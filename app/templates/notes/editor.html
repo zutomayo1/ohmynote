@@ -14,6 +14,8 @@
       data-autosave-url="{{ '' if is_new else '/api/notes/' ~ note.id }}"
       data-ai-summary-url="/api/ai/summarize"
       data-ai-tags-url="/api/ai/tags"
+      data-ai-title-url="/api/ai/title"
+      data-ai-category-url="/api/ai/category"
         data-ai-continue-url="/api/ai/continue"
         data-ai-rewrite-url="/api/ai/rewrite"
         data-ai-enabled="{{ '1' if ai_enabled else '0' }}"
@@ -200,6 +202,12 @@
       </button>
       <button class="btn btn--ghost btn--sm" type="button" id="ai-tags">
         {{ icon('tag', 15) }} AI 推荐标签
+      </button>
+      <button class="btn btn--ghost btn--sm" type="button" id="ai-title">
+        {{ icon('sparkles', 15) }} AI 起标题
+      </button>
+      <button class="btn btn--ghost btn--sm" type="button" id="ai-category">
+        {{ icon('inbox', 15) }} AI 推荐分类
       </button>
       <span class="ai-hint" id="ai-hint">
         {%- if not ai_enabled -%}未配置 AI 服务（可选，见 .env.example）{%- endif -%}

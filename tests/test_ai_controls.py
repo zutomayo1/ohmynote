@@ -128,7 +128,9 @@ def test_default_prompts_are_builtin():
     assert described["summary"]["custom"] is False
     assert described["tags"]["custom"] is False
     assert described["answer"]["custom"] is False
-    assert set(ai.PROMPT_TASKS) == {"summary", "tags", "answer"}
+    assert described["title"]["custom"] is False
+    assert described["category"]["custom"] is False
+    assert set(ai.PROMPT_TASKS) == {"summary", "tags", "title", "category", "answer"}
     for task, needed in ai.PROMPT_PLACEHOLDERS.items():
         for name in needed:
             assert "{" + name + "}" in ai.DEFAULT_PROMPTS[task]
@@ -365,3 +367,62 @@ def test_prompts_route_requires_csrf(auth_client, clean_app_prompts):
     )
     assert response.status_code == 403
     assert ai.describe_prompts()["summary"]["custom"] is False
+
+
+# ---------------------------------------------------------------------------
+# 5. 新增任务：起标题 / 推荐分类
+#    （编辑器里「AI 起标题」「AI 推荐分类」用的就是这两个；提示词同样可改）
+# ---------------------------------------------------------------------------
+def test_suggest_title_cleans_model_noise(conn, fake_ai):
+    """模型很爱回「标题：xxx」还套上引号，直接写进输入框很难看，必须洗成干净的一行。"""
+    _PromptAIHandler.reply = '标题：  "异步编程入门"  \n后面这句是它自己加的废话'
+    ai.configure({"base_url": base_url(fake_ai), "model": "general-model", "timeout": 10})
+
+    assert ai.suggest_title("", "正文内容ABC", conn=conn) == "异步编程入门"
+    sent = " ".join(
+        str(m.get("content") or "") for m in _PromptAIHandler.requests[-1].get("messages", [])
+    )
+    assert "正文内容ABC" in sent  # 正文要真的发给模型
+
+
+def test_suggest_category_hints_existing_and_does_not_leak_other_tasks(conn, fake_ai):
+    _PromptAIHandler.reply = "分类：技术"
+    ai.configure({"base_url": base_url(fake_ai), "model": "general-model", "timeout": 10})
+
+    assert ai.suggest_category("我的标题", "正文内容", ["技术", "生活"], conn=conn) == "技术"
+    sent = " ".join(
+        str(m.get("content") or "") for m in _PromptAIHandler.requests[-1].get("messages", [])
+    )
+    assert "技术" in sent and "生活" in sent  # 已有分类要提示给模型，好让它复用
+    assert "写一句话摘要" not in sent  # 别串到摘要任务上
+
+
+def test_title_and_category_prompts_are_customizable(conn, fake_ai):
+    """新任务和摘要/标签一样，用户在设置页改了模板就要真的生效。"""
+    saved = ai.save_prompts(
+        conn,
+        {
+            "title": "自定义标题指令｜{title}｜{content}",
+            "category": "自定义分类指令｜{title}｜{content}｜已有：{existing}",
+        },
+    )
+    assert saved["title"].startswith("自定义标题指令")
+    ai.configure({"base_url": base_url(fake_ai), "model": "general-model", "timeout": 10})
+
+    ai.suggest_title("原标题", "正文X", conn=conn)
+    sent = " ".join(
+        str(m.get("content") or "") for m in _PromptAIHandler.requests[-1].get("messages", [])
+    )
+    assert "自定义标题指令" in sent and "原标题" in sent and "正文X" in sent
+
+    ai.suggest_category("原标题", "正文X", ["已有分类甲"], conn=conn)
+    sent = " ".join(
+        str(m.get("content") or "") for m in _PromptAIHandler.requests[-1].get("messages", [])
+    )
+    assert "自定义分类指令" in sent and "已有分类甲" in sent
+
+
+@pytest.mark.parametrize("raw", ["", "   ", "\n\n", "```\n```", '"  "', "标题：", "分类：", "#"])
+def test_clean_inline_never_returns_junk(raw):
+    """模型回空/只回噪音时要返回空串，让调用方走「模型没给出」的提示，而不是写垃圾进输入框。"""
+    assert ai._clean_inline(raw) == ""

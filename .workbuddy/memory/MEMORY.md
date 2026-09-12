@@ -10,7 +10,11 @@
   ```
 - 验收三件套：上面这条 + `python scripts/audit_css.py`（必须报「所有模板 class 都有对应样式」）
   + `python scripts/check.py --quick`。
-- 本仓库没有 git，别指望 `git log` / `git status`。
+- **shell 的 `bash` 工具 PATH 是坏的**，先 `export PATH="/usr/bin:/bin:$PATH"`。
+
+## 版本管理
+- 2026-09-12 才建 git（`git init -b main`，初始提交 `0de2515`）。此前所有改动都没有历史。
+- 提交后请保持工作区干净；`.scratch/`、`data/`、`.venv/` 已在 `.gitignore` 里。
 
 ## 全局约定（踩过坑的）
 - **真值解析只有一个入口**：`app/utils.py` 的 `as_bool(value, *, default=False)`。

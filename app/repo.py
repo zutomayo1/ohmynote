@@ -522,6 +522,57 @@ def _apply_python_filters(
     return True
 
 
+def filter_notes(
+    notes: list[dict[str, Any]],
+    *,
+    tag: str = "",
+    category: str = "",
+    status: str = "",
+    fav: str = "",
+    month: str = "",
+) -> list[dict[str, Any]]:
+    """按**与列表页完全一致**的口径筛一批已经取回来的笔记。
+
+    搜索结果页用它：关键词/语义检索负责「找出来」，筛选条件负责「再缩小」，
+    复用 `_apply_python_filters` 就不会出现「列表页能筛、搜索页筛不出来」的口径分叉。
+    """
+    return [
+        note
+        for note in notes
+        if _apply_python_filters(
+            note, tag=tag, category=category, status=status, fav=fav, month=month
+        )
+    ]
+
+
+# 与 SORTS 里的 ORDER BY 一一对应：置顶优先 + 主键 + id 兜底。
+_PY_SORT_KEYS = {
+    "updated": ("updated_at", True),
+    "created": ("created_at", True),
+    "words": ("word_count", True),
+    "title": ("title", False),
+}
+
+
+def sort_notes(
+    notes: list[dict[str, Any]], *, sort: str = "updated", pinned_first: bool = True
+) -> list[dict[str, Any]]:
+    """在 Python 侧排序，口径对齐 `SORTS`（置顶优先、同键按 id 倒序）。
+
+    搜索结果默认要保持**相关度**顺序，所以调用方只在用户显式选了排序时才用这个函数。
+    """
+    field, desc = _PY_SORT_KEYS.get(sort, _PY_SORT_KEYS["updated"])
+    if field == "word_count":
+        key = lambda note: (int(note.get(field) or 0), note.get("id") or 0)  # noqa: E731
+    else:
+        key = lambda note: (note.get(field) or "", note.get("id") or 0)  # noqa: E731
+    ordered = sorted(notes, key=key, reverse=desc)
+    if pinned_first:
+        # sorted 是稳定排序，所以「置顶」这一步不会打乱上面排好的相对顺序
+        ordered.sort(key=lambda note: not note.get("is_pinned"))
+    return ordered
+
+
 def list_notes(
     conn: sqlite3.Connection,
     *,

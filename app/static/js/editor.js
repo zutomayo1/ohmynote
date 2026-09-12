@@ -190,9 +190,11 @@
     var tagsInput = document.getElementById('tags-input');
     var aiSummaryBtn = document.getElementById('ai-summary');
     var aiTagsBtn = document.getElementById('ai-tags');
+    var aiTitleBtn = document.getElementById('ai-title');
+    var aiCategoryBtn = document.getElementById('ai-category');
     var aiHint = document.getElementById('ai-hint');
     var autosaveEl = document.getElementById('autosave-state');
-    // 发布设置字段：随表单正常提交，JS 不改写，此处仅引用以保持契约完整。
+    // 发布设置字段：随表单正常提交。categoryInput 会被「AI 推荐分类」写入，其余不动。
     var categoryInput = document.getElementById('category-input');
     var summaryInput = document.getElementById('summary-input');
     var slugInput = document.getElementById('slug-input');
@@ -724,6 +726,40 @@
           .then(function () { setAiBusy(aiTagsBtn, false, 'AI 推荐标签'); });
       });
     }
+    if (aiTitleBtn) {
+      aiTitleBtn.addEventListener('click', function () {
+        setAiBusy(aiTitleBtn, true, 'AI 起标题');
+        requestJSON(form.dataset.aiTitleUrl || '/api/ai/title', { method: 'POST', json: aiPayload() })
+          .then(function (data) {
+            if (data && data.title && titleInput) {
+              titleInput.value = data.title;
+              // 程序写入 value 不会触发 input，标题缩放之类的联动要自己喊一声
+              try { titleInput.dispatchEvent(new Event('input', { bubbles: true })); } catch (errTitle) { /* 老旧浏览器忽略 */ }
+              aiSuccess('已生成标题');
+            } else {
+              aiFail(new Error('模型没给出标题，换个说法再试试'));
+            }
+          }, aiFail)
+          .then(function () { setAiBusy(aiTitleBtn, false, 'AI 起标题'); });
+      });
+    }
+    if (aiCategoryBtn) {
+      aiCategoryBtn.addEventListener('click', function () {
+        setAiBusy(aiCategoryBtn, true, 'AI 推荐分类');
+        requestJSON(form.dataset.aiCategoryUrl || '/api/ai/category', { method: 'POST', json: aiPayload() })
+          .then(function (data) {
+            if (data && data.category && categoryInput) {
+              categoryInput.value = data.category;
+              try { categoryInput.dispatchEvent(new Event('input', { bubbles: true })); } catch (errCat) { /* 老旧浏览器忽略 */ }
+              aiSuccess('已推荐分类（优先复用你已有的分类）');
+            } else {
+              aiFail(new Error('模型没给出分类，换个说法再试试'));
+            }
+          }, aiFail)
+          .then(function () { setAiBusy(aiCategoryBtn, false, 'AI 推荐分类'); });
+      });
+    }
+
       /* ===== 9.5 标签输入增强：常用标签胶囊 + 自动补全 + 规范化提示（纯增强，JS 挂了仍可手打） ===== */
     (function initTagInput() {
       if (!tagsInput || tagsInput.name !== 'tags') { return; }

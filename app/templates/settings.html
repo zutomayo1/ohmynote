@@ -376,10 +376,10 @@
     <summary class="settings-block__summary">
       <span class="settings-block__chevron" aria-hidden="true">▸</span>
       <span class="settings-block__title">提示词</span>
-      <span class="settings-block__note">摘要 / 标签 / 问答 · 已自定义 {{ prompt_custom_count }} 项</span>
+      <span class="settings-block__note">{% for task, info in prompts.items() %}{{ info.label }}{{ ' / ' if not loop.last }}{% endfor %} · 已自定义 {{ prompt_custom_count }} 项</span>
     </summary>
     <div class="settings-block__body">
-      <p class="micro">下面三段是发给 AI 的「用户消息」模板，<code>{...}</code> 是会被替换的占位符；留空表示不改这一项，点「恢复默认」清除全部自定义。</p>
+      <p class="micro">下面是发给 AI 的「用户消息」模板，<code>{...}</code> 是会被替换的占位符；留空表示不改这一项，点「恢复默认」清除全部自定义。占位符写错或缺了会自动回退内置默认。</p>
       <div class="ai-prompts">
         {% for task, info in prompts.items() %}
           <div class="ai-prompt">

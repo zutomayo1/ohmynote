@@ -14,6 +14,7 @@
         {% else %}
           关键词「{{ q }}」命中 {{ total }} 篇 · 检索方式：{{ backend }}
         {% endif %}
+        {% if has_filter or sort %}（已叠加筛选）{% endif %}
       {% else %}
         输入关键词搜索标题、正文与标签
       {% endif %}
@@ -33,7 +34,7 @@
   </div>
 </form>
 
-{# 「按意思搜」开关：沿用现有筛选 chip（tag-pill）样式，默认关键词，点一下切语义 #}
+{# 「按意思搜」开关 + 快捷筛选：沿用现有筛选 chip（tag-pill）样式 #}
 <div class="filter-bar">
   <div class="filter-bar__group" role="group" aria-label="检索方式">
     {% if mode == 'semantic' %}
@@ -42,7 +43,67 @@
       {{ tag_pill('按意思搜', href=filter_url(request, mode='semantic'), active=False, small=True) }}
     {% endif %}
   </div>
+  {% if q %}
+    <div class="filter-bar__group filter-bar__group--tags" role="group" aria-label="快捷筛选">
+      {{ tag_pill('全部', href=filter_url(request, fav=None), active=(not fav), small=True) }}
+      {{ tag_pill('★ 星标', href=filter_url(request, fav='starred'), active=(fav == 'starred'), small=True) }}
+      {{ tag_pill('置顶', href=filter_url(request, fav='pinned'), active=(fav == 'pinned'), small=True) }}
+      {{ tag_pill('已公开', href=filter_url(request, fav='public'), active=(fav == 'public'), small=True) }}
+      {{ tag_pill('草稿', href=filter_url(request, fav='draft'), active=(fav == 'draft'), small=True) }}
+    </div>
+  {% endif %}
 </div>
+
+{% if q %}
+{# 二级筛选：标签 / 分类 / 状态 / 排序。q 与「按意思搜」用 hidden 带过去，口径与列表页一致。 #}
+<form class="toolbar" method="get" action="/search" role="search">
+  <input type="hidden" name="q" value="{{ q }}">
+  {% if mode == 'semantic' %}<input type="hidden" name="mode" value="semantic">{% endif %}
+  {% if fav %}<input type="hidden" name="fav" value="{{ fav }}">{% endif %}
+  <div class="toolbar__row">
+    <label class="field">
+      <span class="sr-only">标签</span>
+      <select class="select" name="tag">
+        <option value="">全部标签</option>
+        {% for item in all_tags %}
+          <option value="{{ item.name }}"{{ ' selected' if tag == item.name }}>{{ item.name }}（{{ item.count }}）</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="field">
+      <span class="sr-only">分类</span>
+      <select class="select" name="category">
+        <option value="">全部分类</option>
+        {% for item in all_categories %}
+          <option value="{{ item.name }}"{{ ' selected' if category == item.name }}>{{ item.name }}（{{ item.count }}）</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="field">
+      <span class="sr-only">状态</span>
+      <select class="select" name="status">
+        <option value=""{{ ' selected' if not status }}>全部状态</option>
+        <option value="draft"{{ ' selected' if status == 'draft' }}>草稿</option>
+        <option value="saved"{{ ' selected' if status == 'saved' }}>已保存</option>
+      </select>
+    </label>
+    <label class="field">
+      <span class="sr-only">排序</span>
+      <select class="select" name="sort">
+        <option value=""{{ ' selected' if not sort }}>按相关度</option>
+        <option value="updated"{{ ' selected' if sort == 'updated' }}>最近更新</option>
+        <option value="created"{{ ' selected' if sort == 'created' }}>创建时间</option>
+        <option value="words"{{ ' selected' if sort == 'words' }}>字数最多</option>
+        <option value="title"{{ ' selected' if sort == 'title' }}>标题</option>
+      </select>
+    </label>
+    <button class="btn btn--ghost btn--sm" type="submit">筛选</button>
+    {% if has_filter or sort %}
+      <a class="btn btn--ghost btn--sm" href="{{ filter_url(request, fav=None, tag=None, category=None, status=None, sort=None) }}">重置条件</a>
+    {% endif %}
+  </div>
+</form>
+{% endif %}
 
 {# 引擎标注：说清这次到底用了语义还是关键词；回退时说明原因。 #}
 {% if q %}
@@ -60,14 +121,18 @@
         {# 只包一层壳展示匹配度，结果卡片仍复用 note_card 宏，不改宏本身 #}
         <div class="ai-search-result">
           <span class="ai-search-result__score">匹配度 {{ ((note.score or 0) * 100) | round(0) | int }}%</span>
-          {{ note_card(note, request, tokens=tokens, actions=False) }}
+          {{ note_card(note, request, tokens=tokens, actions=True) }}
         </div>
       {% else %}
-        {{ note_card(note, request, tokens=tokens, actions=False) }}
+        {{ note_card(note, request, tokens=tokens, actions=True) }}
       {% endif %}
     {% endfor %}
   </div>
   {{ pagination(request, page, pages) }}
+{% elif q and has_filter %}
+  {{ empty_state('当前筛选条件下没有匹配的笔记',
+                 '放宽一点条件试试，或者点「重置条件」看全部命中结果。',
+                 'search', filter_url(request, fav=None, tag=None, category=None, status=None, sort=None), '重置筛选条件') }}
 {% elif q %}
   {{ empty_state('没有找到相关笔记', '换个关键词，或者用标签筛选试试。', 'search', '/notes', '返回笔记列表') }}
 {% else %}

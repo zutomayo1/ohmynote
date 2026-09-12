@@ -739,6 +739,11 @@ def fake_ai_server():
                 reply = '["测试标签","AI"]'
             elif "摘要" in text:
                 reply = "这是测试生成的摘要。"
+            elif "起一个标题" in text:
+                # 故意带「标题：」前缀和引号：验证服务端会清洗成干净的一行
+                reply = '标题：  "异步编程入门"  '
+            elif "选一个分类" in text:
+                reply = "分类：技术"
             else:
                 reply = "可用"
             data = json.dumps({"choices": [{"message": {"content": reply}}]}).encode("utf-8")
@@ -787,6 +792,56 @@ def ai_configured(auth_client, csrf, fake_ai_server):
     assert saved.status_code == 303
     yield fake_ai_server
     auth_client.post("/settings/ai", data={"_csrf": csrf, "clear_all": "1"}, follow_redirects=False)
+
+
+def test_ai_title_and_category_endpoints(auth_client, csrf, ai_configured):
+    """「AI 起标题 / 推荐分类」：模型爱加的「标题：」前缀和引号要被洗掉。"""
+    title = auth_client.post(
+        "/api/ai/title",
+        json={"title": "", "content": "随便写点内容"},
+        headers={"X-CSRF-Token": csrf},
+    )
+    assert title.status_code == 200, title.text
+    assert title.json()["title"] == "异步编程入门"
+
+    category = auth_client.post(
+        "/api/ai/category",
+        json={"title": "测试", "content": "随便写点内容"},
+        headers={"X-CSRF-Token": csrf},
+    )
+    assert category.status_code == 200, category.text
+    assert category.json()["category"] == "技术"
+
+
+@pytest.mark.parametrize("path", ["/api/ai/title", "/api/ai/category"])
+def test_ai_title_category_need_content(auth_client, csrf, ai_configured, path):
+    """正文为空要给人话提示（400），不能把空内容发给模型。"""
+    response = auth_client.post(
+        path, json={"title": "只有标题", "content": "   "}, headers={"X-CSRF-Token": csrf}
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["ok"] is False
+
+
+@pytest.mark.parametrize("path", ["/api/ai/title", "/api/ai/category"])
+def test_ai_title_category_without_config(auth_client, csrf, path):
+    """没配 AI 时是 503 + 人话，不是 500。"""
+    response = auth_client.post(
+        path, json={"title": "x", "content": "一些内容"}, headers={"X-CSRF-Token": csrf}
+    )
+    assert response.status_code == 503, response.text
+    assert response.json()["ok"] is False
+
+
+def test_editor_exposes_the_new_ai_buttons(auth_client):
+    """端点在、编辑器里也得有入口（否则功能等于不存在）。"""
+    page = auth_client.get("/notes/new")
+    assert page.status_code == 200
+    text = page.text
+    assert 'id="ai-title"' in text and 'data-ai-title-url="/api/ai/title"' in text
+    assert 'id="ai-category"' in text and 'data-ai-category-url="/api/ai/category"' in text
+    # 老的两个不能被弄坏
+    assert 'id="ai-summary"' in text and 'id="ai-tags"' in text
 
 
 def test_settings_page_renders(auth_client):

@@ -76,11 +76,19 @@ TASK_MODEL_FIELD = {
 # ---------------------------------------------------------------------------
 # 提示词模板（存在 meta 的 ai.prompt.* 下，设置页可改）
 # ---------------------------------------------------------------------------
-PROMPT_TASKS = ("summary", "tags", "answer")
-PROMPT_LABELS = {"summary": "摘要", "tags": "打标签", "answer": "问答"}
+PROMPT_TASKS = ("summary", "tags", "title", "category", "answer")
+PROMPT_LABELS = {
+    "summary": "摘要",
+    "tags": "打标签",
+    "title": "起标题",
+    "category": "推荐分类",
+    "answer": "问答",
+}
 PROMPT_PLACEHOLDERS: dict[str, tuple[str, ...]] = {
     "summary": ("title", "content"),
     "tags": ("title", "content", "existing"),
+    "title": ("title", "content"),
+    "category": ("title", "content", "existing"),
     "answer": ("question", "contexts"),
 }
 PROMPT_MAX_CHARS = 4000
@@ -89,6 +97,8 @@ PROMPT_PREFIX = f"{META_PREFIX}prompt."
 DEFAULT_PROMPTS = {
     "summary": "笔记标题：{title}\n\n笔记正文：\n{content}",
     "tags": "笔记标题：{title}\n\n笔记正文：\n{content}{existing}",
+    "title": "笔记标题：{title}\n\n笔记正文：\n{content}",
+    "category": "笔记标题：{title}\n\n笔记正文：\n{content}{existing}",
     "answer": "【资料】\n\n{contexts}\n\n【问题】\n{question}\n\n请依据以上资料作答。",
 }
 # 运行期缓存：只放「库里有保存」的模板，空表示用内置默认
@@ -816,6 +826,20 @@ SYSTEM_TAGS = (
     "3) 只输出一个 JSON 数组，例如 [\"Python\",\"异步编程\"]，不要任何解释文字。"
 )
 
+SYSTEM_TITLE = (
+    "你是一个中文笔记助手。请为用户给出的笔记起一个标题，要求："
+    "1) 8-20 个字，概括主题、说人话，不要空洞的「关于…的思考」这种套话；"
+    "2) 不要带书名号、引号、Markdown，也不要带 # 号；"
+    "3) 只输出标题本身，不要任何解释。若已有标题已经足够好，就沿用或只做微调。"
+)
+
+SYSTEM_CATEGORY = (
+    "你是一个中文笔记助手。请为笔记选一个分类，要求："
+    "1) 只输出一个分类名，2-6 个字，不要带符号；"
+    "2) 优先从用户已有分类里挑；确实都不合适才新拟一个；"
+    "3) 只输出分类名本身，不要任何解释。"
+)
+
 SYSTEM_QA = (
     "你是一个只依据给定资料回答问题的中文助手。要求："
     "1) 只能使用【资料】里的内容，不允许编造；"
@@ -861,6 +885,57 @@ def suggest_tags(
         conn=conn,
     )
     return _parse_tag_list(result)
+
+
+def _clean_inline(raw: str, *, limit: int = 40) -> str:
+    """把「一句话结果」洗干净：去代码围栏 / 引号 / 井号 / Markdown 标记，只留第一行。
+
+    模型很爱回「标题：xxx」或者给标题套上引号，直接用会写进输入框里很难看。
+    """
+    text = (raw or "").strip()
+    text = re.sub(r"^```[a-zA-Z]*\s*|\s*```$", "", text).strip()
+    text = text.split("\n")[0].strip()
+    text = re.sub(r"^(标题|题目|分类|类别)\s*[:：]\s*", "", text)
+    return text.strip().strip("\"'“”‘’《》#*`-— 　").strip()[:limit]
+
+
+def suggest_title(
+    title: str, content: str, *, conn: sqlite3.Connection | None = None
+) -> str:
+    """给一篇笔记起标题（也有标题时按「微调」处理）。"""
+    prompt = _format_prompt("title", title=title or "（无标题）", content=_trim(content))
+    result = chat(
+        [{"role": "system", "content": SYSTEM_TITLE}, {"role": "user", "content": prompt}],
+        temperature=0.4,
+        max_tokens=80,
+        task="title",
+        conn=conn,
+    )
+    return _clean_inline(result, limit=60)
+
+
+def suggest_category(
+    title: str,
+    content: str,
+    existing: list[str] | None = None,
+    *,
+    conn: sqlite3.Connection | None = None,
+) -> str:
+    """推荐一个分类；`existing` 是用户已有分类，会提示模型优先复用。"""
+    hint = ""
+    if existing:
+        hint = f"\n\n用户已有的分类（优先从中挑）：{'、'.join(existing[:30])}"
+    prompt = _format_prompt(
+        "category", title=title or "（无标题）", content=_trim(content), existing=hint
+    )
+    result = chat(
+        [{"role": "system", "content": SYSTEM_CATEGORY}, {"role": "user", "content": prompt}],
+        temperature=0.2,
+        max_tokens=40,
+        task="category",
+        conn=conn,
+    )
+    return _clean_inline(result, limit=12)
 
 
 def _parse_tag_list(raw: str) -> list[str]:

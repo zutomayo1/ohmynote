@@ -454,3 +454,51 @@ async def ai_tags(request: Request, conn: sqlite3.Connection = Depends(db_conn))
     except ai.AIError as exc:
         return _json({"ok": False, "error": str(exc)}, 502)
     return _json({"ok": True, "tags": tags})
+
+
+@ai_api_router.post("/ai/title")
+async def ai_title(request: Request, conn: sqlite3.Connection = Depends(db_conn)):
+    """给笔记起标题：把结果填进标题输入框（用户自己决定采不采用）。"""
+    payload = await read_json(request)
+    title = str(payload.get("title") or "").strip()
+    content = str(payload.get("content") or "").strip()
+    note_id = payload.get("id")
+    if not content and isinstance(note_id, int):
+        note = repo.get_note(conn, note_id)
+        if note:
+            content, title = note["content"], note["title"]
+    if not content:
+        return _json({"ok": False, "error": "正文还是空的，先写点内容再让 AI 起标题吧"}, 400)
+    if not ai.is_enabled():
+        return _json(
+            {"ok": False, "error": "尚未配置 AI 服务（INKNOTE_AI_BASE_URL / INKNOTE_AI_MODEL）"}, 503
+        )
+    try:
+        suggested = ai.suggest_title(title, content, conn=conn)
+    except ai.AIError as exc:
+        return _json({"ok": False, "error": str(exc)}, 502)
+    if not suggested:
+        return _json({"ok": False, "error": "模型没给出标题，换个说法再试试"}, 502)
+    return _json({"ok": True, "title": suggested})
+
+
+@ai_api_router.post("/ai/category")
+async def ai_category(request: Request, conn: sqlite3.Connection = Depends(db_conn)):
+    """推荐分类：优先复用用户已有的分类，实在不合适才新拟一个。"""
+    payload = await read_json(request)
+    title = str(payload.get("title") or "").strip()
+    content = str(payload.get("content") or "").strip()
+    if not content:
+        return _json({"ok": False, "error": "正文还是空的，先写点内容再让 AI 推荐分类吧"}, 400)
+    if not ai.is_enabled():
+        return _json(
+            {"ok": False, "error": "尚未配置 AI 服务（INKNOTE_AI_BASE_URL / INKNOTE_AI_MODEL）"}, 503
+        )
+    existing = [item["name"] for item in repo.list_categories(conn)]
+    try:
+        category = ai.suggest_category(title, content, existing, conn=conn)
+    except ai.AIError as exc:
+        return _json({"ok": False, "error": str(exc)}, 502)
+    if not category:
+        return _json({"ok": False, "error": "模型没给出分类，换个说法再试试"}, 502)
+    return _json({"ok": True, "category": category})

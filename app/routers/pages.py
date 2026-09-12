@@ -134,6 +134,11 @@ def search_page(
     q: str = "",
     page: PageParam = 1,
     mode: str = "",
+    fav: str = "",
+    tag: str = "",
+    category: str = "",
+    status: str = "",
+    sort: str = "",
 ):
     per_page = settings.per_page
     requested_semantic = (mode or "").strip().lower() == "semantic"
@@ -157,6 +162,19 @@ def search_page(
     else:
         results = repo.search_notes(conn, q, limit=300) if q.strip() else []
 
+    # 检索负责「找出来」，筛选/排序负责「再缩小」—— 口径与列表页共用同一套实现。
+    fav = (fav or "").strip()
+    tag = (tag or "").strip()
+    category = (category or "").strip()
+    status = (status or "").strip()
+    sort = (sort or "").strip()
+    has_filter = bool(fav or tag or category or status)
+    if results and has_filter:
+        results = repo.filter_notes(results, tag=tag, category=category, status=status, fav=fav)
+    if results and sort:
+        # 默认不动顺序：关键词/语义的相关度排序比任何时间排序都有用
+        results = repo.sort_notes(results, sort=sort)
+
     total = len(results)
     start = (max(1, page) - 1) * per_page
     page_items = results[start : start + per_page]
@@ -176,6 +194,14 @@ def search_page(
         else "LIKE",
         fallback_reason=fallback_reason,
         semantic_needs_setup=semantic_needs_setup,
+        fav=fav,
+        tag=tag,
+        category=category,
+        status=status,
+        sort=sort,
+        has_filter=has_filter,
+        all_tags=repo.list_tags(conn, limit=60),
+        all_categories=repo.list_categories(conn),
     )
 
 
