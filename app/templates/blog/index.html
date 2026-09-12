@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% from '_macros.html' import post_card, pagination, tag_pill, empty_state, icon with context %}
+{% block page %}blog{% endblock %}
+{% block title %}{{ settings.site_title }} · {{ settings.site_subtitle }}{% endblock %}
+{% block description %}{{ settings.site_description }}{% endblock %}
+{% block canonical %}<link rel="canonical" href="{{ absolute(current_path) }}">{% endblock %}
+
+{% block content %}
+<section class="blog-hero">
+  <h1 class="blog-hero__title">{{ settings.site_title }}</h1>
+  <p class="blog-hero__sub">{{ settings.site_subtitle }}</p>
+  <p class="blog-hero__desc">{{ settings.site_description }}</p>
+  <div class="blog-hero__links">
+    <a class="btn btn--ghost btn--sm" href="/feed.xml">{{ icon('rss', 15) }} Atom 订阅</a>
+    <a class="btn btn--ghost btn--sm" href="/rss.xml">RSS</a>
+    <a class="btn btn--ghost btn--sm" href="/blog/archive">按月归档</a>
+  </div>
+</section>
+
+{% if not (q or tag or month) %}
+  <div class="blog-filters">
+    <form class="blog-filters__search" method="get" action="/blog" role="search">
+      <input class="input" type="search" name="q" value="{{ q }}" placeholder="在公开文章里搜索…">
+      <button class="btn btn--ghost btn--sm" type="submit">{{ icon('search', 15) }}</button>
+    </form>
+    <div class="blog-filters__tags">
+      {% for item in tags %}
+        {{ tag_pill(item.name, count=item.count, href=url_with_query('/blog', tag=item.name), small=True) }}
+      {% endfor %}
+    </div>
+  </div>
+{% else %}
+  <div class="filter-bar">
+    <div class="filter-bar__group">
+      <span class="muted">当前筛选：</span>
+      {% if q %}{{ tag_pill('关键词：' ~ q, href=filter_url(request, q=None), active=True, small=True) }}{% endif %}
+      {% if tag %}{{ tag_pill('标签：' ~ tag, href=filter_url(request, tag=None), active=True, small=True) }}{% endif %}
+      {% if month %}{{ tag_pill('月份：' ~ month | month_label, href=filter_url(request, month=None), active=True, small=True) }}{% endif %}
+      <a class="btn btn--ghost btn--sm" href="/blog">返回全部</a>
+    </div>
+  </div>
+{% endif %}
+
+{% if notes %}
+  <div class="blog-list">
+    {% for note in notes %}
+      {{ post_card(note, tokens=tokens, feature=(is_feature and loop.first)) }}
+    {% endfor %}
+  </div>
+  {{ pagination(request, page, pages) }}
+{% else %}
+  {% if q or tag or month %}
+    {{ empty_state('没有匹配的文章', '换个关键词或清空筛选条件。', 'search', '/blog', '查看全部文章') }}
+  {% else %}
+    {{ empty_state('博客还没有公开文章', '在笔记里打开「公开到博客」，它就会出现在这里。', 'book') }}
+  {% endif %}
+{% endif %}
+
+{% if months %}
+  <section class="blog-archive">
+    <h2 class="section-title">按月归档</h2>
+    <ul class="archive-list archive-list--inline">
+      {% for item in months %}
+        <li class="archive-month">
+          <a class="archive-month__label" href="{{ url_with_query('/blog', month=item.key) }}">{{ item.label }}</a>
+          <span class="archive-count">{{ item.count }}</span>
+        </li>
+      {% endfor %}
+    </ul>
+    <a class="rail-block__more" href="/blog/archive">查看完整归档 →</a>
+  </section>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% from '_macros.html' import icon with context %}
+{% block page %}versions{% endblock %}
+{% block title %}版本对比 · {{ note.title }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">版本对比</h1>
+    <p class="page-sub">
+      {{ version.created_at | datetime_cn }} 的快照 ↔ 当前内容：新增 {{ added }} 行，删除 {{ removed }} 行
+    </p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn--ghost" href="{{ note.url }}/versions">返回版本列表</a>
+    <form method="post" action="{{ note.url }}/versions/{{ version.id }}/restore"
+          data-confirm="回滚到这一版？当前内容会先自动存成一个新版本。">
+      <input type="hidden" name="_csrf" value="{{ csrf }}">
+      <input type="hidden" name="next" value="{{ note.url }}">
+      <button class="btn btn--primary" type="submit">{{ icon('restore', 16) }} 回滚到这一版</button>
+    </form>
+  </div>
+</div>
+
+<div class="diff-wrap">
+  <div class="diff">
+    {% for kind, text in diff %}
+      <div class="diff__line{{ ' diff__line--add' if kind == 'add' }}{{ ' diff__line--del' if kind == 'del' }}{{ ' diff__line--meta' if kind == 'meta' }}">
+        <span class="diff__sign">{% if kind == 'add' %}+{% elif kind == 'del' %}-{% else %} {% endif %}</span>
+        <span class="diff__text">{{ text }}</span>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+
+<p class="muted">提示：绿色是「当前内容比这一版多出来的行」，红色是「这一版后来被改掉的行」。标题与标签的差异不在对比范围内。</p>
+{% endblock %}

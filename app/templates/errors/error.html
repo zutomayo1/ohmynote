@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% from '_macros.html' import icon with context %}
+{% block title %}{{ code }} · {{ settings.site_title }}{% endblock %}
+{% block page %}error{% endblock %}
+
+{% block content %}
+<div class="empty-state empty-state--error">
+  <div class="empty-state__icon">{{ icon('inbox', 34) }}</div>
+  <h1 class="empty-state__title">{{ code }}</h1>
+  <p class="empty-state__text">{{ message or '出现了点问题。' }}</p>
+  <div class="empty-state__actions">
+    <a class="btn btn--primary" href="/notes">回到笔记</a>
+    <a class="btn btn--ghost" href="/blog">去博客</a>
+  </div>
+</div>
+{% endblock %}

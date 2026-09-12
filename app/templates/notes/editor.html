@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+{% from '_macros.html' import icon with context %}
+{% block page %}editor{% endblock %}
+{% block title %}{{ '新建笔记' if is_new else note.title }} · {{ settings.site_title }}{% endblock %}
+{% block description %}Markdown 编辑器，支持实时预览、图片拖拽上传、自动保存。{% endblock %}
+
+{% block content %}
+<form class="editor" id="editor-form" method="post"
+      action="{{ '/notes' if is_new else '/notes/' ~ note.id }}"
+      data-note-id="{{ note.id or '' }}"
+      data-is-new="{{ '1' if is_new else '0' }}"
+      data-preview-url="/api/preview"
+      data-upload-url="/api/upload"
+      data-autosave-url="{{ '' if is_new else '/api/notes/' ~ note.id }}"
+      data-ai-summary-url="/api/ai/summarize"
+      data-ai-tags-url="/api/ai/tags"
+        data-ai-continue-url="/api/ai/continue"
+        data-ai-rewrite-url="/api/ai/rewrite"
+        data-ai-enabled="{{ '1' if ai_enabled else '0' }}"
+      data-unsaved-text="这篇笔记还有未保存的改动，确定要离开吗？">
+  <input type="hidden" name="_csrf" value="{{ csrf }}">
+
+  <div class="editor__bar">
+    <input class="editor__title-input" id="note-title" name="title" type="text"
+           value="{{ note.title }}" placeholder="无标题笔记" autocomplete="off"
+           aria-label="笔记标题" {% if is_new %}autofocus{% endif %}>
+    <div class="editor__tabs" id="editor-tabs" role="tablist" aria-label="编辑视图切换">
+      <button class="editor__tab is-active" type="button" role="tab" data-mode="write">编辑</button>
+      <button class="editor__tab" type="button" role="tab" data-mode="split">分栏</button>
+      <button class="editor__tab" type="button" role="tab" data-mode="preview">预览</button>
+    </div>
+    <span class="save-state" id="autosave-state" data-state="{{ 'idle' if is_new else 'saved' }}">
+      {{ '尚未保存' if is_new else '已保存' }}
+    </span>
+  </div>
+
+  <div class="editor__toolbar" id="md-toolbar" role="toolbar" aria-label="Markdown 工具栏">
+    {# 隐藏 checkbox 放最前：后面的 .md-tool__rest / .md-tool__more 才能用兄弟选择器选中 #}
+    <input type="checkbox" id="md-more-toggle" class="sr-only md-more__checkbox">
+    <span class="md-tool__group">
+      <button class="md-tool" type="button" data-md="bold" title="加粗（Ctrl+B）"><b>B</b></button>
+      <button class="md-tool" type="button" data-md="italic" title="斜体（Ctrl+I）"><i>I</i></button>
+    </span>
+    <span class="md-tool__rest" id="md-more-strike">
+      <span class="md-tool__group">
+        <button class="md-tool" type="button" data-md="strike" title="删除线"><s>S</s></button>
+      </span>
+    </span>
+    <span class="md-tool__sep" aria-hidden="true"></span>
+    <span class="md-tool__rest" id="md-more-heading">
+      <span class="md-tool__group">
+        <button class="md-tool" type="button" data-md="h1" title="一级标题">H1</button>
+        <button class="md-tool" type="button" data-md="h2" title="二级标题">H2</button>
+        <button class="md-tool" type="button" data-md="h3" title="三级标题">H3</button>
+      </span>
+    </span>
+    <span class="md-tool__sep" aria-hidden="true"></span>
+    <span class="md-tool__rest" id="md-more-list">
+      <span class="md-tool__group">
+        <button class="md-tool" type="button" data-md="ul" title="无序列表">• 列表</button>
+        <button class="md-tool" type="button" data-md="ol" title="有序列表">1. 列表</button>
+        <button class="md-tool" type="button" data-md="task" title="任务清单">☑ 待办</button>
+        <button class="md-tool" type="button" data-md="quote" title="引用">❝ 引用</button>
+      </span>
+    </span>
+    <span class="md-tool__sep" aria-hidden="true"></span>
+    <span class="md-tool__group">
+      <button class="md-tool" type="button" data-md="code" title="行内代码">&lt;/&gt;</button>
+    </span>
+    <span class="md-tool__rest" id="md-more-code">
+      <span class="md-tool__group">
+        <button class="md-tool" type="button" data-md="codeblock" title="代码块">{ } 代码</button>
+      </span>
+    </span>
+    <span class="md-tool__group">
+      <button class="md-tool" type="button" data-md="link" title="链接（Ctrl+K）">{{ icon('link', 15) }}</button>
+    </span>
+    <span class="md-tool__rest" id="md-more-misc">
+      <span class="md-tool__group">
+        <button class="md-tool" type="button" data-md="wiki" title="双链：[[笔记标题]]">[[ ]]</button>
+        <button class="md-tool" type="button" data-md="table" title="表格">▦ 表格</button>
+        <button class="md-tool" type="button" data-md="hr" title="分割线">― 分割</button>
+      </span>
+    </span>
+    <span class="md-tool__sep" aria-hidden="true"></span>
+    <span class="md-tool__group">
+      <label class="md-tool md-tool--upload" title="插入图片（也可以直接拖拽或粘贴）">
+        {{ icon('image', 15) }} 图片
+        <input class="sr-only" id="upload-input" type="file" accept="image/*" multiple>
+      </label>
+    </span>
+    {% if not is_new %}
+      <span class="md-tool__rest" id="md-more-end">
+        <span class="md-tool__group md-tool__group--end">
+          <a class="md-tool md-tool--link" href="/notes/{{ note.id }}/versions" title="查看历史版本">{{ icon('history', 15) }} 历史</a>
+          <a class="md-tool md-tool--link" href="/notes/{{ note.id }}" title="查看渲染后的页面">{{ icon('book', 15) }} 预览页</a>
+        </span>
+      </span>
+    {% endif %}
+    <span class="md-tool__sep" aria-hidden="true"></span>
+      <span class="md-tool__group md-tool__group--ai">
+        <button class="md-tool md-tool--ai" type="button" id="ai-continue"
+                title="AI 接着写（Ctrl+J）">✦ AI 接着写</button>
+      </span>
+      <label for="md-more-toggle" class="md-tool md-tool__more"
+           aria-controls="md-more-strike md-more-heading md-more-list md-more-code md-more-misc{{ ' md-more-end' if not is_new else '' }}">
+      <span class="md-tool__more-open">更多 ▾</span>
+      <span class="md-tool__more-close" aria-hidden="true">收起 ▴</span>
+    </label>
+  </div>
+
+  <div class="editor__split" id="editor-split" data-layout="split">
+    <div class="editor__pane editor__pane--write">
+      <textarea class="editor__textarea" id="note-content" name="content" spellcheck="false"
+                placeholder="开始写 Markdown…&#10;&#10;## 小标题&#10;&#10;用 [[另一篇笔记]] 建立双链，用 #标签 归类。&#10;```python&#10;print('hello')&#10;```">{{ note.content }}</textarea>
+    </div>
+    <div class="editor__pane editor__pane--preview">
+      <div class="editor__preview prose" id="preview" aria-live="polite"></div>
+    </div>
+  </div>
+
+  <div class="editor__status meta">
+    <span id="word-count">{{ note.word_count | number }} 字</span>
+    <span class="meta__divider">·</span>
+    <span id="reading-time">{{ note.reading_minutes | reading }}</span>
+    <span class="meta__divider">·</span>
+    <span id="cursor-info">第 1 行</span>
+    <span class="editor__upload-hint">支持拖拽 / 粘贴图片，Ctrl+S 保存</span>
+  </div>
+
+  <details class="editor__settings" id="editor-settings"{% if is_new or not note.summary %} open{% endif %}>
+    <summary>发布设置</summary>
+    <div class="field-grid">
+      <div class="field field--tags" id="note-tags">
+        <label class="field__label" for="tags-input">
+          标签 <small class="muted tag-input__count" id="tag-input-count"></small>
+        </label>
+        <div class="tag-input" id="tag-input-widget" data-max-tags="12">
+          <input class="input" id="tags-input" name="tags" type="text" list="tag-options"
+                 value="{{ note.tags | join('，') }}"
+                 placeholder="用逗号、顿号或空格分隔，正文里的 #标签 也会自动收集"
+                 autocomplete="off" spellcheck="false"
+                 role="combobox" aria-autocomplete="list" aria-expanded="false"
+                 aria-controls="tag-suggest" aria-describedby="tag-input-hint">
+          <div class="tag-suggest" id="tag-suggest" role="listbox" aria-label="匹配的既有标签" hidden></div>
+        </div>
+        {% if known_tags %}
+        {% set _lower_tags = note.tags | map('lower') | list %}
+        <div class="tag-common" id="tag-common" role="group" aria-label="常用标签">
+          <span class="tag-common__label" aria-hidden="true">常用</span>
+          {% for name in known_tags[:12] %}
+            <button type="button" class="tag-chip{% if name | lower in _lower_tags %} is-active{% endif %}"
+                    data-tag="{{ name }}"
+                    aria-pressed="{{ 'true' if name | lower in _lower_tags else 'false' }}">{{ name }}</button>
+          {% endfor %}
+        </div>
+        {% endif %}
+        <p class="tag-input__hint" id="tag-input-hint" role="status" aria-live="polite"></p>
+      </div>
+      <label class="field">
+        <span class="field__label">分类</span>
+        <input class="input" id="category-input" name="category" type="text" list="category-options"
+               value="{{ note.category }}" placeholder="技术 / 读书 / 生活…">
+      </label>
+      <label class="field field--wide">
+        <span class="field__label">摘要 <small class="muted">留空则自动截取正文开头</small></span>
+        <textarea class="textarea" id="summary-input" name="summary" rows="2"
+                  placeholder="列表页与 SEO 会用到这句话">{{ note.summary }}</textarea>
+      </label>
+      <label class="field">
+        <span class="field__label">slug <small class="muted">URL 路径</small></span>
+        <input class="input" id="slug-input" name="slug" type="text" value="{{ note.slug }}"
+               placeholder="例如 python-asyncio">
+      </label>
+      <label class="field">
+        <span class="field__label">meta 描述 <small class="muted">给搜索引擎</small></span>
+        <input class="input" id="meta-description-input" name="meta_description" type="text"
+               value="{{ note.meta_description }}" placeholder="留空则用摘要">
+      </label>
+      <div class="field field--checks">
+        <span class="field__label">状态</span>
+        <label class="checkbox">
+          <input type="checkbox" name="is_public" value="1" {% if note.is_public %}checked{% endif %}>
+          公开到博客
+        </label>
+        <label class="checkbox">
+          <input type="checkbox" name="is_pinned" value="1" {% if note.is_pinned %}checked{% endif %}>
+          置顶
+        </label>
+        <label class="checkbox">
+          <input type="checkbox" name="is_starred" value="1" {% if note.is_starred %}checked{% endif %}>
+          星标
+        </label>
+      </div>
+    </div>
+
+    <div class="ai-row">
+      <button class="btn btn--ghost btn--sm" type="button" id="ai-summary">
+        {{ icon('sparkles', 15) }} AI 生成摘要
+      </button>
+      <button class="btn btn--ghost btn--sm" type="button" id="ai-tags">
+        {{ icon('tag', 15) }} AI 推荐标签
+      </button>
+      <span class="ai-hint" id="ai-hint">
+        {%- if not ai_enabled -%}未配置 AI 服务（可选，见 .env.example）{%- endif -%}
+      </span>
+    </div>
+  </details>
+
+  {% if is_new and templates %}
+    <details class="editor__templates">
+      <summary>从模板开始</summary>
+      <div class="template-grid template-grid--compact">
+        {% for item in templates %}
+          <a class="template-card{{ ' is-active' if current_template and current_template.id == item.id }}"
+             href="/notes/new?template={{ item.id }}">
+            <span class="template-card__name">{{ item.name }}</span>
+            <span class="template-card__desc">{{ item.description }}</span>
+          </a>
+        {% endfor %}
+      </div>
+    </details>
+  {% endif %}
+
+  <div class="editor__actions">
+    <button class="btn btn--ghost" type="submit" name="action" value="draft">存为草稿</button>
+    <button class="btn" type="submit" name="action" value="save">保存</button>
+    <button class="btn btn--primary" type="submit" name="action" value="view">
+      {{ '创建并查看' if is_new else '保存并查看' }}
+    </button>
+    <a class="btn btn--ghost" href="{{ '/notes' if is_new else '/notes/' ~ note.id }}">取消</a>
+    {% if not is_new %}
+      <span class="editor__actions-meta muted">最后更新：{{ note.updated_at | datetime_cn }}</span>
+    {% endif %}
+  </div>
+</form>
+
+<datalist id="tag-options">
+  {% for name in known_tags %}<option value="{{ name }}"></option>{% endfor %}
+</datalist>
+<datalist id="category-options">
+  {% for item in categories %}<option value="{{ item.name }}"></option>{% endfor %}
+</datalist>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/editor.js?v={{ asset_v }}" defer></script>
+{% endblock %}

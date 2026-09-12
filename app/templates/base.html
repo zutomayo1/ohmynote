@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>{% block title %}{{ settings.site_title }}{% endblock %}</title>
+  <meta name="description" content="{% block description %}{{ settings.site_description }}{% endblock %}">
+  {% block canonical %}{% endblock %}
+  <meta property="og:site_name" content="{{ settings.site_title }}">
+  <meta property="og:type" content="{% block og_type %}website{% endblock %}">
+  <meta property="og:title" content="{% block og_title %}{{ settings.site_title }}{% endblock %}">
+  <meta property="og:description" content="{% block og_description %}{{ settings.site_description }}{% endblock %}">
+  <meta property="og:url" content="{{ absolute(current_path) }}">
+  <meta name="twitter:card" content="summary">
+  <meta name="csrf-token" content="{{ csrf }}">
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="alternate" type="application/atom+xml" href="/feed.xml" title="{{ settings.site_title }} · Atom">
+  <link rel="alternate" type="application/rss+xml" href="/rss.xml" title="{{ settings.site_title }} · RSS">
+  <link rel="stylesheet" href="/static/css/style.css?v={{ asset_v }}">
+  <link rel="stylesheet" href="/static/css/highlight.css?v={{ asset_v }}">
+  <script nonce="{{ nonce }}">
+    // 首屏之前就把主题定好，避免深色模式闪白
+    (function () {
+      try {
+        var mode = localStorage.getItem('inknote-theme');
+        if (mode !== 'light' && mode !== 'dark') {
+          mode = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+        }
+        document.documentElement.setAttribute('data-theme', mode);
+      } catch (error) { /* 隐私模式下 localStorage 不可用，忽略 */ }
+    })();
+  </script>
+</head>
+<body data-page="{% block page %}blog{% endblock %}">
+<div class="offline-banner" id="offline-banner" hidden>当前处于离线状态，改动会在联网后重新保存。</div>
+
+<header class="site-header">
+  <div class="site-header__inner container">
+    <a class="brand" href="{{ '/' if not is_authed else '/notes' }}">
+      <span class="brand__mark">墨</span>
+      <span class="brand__text">{{ settings.site_title }}<small class="brand__sub">{{ settings.site_subtitle }}</small></span>
+    </a>
+
+    <nav class="site-nav" aria-label="主导航">
+      {% if is_authed %}
+        <a class="nav-link{{ ' is-active' if current_path.startswith('/notes') or current_path == '/' }}" href="/notes">笔记</a>
+        <a class="nav-link{{ ' is-active' if current_path.startswith('/tags') }}" href="/tags">标签</a>
+        <a class="nav-link{{ ' is-active' if current_path.startswith('/blog') }}" href="/blog">博客</a>
+        <div class="nav-more">
+          <button class="nav-link nav-more__toggle" type="button" aria-haspopup="true" aria-label="更多导航">更多<span class="nav-more__caret" aria-hidden="true">▾</span></button>
+          <div class="nav-more__menu">
+            <a class="nav-link{{ ' is-active' if current_path.startswith('/templates') }}" href="/templates">模板</a>
+            <a class="nav-link{{ ' is-active' if current_path.startswith('/ask') }}" href="/ask">问笔记</a>
+            <a class="nav-link{{ ' is-active' if current_path.startswith('/trash') }}" href="/trash">回收站{% if nav_trash %}<span class="nav-badge">{{ nav_trash }}</span>{% endif %}</a>
+          </div>
+        </div>
+      {% else %}
+        <a class="nav-link{{ ' is-active' if current_path in ('/', '/blog') }}" href="/blog">博客</a>
+        <a class="nav-link{{ ' is-active' if current_path.startswith('/blog/archive') }}" href="/blog/archive">归档</a>
+        <a class="nav-link{{ ' is-active' if current_path.startswith('/about') }}" href="/about">关于</a>
+      {% endif %}
+    </nav>
+
+    <div class="header-actions">
+      {% if is_authed %}
+        <button class="icon-btn" id="search-open" type="button" title="快速搜索（Ctrl+K）" aria-label="快速搜索">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        </button>
+      {% endif %}
+      <button class="icon-btn theme-toggle" id="theme-toggle" type="button" title="切换深色模式" aria-label="切换深色模式">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg>
+      </button>
+      {% if is_authed %}
+        <a class="btn btn--primary btn--sm" href="/notes/new">写笔记</a>
+        <form class="logout-form" method="post" action="/logout">
+          <button class="btn btn--ghost btn--sm" type="submit">退出</button>
+        </form>
+      {% else %}
+        <a class="btn btn--ghost btn--sm" href="/login">登录</a>
+      {% endif %}
+    </div>
+  </div>
+</header>
+
+<main class="site-main container">
+  {% if msg %}
+    <div class="flash flash--{{ msg_kind or 'ok' }}" id="flash" role="status">{{ msg }}</div>
+  {% endif %}
+  {% block content %}{% endblock %}
+</main>
+
+<footer class="site-footer">
+  <div class="footer-inner container">
+    <div class="footer-brand">{{ settings.site_title }} · {{ settings.site_subtitle }}</div>
+    <nav class="footer-links">
+      <a href="/feed.xml">Atom</a>
+      <a href="/rss.xml">RSS</a>
+      <a href="/blog/archive">归档</a>
+      <a href="/about">关于</a>
+      {% if is_authed %}<a href="/manual">使用说明</a> · <a href="/settings">设置</a> · <a href="/backup">备份与恢复</a> · <a href="/images">图片</a> · <a href="/export/zip">导出全部笔记</a>{% endif %}
+    </nav>
+    <div class="footer-note">© {{ current_year }} {{ settings.author }} · 由 InkNote 驱动</div>
+  </div>
+</footer>
+
+{% if is_authed %}
+<div class="palette" id="palette" hidden>
+  <div class="palette__backdrop" data-palette-close></div>
+  <div class="palette__box" role="dialog" aria-modal="true" aria-label="快速搜索">
+    <form class="palette__form" method="get" action="/search">
+      <input class="palette__input" id="palette-input" type="search" name="q" autocomplete="off" spellcheck="false"
+             placeholder="搜索笔记标题与正文…" data-search-url="/api/search" aria-label="搜索关键词">
+    </form>
+    <div class="palette__results" id="palette-results"></div>
+    <div class="palette__hint">
+      <span><kbd>↑</kbd><kbd>↓</kbd> 选择</span>
+      <span><kbd>Enter</kbd> 打开</span>
+      <span><kbd>Ctrl</kbd>+<kbd>Enter</kbd> 全部结果</span>
+      <span><kbd>Esc</kbd> 关闭</span>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="toast-wrap" id="toast-wrap" aria-live="polite" aria-atomic="false"></div>
+
+<script src="/static/js/app.js?v={{ asset_v }}" defer></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

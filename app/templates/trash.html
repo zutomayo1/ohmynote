@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% from '_macros.html' import icon, note_card, pagination, empty_state with context %}
+{% block page %}trash{% endblock %}
+{% block title %}回收站 · {{ settings.site_title }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">回收站</h1>
+    <p class="trash-policy{{ ' trash-policy--off' if settings.trash_days <= 0 }}">
+      {%- if settings.trash_days > 0 -%}
+        回收站里的笔记保留 {{ settings.trash_days }} 天，会在下次启动服务时清理。共 {{ total }} 篇。
+      {%- else -%}
+        当前设置为不自动清理，回收站里的笔记会一直保留。共 {{ total }} 篇。
+      {%- endif -%}
+    </p>
+  </div>
+  <div class="page-actions">
+    {% if notes %}
+      <form method="post" action="/trash/empty" data-confirm="彻底删除回收站里的全部笔记？此操作不可恢复。">
+        <input type="hidden" name="_csrf" value="{{ csrf }}">
+        <button class="btn btn--danger" type="submit">{{ icon('trash', 16) }} 清空回收站</button>
+      </form>
+    {% endif %}
+    <a class="btn btn--ghost" href="/notes">返回笔记</a>
+  </div>
+</div>
+
+{% if notes %}
+  <div class="note-grid">
+    {% for note in notes %}
+      <article class="note-card note-card--trash">
+        <header class="note-card__head">
+          <h2 class="card__title">{{ note.title | e }}</h2>
+          <div class="note-card__badges">
+            <span class="badge badge--draft">{{ note.deleted_at | rel }} 删除</span>
+            {% set countdown = note.deleted_at | purge_countdown %}
+            {% if countdown %}
+              <span class="badge trash-countdown{{ ' trash-countdown--overdue' if '已过期' in countdown }}">{{ countdown }}</span>
+            {% endif %}
+          </div>
+        </header>
+        {% if note.summary %}<p class="card__summary">{{ note.summary | truncate_cn(140) }}</p>{% endif %}
+        <div class="card__meta meta">
+          <span class="meta__item">{{ note.word_count | number }} 字</span>
+          <span class="meta__divider">·</span>
+          <span class="meta__item">创建于 {{ note.created_at | date_cn }}</span>
+        </div>
+        <div class="note-card__foot">
+          <div class="pill-list">
+            {% for tag in note.tags %}<span class="tag-pill tag-pill--sm">{{ tag }}</span>{% endfor %}
+          </div>
+          <div class="note-card__actions">
+            <form method="post" action="{{ note.url }}/restore">
+              <input type="hidden" name="_csrf" value="{{ csrf }}">
+              <input type="hidden" name="next" value="{{ request.url.path }}">
+              <button class="btn btn--sm btn--ghost" type="submit">{{ icon('restore', 15) }} 恢复</button>
+            </form>
+            <form method="post" action="{{ note.url }}/purge" data-confirm="彻底删除《{{ note.title }}》？此操作不可恢复。">
+              <input type="hidden" name="_csrf" value="{{ csrf }}">
+              <input type="hidden" name="next" value="{{ request.url.path }}">
+              <button class="btn btn--sm btn--danger" type="submit">彻底删除</button>
+            </form>
+          </div>
+        </div>
+      </article>
+    {% endfor %}
+  </div>
+  {{ pagination(request, page, pages) }}
+{% else %}
+  {{ empty_state('回收站是空的', '删除笔记时会先放到这里，给你一次反悔的机会。', 'trash', '/notes', '返回笔记列表') }}
+{% endif %}
+{% endblock %}

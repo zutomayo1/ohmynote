@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% from '_macros.html' import icon, post_card, tag_pill with context %}
+{% block page %}blog{% endblock %}
+{% block title %}关于 · {{ settings.site_title }}{% endblock %}
+{% block canonical %}<link rel="canonical" href="{{ absolute('/about') }}">{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">关于</h1>
+    <p class="page-sub">{{ settings.site_subtitle }}</p>
+  </div>
+</div>
+
+<div class="about-layout">
+  <section class="card about-card">
+    <p class="prose">{{ settings.site_description }}</p>
+    <ul class="about-facts">
+      <li><span>站点</span><strong>{{ settings.site_title }}</strong></li>
+      <li><span>作者</span><strong>{{ settings.author }}</strong></li>
+      <li><span>已公开文章</span><strong>{{ total }} 篇</strong></li>
+      <li><span>订阅</span><strong><a href="/feed.xml">Atom</a> / <a href="/rss.xml">RSS</a></strong></li>
+    </ul>
+    <p class="muted micro">
+      本站由自己写的 InkNote 驱动：笔记用 Markdown 存在本地 SQLite 里，
+      勾选「公开到博客」后才会出现在这里。
+    </p>
+  </section>
+
+  <aside class="card">
+    <h2 class="card__title">{{ icon('tag', 16) }} 标签</h2>
+    {% if tags %}
+      <div class="tag-cloud tag-cloud--compact">
+        {% for item in tags %}{{ tag_pill(item.name, count=item.count, href=url_with_query('/blog', tag=item.name)) }}{% endfor %}
+      </div>
+    {% else %}<p class="muted">暂无标签。</p>{% endif %}
+  </aside>
+</div>
+
+{% if posts %}
+  <h2 class="section-title">最近更新</h2>
+  <div class="blog-list">
+    {% for note in posts %}{{ post_card(note) }}{% endfor %}
+  </div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% from '_macros.html' import icon, toc_nav, link_list, tag_pill with context %}
+{% set back = request.url.path %}
+{% block page %}detail{% endblock %}
+{% block title %}{{ note.title }} · {{ settings.site_title }}{% endblock %}
+{% block description %}{{ note.meta_description or note.summary or settings.site_description }}{% endblock %}
+{% block og_type %}article{% endblock %}
+{% block og_title %}{{ note.title }}{% endblock %}
+{% block og_description %}{{ note.meta_description or note.summary }}{% endblock %}
+
+{% block content %}
+{% set _img_count = note.content | image_count %}
+<div class="page-head page-head--article">
+  <div>
+    <h1 class="page-title">{{ note.title }}</h1>
+    <div class="post-meta meta">
+    {% if _img_count %}
+      <a class="post-meta__images" href="/images" title="去图片页看看这些图">{{ icon('image', 14) }} 本文引用 {{ _img_count }} 张图片</a>
+    {% endif %}
+
+      <span class="meta__item">更新 {{ note.updated_at | rel }}</span>
+      <span class="meta__divider">·</span>
+      <span class="meta__item">{{ note.word_count | number }} 字</span>
+      <span class="meta__divider">·</span>
+      <span class="meta__item">{{ note.reading_minutes | reading }}</span>
+      {% if note.category %}
+        <span class="meta__divider">·</span>
+        <span class="meta__item">{{ note.category }}</span>
+      {% endif %}
+      <span class="meta__divider">·</span>
+      <span class="meta__item">创建于 {{ note.created_at | date_cn }}</span>
+    </div>
+    <div class="pill-list pill-list--mt">
+      {% if note.status == 'draft' %}<span class="badge badge--draft">草稿</span>{% else %}<span class="badge badge--saved">已保存</span>{% endif %}
+      {% if note.is_public %}<span class="badge badge--public">已公开</span>{% endif %}
+      {% if note.is_pinned %}<span class="badge badge--pinned">置顶</span>{% endif %}
+      {% if note.is_starred %}<span class="badge badge--star">星标</span>{% endif %}
+      {% for tag in note.tags %}{{ tag_pill(tag, href=url_with_query('/notes', tag=tag), small=True) }}{% endfor %}
+    </div>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn--primary" href="{{ note.url }}/edit">{{ icon('edit', 16) }} 编辑</a>
+    <a class="btn btn--ghost" href="/ask?note={{ note.id }}">{{ icon('sparkles', 16) }} 问这篇</a>
+    <form method="post" action="{{ note.url }}/flag">
+      <input type="hidden" name="_csrf" value="{{ csrf }}">
+      <input type="hidden" name="next" value="{{ back }}">
+      <input type="hidden" name="flag" value="public">
+      <input type="hidden" name="value" value="{{ '0' if note.is_public else '1' }}">
+      <button class="btn btn--ghost" type="submit">
+        {{ icon('eye-off' if note.is_public else 'eye', 16) }} {{ '取消公开' if note.is_public else '公开到博客' }}
+      </button>
+    </form>
+    <form method="post" action="{{ note.url }}/flag">
+      <input type="hidden" name="_csrf" value="{{ csrf }}">
+      <input type="hidden" name="next" value="{{ back }}">
+      <input type="hidden" name="flag" value="pin">
+      <input type="hidden" name="value" value="{{ '0' if note.is_pinned else '1' }}">
+      <button class="btn btn--ghost btn--icon" type="submit" title="{{ '取消置顶' if note.is_pinned else '置顶' }}">{{ icon('pin', 16) }}</button>
+    </form>
+    <form method="post" action="{{ note.url }}/flag">
+      <input type="hidden" name="_csrf" value="{{ csrf }}">
+      <input type="hidden" name="next" value="{{ back }}">
+      <input type="hidden" name="flag" value="star">
+      <input type="hidden" name="value" value="{{ '0' if note.is_starred else '1' }}">
+      <button class="btn btn--ghost btn--icon" type="submit" title="{{ '取消星标' if note.is_starred else '标星' }}">{{ icon('star', 16) }}</button>
+    </form>
+    <div class="menu-group">
+      <a class="btn btn--ghost" href="{{ note.url }}/versions">{{ icon('history', 16) }} 历史</a>
+      <a class="btn btn--ghost" href="{{ note.url }}/export.md" title="导出为 Markdown 文件">{{ icon('download', 16) }}</a>
+      {% if note.is_public %}<a class="btn btn--ghost" href="{{ note.blog_url }}" title="在博客中查看">{{ icon('book', 16) }}</a>{% endif %}
+                <form method="post" action="{{ note.url }}/delete"
+                data-confirm="把《{{ note.title }}》移入回收站？{% if _img_count %}正文引用了 {{ _img_count }} 张图片，删完可以去「图片」页清理。{% endif %}">
+        <input type="hidden" name="_csrf" value="{{ csrf }}">
+        <input type="hidden" name="next" value="/notes">
+        <button class="btn btn--ghost btn--danger btn--icon" type="submit" title="移入回收站">{{ icon('trash', 16) }}</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="post-layout">
+  <article class="post-body prose" id="post-body">
+    {% if not note.content.strip() %}
+      <p class="muted">这篇笔记还是空的，<a href="{{ note.url }}/edit">去写点什么</a>。</p>
+    {% else %}
+      {{ html | safe }}
+    {% endif %}
+  </article>
+
+  <aside class="post-rail">
+    {{ toc_nav(toc) }}
+
+    <section class="rail-block">
+      <h2 class="rail-block__title">你可能还想看</h2>
+      {{ link_list(related, '还没有相关笔记。', why=True) }}
+    </section>
+
+    <section class="rail-block">
+      <h2 class="rail-block__title">反向链接（{{ backlinks | length }}）</h2>
+      {{ link_list(backlinks, '还没有笔记引用这篇。') }}
+    </section>
+
+    <section class="rail-block">
+      <h2 class="rail-block__title">指向（{{ outgoing | length }}）</h2>
+      {% if outgoing %}
+        <ul class="related">
+          {% for item in outgoing %}
+            <li class="related__item">
+              {% if item.exists %}
+                <a href="{{ item.url }}">{{ item.title }}</a>
+              {% else %}
+                <span class="wikilink wikilink--missing">{{ item.title }}</span>
+                <a class="related__action" href="/notes/new?title={{ item.title | urlencode }}">创建 →</a>
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="muted">在正文写 <code>[[另一篇标题]]</code> 即可建立双链。</p>
+      {% endif %}
+    </section>
+
+    {% if versions %}
+      <section class="rail-block">
+        <h2 class="rail-block__title">最近历史（{{ version_count }}）</h2>
+        <ul class="related">
+          {% for item in versions %}
+            <li class="related__item">
+              <a href="{{ note.url }}/versions/{{ item.id }}">{{ item.created_at | datetime_cn }}</a>
+              <span class="related__why">{{ item.reason | replace('autosave', '自动快照') | replace('manual', '保存前快照') | replace('before-restore', '回滚前快照') | replace('restore', '回滚') }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+        <a class="rail-block__more" href="{{ note.url }}/versions">查看全部版本 →</a>
+      </section>
+    {% endif %}
+  </aside>
+</div>
+
+{% if previous or next %}
+  <nav class="post-nav" aria-label="相邻笔记">
+    {% if previous %}
+      <a class="post-nav__item post-nav__item--prev" href="{{ previous.url }}">
+        <span class="post-nav__label">{{ icon('left', 14) }} 更新的笔记</span>
+        <span class="post-nav__title">{{ previous.title }}</span>
+      </a>
+    {% else %}<span class="post-nav__item is-empty"></span>{% endif %}
+    {% if next %}
+      <a class="post-nav__item post-nav__item--next" href="{{ next.url }}">
+        <span class="post-nav__label">更早的笔记 {{ icon('right', 14) }}</span>
+        <span class="post-nav__title">{{ next.title }}</span>
+      </a>
+    {% else %}<span class="post-nav__item is-empty"></span>{% endif %}
+  </nav>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% from '_macros.html' import icon, empty_state with context %}
+{% block page %}templates{% endblock %}
+{% block title %}笔记模板 · {{ settings.site_title }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">笔记模板</h1>
+    <p class="page-sub">新建笔记时可以选一个模板起步，省掉重复的结构。</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn--ghost" href="/notes">返回笔记</a>
+  </div>
+</div>
+
+<div class="template-layout">
+  <section>
+    <h2 class="section-title">全部模板（{{ templates | length }}）</h2>
+    {% if templates %}
+      <div class="template-grid">
+        {% for item in templates %}
+          <article class="template-card{{ ' is-active' if editing and editing.id == item.id }}">
+            <header class="template-card__head">
+              <h3 class="template-card__name">{{ item.name }}</h3>
+            </header>
+            <p class="template-card__desc">{{ item.description or '（没有说明）' }}</p>
+            <pre class="template-card__preview">{{ item.content | truncate_cn(160) }}</pre>
+            <div class="template-card__actions">
+              <a class="btn btn--sm btn--primary" href="/notes/new?template={{ item.id }}">用这个模板</a>
+              <a class="btn btn--sm btn--ghost" href="/templates?edit={{ item.id }}">编辑</a>
+              <form method="post" action="/templates/{{ item.id }}/delete" data-confirm="删除模板「{{ item.name }}」？已有的笔记不受影响。">
+                <input type="hidden" name="_csrf" value="{{ csrf }}">
+                <button class="btn btn--sm btn--ghost btn--danger" type="submit">删除</button>
+              </form>
+            </div>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      {{ empty_state('还没有模板', '在右边新建一个，比如「周报」或「读书笔记」。', 'book') }}
+    {% endif %}
+  </section>
+
+  <aside class="template-editor">
+    <h2 class="section-title">{{ '编辑模板' if editing else '新建模板' }}</h2>
+    <form class="template-form" method="post" action="/templates/save">
+      <input type="hidden" name="_csrf" value="{{ csrf }}">
+      <input type="hidden" name="template_id" value="{{ editing.id if editing else '' }}">
+      <label class="field">
+        <span class="field__label">名称</span>
+        <input class="input" type="text" name="name" required value="{{ editing.name if editing else '' }}"
+               placeholder="例如：周报">
+      </label>
+      <label class="field">
+        <span class="field__label">一句话说明</span>
+        <input class="input" type="text" name="description" value="{{ editing.description if editing else '' }}"
+               placeholder="这个模板适合什么场景">
+      </label>
+      <label class="field">
+        <span class="field__label">模板内容（Markdown）</span>
+        <textarea class="textarea textarea--code" name="content" rows="14"
+                  placeholder="## 小标题&#10;&#10;- [ ] 待办">{{ editing.content if editing else '' }}</textarea>
+      </label>
+      <div class="template-form__actions">
+        <button class="btn btn--primary" type="submit">{{ '保存修改' if editing else '创建模板' }}</button>
+        {% if editing %}<a class="btn btn--ghost" href="/templates">取消编辑</a>{% endif %}
+      </div>
+    </form>
+  </aside>
+</div>
+{% endblock %}

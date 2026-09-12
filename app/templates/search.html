@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% from '_macros.html' import note_card, pagination, empty_state, icon, tag_pill with context %}
+{% block page %}search{% endblock %}
+{% block title %}搜索{% if q %}：{{ q }}{% endif %} · {{ settings.site_title }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">搜索</h1>
+    <p class="page-sub">
+      {% if q %}
+        {% if engine == 'semantic' %}
+          按意思搜「{{ q }}」命中 {{ total }} 篇
+        {% else %}
+          关键词「{{ q }}」命中 {{ total }} 篇 · 检索方式：{{ backend }}
+        {% endif %}
+      {% else %}
+        输入关键词搜索标题、正文与标签
+      {% endif %}
+    </p>
+  </div>
+</div>
+
+<form class="toolbar" method="get" action="/search" role="search">
+  <div class="toolbar__row">
+    <label class="field field--grow">
+      <span class="sr-only">搜索</span>
+      <input class="input" type="search" name="q" value="{{ q }}" placeholder="多个关键词用空格分隔，需要同时命中" autofocus>
+    </label>
+    {% if mode == 'semantic' %}<input type="hidden" name="mode" value="semantic">{% endif %}
+    <button class="btn btn--primary" type="submit">{{ icon('search', 16) }} 搜索</button>
+    {% if q %}<a class="btn btn--ghost" href="/search">清空</a>{% endif %}
+  </div>
+</form>
+
+{# 「按意思搜」开关：沿用现有筛选 chip（tag-pill）样式，默认关键词，点一下切语义 #}
+<div class="filter-bar">
+  <div class="filter-bar__group" role="group" aria-label="检索方式">
+    {% if mode == 'semantic' %}
+      {{ tag_pill('按意思搜', href=filter_url(request, mode=None), active=True, small=True) }}
+    {% else %}
+      {{ tag_pill('按意思搜', href=filter_url(request, mode='semantic'), active=False, small=True) }}
+    {% endif %}
+  </div>
+</div>
+
+{# 引擎标注：说清这次到底用了语义还是关键词；回退时说明原因。 #}
+{% if q %}
+<p class="result-hint ai-search-status">
+  <span class="ai-search-status__engine ai-search-status__engine--{{ engine }}">{{ '语义检索' if engine == 'semantic' else '关键词检索' }} · 共 {{ total }} 篇</span>
+  {% if fallback_reason %}<span class="ai-search-status__fallback">已回退关键词检索：{{ fallback_reason }}</span>{% endif %}
+  {% if semantic_needs_setup %}<a class="result-hint__all ai-search-status__setup" href="/#ai">语义搜索需要先在设置页配置向量模型并重建索引</a>{% endif %}
+</p>
+{% endif %}
+
+{% if q and notes %}
+  <div class="note-grid">
+    {% for note in notes %}
+      {% if engine == 'semantic' %}
+        {# 只包一层壳展示匹配度，结果卡片仍复用 note_card 宏，不改宏本身 #}
+        <div class="ai-search-result">
+          <span class="ai-search-result__score">匹配度 {{ ((note.score or 0) * 100) | round(0) | int }}%</span>
+          {{ note_card(note, request, tokens=tokens, actions=False) }}
+        </div>
+      {% else %}
+        {{ note_card(note, request, tokens=tokens, actions=False) }}
+      {% endif %}
+    {% endfor %}
+  </div>
+  {{ pagination(request, page, pages) }}
+{% elif q %}
+  {{ empty_state('没有找到相关笔记', '换个关键词，或者用标签筛选试试。', 'search', '/notes', '返回笔记列表') }}
+{% else %}
+  {{ empty_state('搜索你的全部笔记', '支持多个关键词（空格分隔，需同时命中）；标题命中的结果排在最前。', 'search') }}
+{% endif %}
+{% endblock %}

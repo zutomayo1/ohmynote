@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% from '_macros.html' import note_card, pagination, tag_pill, empty_state, icon with context %}
+{% block page %}dashboard{% endblock %}
+{% block title %}我的笔记 · {{ settings.site_title }}{% endblock %}
+{% block description %}管理全部笔记（含草稿）{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">我的笔记</h1>
+    <p class="page-sub">
+      共 {{ stats.total | number }} 篇
+      {%- if stats.drafts %} · 草稿 {{ stats.drafts | number }} 篇{% endif %}
+      {%- if stats.public_count %} · 已公开 {{ stats.public_count | number }} 篇{% endif %}
+      {%- if stats.trash %} · 回收站 {{ stats.trash }} 篇{% endif %}
+    </p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn--ghost" href="/export/zip" title="把全部笔记导出为 Markdown 压缩包">{{ icon('download', 16) }} 导出</a>
+    <a class="btn btn--primary" href="/notes/new">{{ icon('plus', 16) }} 新建笔记</a>
+  </div>
+</div>
+
+<section class="stats-strip">
+  <div class="stat">
+    <div class="stat__value">{{ stats.words | number }}</div>
+    <div class="stat__label">累计字数</div>
+  </div>
+  <div class="stat">
+    <div class="stat__value">{{ stats.streak }}<small>天</small></div>
+    <div class="stat__label">连续写作</div>
+  </div>
+  <div class="stat">
+    <div class="stat__value">{{ stats.today_updated }}<small>篇</small></div>
+    <div class="stat__label">今日更新</div>
+  </div>
+  <div class="stat">
+    <div class="stat__value">{{ stats.tags | number }}</div>
+    <div class="stat__label">标签数</div>
+  </div>
+</section>
+
+<form class="toolbar" method="get" action="/notes" role="search">
+  <div class="toolbar__row">
+    <label class="field field--grow">
+      <span class="sr-only">搜索笔记</span>
+      <input class="input" type="search" name="q" value="{{ q }}" placeholder="搜索标题、正文、标签…">
+    </label>
+    <label class="field">
+      <span class="sr-only">状态</span>
+      <select class="select" name="status">
+        <option value="" {{ 'selected' if not status }}>全部状态</option>
+        <option value="draft" {{ 'selected' if status == 'draft' }}>草稿</option>
+        <option value="saved" {{ 'selected' if status == 'saved' }}>已保存</option>
+      </select>
+    </label>
+    <label class="field">
+      <span class="sr-only">排序</span>
+      <select class="select" name="sort">
+        {% for key, value in sorts.items() %}
+          <option value="{{ key }}" {{ 'selected' if sort == key }}>{{ value[1] }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="field">
+      <span class="sr-only">分类</span>
+      <select class="select" name="category">
+        <option value="">全部分类</option>
+        {% for item in categories %}
+          <option value="{{ item.name }}" {{ 'selected' if category == item.name }}>{{ item.name }}（{{ item.count }}）</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button class="btn btn--primary" type="submit">筛选</button>
+    {% if q or status or category or tag or fav %}
+      <a class="btn btn--ghost" href="/notes">清空</a>
+    {% endif %}
+  </div>
+  {% if tag %}<input type="hidden" name="tag" value="{{ tag }}">{% endif %}
+  {% if fav %}<input type="hidden" name="fav" value="{{ fav }}">{% endif %}
+</form>
+
+<div class="filter-bar">
+  <div class="filter-bar__group">
+    {{ tag_pill('全部', href=filter_url(request, tag=None, fav=None), active=(not tag and not fav), small=True) }}
+    {{ tag_pill('★ 星标', href=filter_url(request, fav='starred', tag=None), active=(fav == 'starred'), small=True) }}
+    {{ tag_pill('置顶', href=filter_url(request, fav='pinned', tag=None), active=(fav == 'pinned'), small=True) }}
+    {{ tag_pill('已公开', href=filter_url(request, fav='public', tag=None), active=(fav == 'public'), small=True) }}
+  </div>
+  {% if tags %}
+    <div class="filter-bar__group filter-bar__group--tags">
+      {% for item in tags %}
+        {{ tag_pill(item.name, count=item.count, href=filter_url(request, tag=item.name), active=(tag == item.name), small=True) }}
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>
+
+{% if q %}
+  <p class="result-hint">
+    关键词「{{ q }}」命中 {{ total }} 篇{% if page > 1 %}（第 {{ page }} 页）{% endif %}
+    <a class="result-hint__all" href="/search?q={{ q | urlencode }}">在搜索结果页查看 →</a>
+  </p>
+{% endif %}
+
+{% if notes %}
+  <form id="batch-form" class="batch-bar" method="post" action="/notes/batch" data-batch-total="{{ total }}">
+    <input type="hidden" name="_csrf" value="{{ csrf }}">
+    {# 当前筛选 / 搜索 / 分页参数由路由算好，批量提交后原样带回 #}
+    <input type="hidden" name="next" value="{{ next_url or '/notes' }}">
+    <input type="hidden" name="q" value="{{ q }}">
+    <input type="hidden" name="tag" value="{{ tag }}">
+    <input type="hidden" name="category" value="{{ category }}">
+    <input type="hidden" name="status" value="{{ status }}">
+    <input type="hidden" name="fav" value="{{ fav }}">
+    <input type="hidden" name="sort" value="{{ sort }}">
+    <button type="button" class="btn btn--ghost btn--sm" data-batch-all>全选</button>
+    <label class="batch-bar__all">
+      <input type="checkbox" name="all" value="1" data-batch-select-all>
+      选中全部筛选结果（全部 {{ total }} 篇）
+    </label>
+    {% if not batch_has_filter %}
+    <label class="batch-bar__all batch-bar__all--confirm" data-batch-confirm-all>
+      <input type="checkbox" name="confirm_all" value="1">
+      确认处理全部 {{ total }} 篇笔记
+    </label>
+    {% endif %}
+    {# 计数：初始「已选 0 项」，超出当前页时由 batch.js 追加「含其它页 M 项」 #}
+    <span class="batch-bar__count" data-batch-count aria-live="polite">已选 0 项</span>
+    {# 清空选择：默认隐藏（无 JS 时退化成原生只勾当前页）；有选择时由 batch.js 露出 #}
+    <button type="button" class="btn btn--ghost btn--sm batch-bar__clear is-hidden" data-batch-clear title="清空所有已勾选的笔记（含其它页）">清空选择</button>
+    <label class="field batch-bar__field">
+      <span class="sr-only">选择批量操作</span>
+      <select class="select" name="action" data-batch-action>
+        <option value="">批量操作…</option>
+        <option value="add_tag">添加标签</option>
+        <option value="remove_tag">移除标签</option>
+        <option value="publish">设为公开</option>
+        <option value="unpublish">取消公开</option>
+        <option value="pin">置顶</option>
+        <option value="unpin">取消置顶</option>
+        <option value="star">加星标</option>
+        <option value="unstar">取消星标</option>
+        <option value="trash">移入回收站</option>
+      </select>
+    </label>
+    <label class="field batch-bar__field batch-bar__tag" data-batch-tag>
+      <span class="sr-only">标签名</span>
+      <input class="input" type="text" name="action_tag" placeholder="标签名，如 python" data-batch-tag-input>
+    </label>
+    <button class="btn btn--primary btn--sm" type="submit">执行</button>
+  </form>
+
+  <div class="note-grid">
+    {% for note in notes %}
+      {{ note_card(note, request, tokens=tokens, tag_base='/notes', selectable=True, version_counts=version_counts) }}
+    {% endfor %}
+  </div>
+  {{ pagination(request, page, pages) }}
+{% else %}
+  {% if q or tag or status or category or fav %}
+    {{ empty_state('没有匹配的笔记', '换个关键词或清空筛选条件再试一次。', 'search', '/notes', '查看全部笔记') }}
+  {% else %}
+    {{ empty_state('还没有笔记', '写第一篇文章吧，支持 Markdown、双链、标签与全文搜索。', 'book', '/notes/new', '写第一篇笔记') }}
+  {% endif %}
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/batch.js?v={{ asset_v }}" defer></script>
+{% endblock %}

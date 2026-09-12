@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% from '_macros.html' import icon, empty_state with context %}
+{% block page %}ask{% endblock %}
+{% block title %}问笔记 · {{ settings.site_title }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">问笔记</h1>
+    <p class="page-sub">{% if scope_note %}只在这一篇笔记里找答案，引用来源也只有它；{% else %}先在你自己的笔记里检索相关内容，再让 AI 依据这些内容作答；{% endif %}可以连续追问，回答能一键存成笔记。</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn--ghost" href="{{ '/ask?note=' ~ scope_note.id if scope_note else '/ask' }}">{{ icon('plus', 16) }} 新对话</a>
+  </div>
+</div>
+
+<div class="ask-layout">
+  <div class="ask-main">
+    {% if not ai_ready %}
+      <div class="flash flash--warn">AI 服务未配置，下面只做全文检索（在「设置」里配好 Base URL 与模型名即可获得 AI 回答）。</div>
+    {% endif %}
+
+    {% if scope_note %}
+      <div class="ask-scope" role="status">
+        <span class="ask-scope__label">正在问这篇：</span>
+        <a class="ask-scope__title" href="{{ scope_note.url or ('/notes/' ~ scope_note.id) }}">《{{ scope_note.title }}》</a>
+        <a class="ask-scope__switch" href="/ask">切回问全部笔记</a>
+      </div>
+      {% if not ai_ready and scope_html %}
+        <section class="ask-scope-preview">
+          <h2 class="ask-scope-preview__title">{{ icon('book', 15) }} 这篇笔记的内容</h2>
+          <div class="ask-scope-preview__body prose">{{ scope_html | safe }}</div>
+          <p class="ask-scope-preview__hint micro muted">AI 服务未配置，先把它当检索结果列在这里。</p>
+        </section>
+      {% endif %}
+    {% endif %}
+
+    <div class="ask-thread" id="ask-thread" aria-live="polite">
+      {% for msg in messages %}
+        {% if msg.role == 'user' %}
+          <div class="ask-bubble ask-bubble--user">
+            <div class="ask-bubble__role">你</div>
+            <div class="ask-bubble__body">{{ msg.content }}</div>
+          </div>
+        {% else %}
+          <div class="ask-bubble ask-bubble--ai">
+            <div class="ask-bubble__role">{{ icon('sparkles', 15) }} AI 回答{% if msg.engine %}<span class="ask-engine ask-engine--{{ 'semantic' if msg.engine == 'semantic' else 'keyword' }}">{{ '语义检索' if msg.engine == 'semantic' else '关键词检索' }}</span>{% elif msg.sources and msg.sources[0].scope == 'note' %}<span class="ask-engine ask-engine--note">本篇笔记</span>{% endif %}</div>
+            {% if msg.html %}
+              <div class="ask-bubble__body ask-answer prose">{{ msg.html | safe }}</div>
+            {% elif not ai_ready %}
+              <p class="ask-bubble__body muted">AI 未配置，这轮只保留了检索结果。</p>
+            {% endif %}
+            {% if msg.sources %}
+              <div class="ask-sources">
+                <div class="ask-sources__title">引用到的笔记（{{ msg.sources | length }}）</div>
+                <div class="ask-source-list">
+                  {% for item in msg.sources %}
+                    <a class="ask-source-card" href="{{ item.url or '#' }}">
+                      <span class="ask-source-card__title">{{ item.title }}</span>
+                      {% if item.snippet %}<span class="ask-source-card__snippet">{{ item.snippet }}</span>{% endif %}
+                    </a>
+                  {% endfor %}
+                </div>
+              </div>
+            {% endif %}
+            {% if msg.id %}
+              <div class="ask-actions">
+                <form method="post" action="/ask/save">
+                  <input type="hidden" name="_csrf" value="{{ csrf }}">
+                  <input type="hidden" name="conversation_id" value="{{ conversation.id }}">
+                  <input type="hidden" name="message_id" value="{{ msg.id }}">
+                  <button class="btn btn--ghost btn--sm" type="submit">{{ icon('book', 15) }} 存成笔记</button>
+                </form>
+              </div>
+            {% endif %}
+          </div>
+        {% endif %}
+      {% endfor %}
+      {% if not conversation %}
+        {{ empty_state('开始一次新的提问', '输入问题，系统会先检索你的笔记再作答。Enter 发送，Shift+Enter 换行。', 'search') }}
+      {% endif %}
+    </div>
+
+    <form class="ask-form" id="ask-form" method="post" action="/ask"
+          data-stream-url="{{ '/ask/stream?note_id=' ~ scope_note.id if scope_note else '/ask/stream' }}" data-save-url="/ask/save" data-ai-ready="{{ '1' if ai_ready else '0' }}">
+      <input type="hidden" name="_csrf" value="{{ csrf }}">
+      {% if scope_note %}<input type="hidden" name="note_id" value="{{ scope_note.id }}">{% endif %}
+      <input type="hidden" name="conversation_id" id="ask-conversation-id" value="{{ conversation.id if conversation else '' }}">
+      <label class="field field--grow ask-field">
+        <span class="sr-only">你的问题</span>
+        <textarea class="input input--lg ask-input" id="ask-input" name="question" rows="2" required
+                  placeholder="例如：我关于 SQLite 记过哪些坑？（Enter 发送，Shift+Enter 换行）"></textarea>
+      </label>
+      <div class="ask-form__actions">
+        <button class="btn btn--primary" type="submit" id="ask-send">{{ icon('search', 16) }} 提问</button>
+        <span class="ask-hint micro">回答来自你自己的笔记；AI 可能出错，重要结论请点开来源核对。</span>
+      </div>
+    </form>
+
+    {% if sample_questions %}
+      <div class="ask-samples">
+        <span class="muted">试试：</span>
+        {% for item in sample_questions %}
+          <form method="post" action="/ask">
+            <input type="hidden" name="_csrf" value="{{ csrf }}">
+            <input type="hidden" name="question" value="{{ item }}">
+            {% if scope_note %}<input type="hidden" name="note_id" value="{{ scope_note.id }}">{% endif %}
+            <button class="tag-pill" type="submit">{{ item }}</button>
+          </form>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+
+  <aside class="post-rail ask-rail">
+    <section class="rail-block">
+      <h2 class="rail-block__title">{{ icon('history', 15) }} 最近提问</h2>
+      {% if recent %}
+        <ul class="ask-recent">
+          {% for item in recent %}
+            <li class="ask-recent__item{{ ' is-active' if conversation and conversation.id == item.id }}">
+              <a class="ask-recent__link" href="/ask?c={{ item.id }}">{{ item.title }}</a>
+              <span class="ask-recent__meta meta">{{ item.updated_at | rel }}{% if item.message_count %} · {{ item.message_count }} 条{% endif %}</span>
+              <form method="post" action="/ask/delete" data-confirm="删除这次对话？">
+                <input type="hidden" name="_csrf" value="{{ csrf }}">
+                <input type="hidden" name="conversation_id" value="{{ item.id }}">
+                <button class="icon-btn icon-btn--sm icon-btn--danger" type="submit" title="删除这次对话" aria-label="删除这次对话">{{ icon('trash', 14) }}</button>
+              </form>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="muted">还没有提问记录。</p>
+      {% endif %}
+    </section>
+
+    <section class="rail-block">
+      <h2 class="rail-block__title">{{ icon('search', 15) }} 怎么找来源</h2>
+      <p class="micro muted">每次提问都会先在你的笔记里检索：配了向量模型时优先用语义检索，不可用则回退到关键词全文检索。回答上会标出用的是哪一种。</p>
+    </section>
+
+    <section class="rail-block">
+      <h2 class="rail-block__title">{{ icon('lock', 15) }} 隐私</h2>
+      <p class="micro muted">问题和检索到的笔记片段会发送给你配置的 AI 服务；没有配置 AI 时只在本地检索、不联网。可在设置里开启「只允许本机模型」。</p>
+    </section>
+  </aside>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/ask.js?v={{ asset_v }}" defer></script>
+{% endblock %}

@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% from '_macros.html' import tag_pill, note_card, pagination, empty_state, icon with context %}
+{% block page %}tags{% endblock %}
+{% block title %}标签 · {{ settings.site_title }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">标签</h1>
+    <p class="page-sub">共 {{ tags | length }} 个标签。点标签筛选笔记，正文里写 <code>#标签</code> 也会自动归类。</p>
+  </div>
+</div>
+<details class="tag-admin">
+  <summary class="tag-admin__summary">
+    <span class="tag-admin__title">管理标签</span>
+    <span class="tag-admin__count">共 {{ all_tags | length }} 个</span>
+  </summary>
+  <div class="tag-admin__body">
+    <form class="tag-admin__form" method="post" action="/tags/rename">
+      <input type="hidden" name="_csrf" value="{{ csrf }}">
+      <label class="field">
+        <span class="field__label">要改名 / 合并的标签</span>
+        <select class="select" name="old" required>
+          <option value="">选择标签…</option>
+          {% for item in all_tags %}<option value="{{ item.name }}">{{ item.name }}（{{ item.count }}）</option>{% endfor %}
+        </select>
+      </label>
+      <label class="field">
+        <span class="field__label">新名字（已存在会自动合并）</span>
+        <input class="input" type="text" name="new" list="tag-name-options" maxlength="40" required placeholder="输入新标签名">
+      </label>
+      <datalist id="tag-name-options">
+        {% for item in all_tags %}<option value="{{ item.name }}"></option>{% endfor %}
+      </datalist>
+      <button class="btn btn--primary" type="submit">重命名 / 合并</button>
+    </form>
+    <form class="tag-admin__cleanup" method="post" action="/tags/cleanup">
+      <input type="hidden" name="_csrf" value="{{ csrf }}">
+      <button class="btn btn--ghost" type="submit">清理未使用的标签</button>
+    </form>
+  </div>
+</details>
+
+
+{% if tags %}
+  <div class="tag-cloud">
+    {{ tag_pill('全部', count=total if tag else none, href='/tags', active=(not tag)) }}
+    {% for item in tags %}
+      <div class="tag-manage">
+        <a class="tag-pill{{ ' is-active' if tag == item.name }}" href="/tags?tag={{ item.name | urlencode }}">
+        {{ item.name }}<span class="tag-pill__count">{{ item.count }}</span>
+      </a>
+      <details class="tag-manage__menu">
+        <summary class="tag-manage__toggle" title="管理「{{ item.name }}」" aria-label="管理标签 {{ item.name }}">✎</summary>
+        <div class="tag-manage__panel">
+          <form class="tag-manage__form" method="post" action="/tags/rename">
+            <input type="hidden" name="_csrf" value="{{ csrf }}">
+            <input type="hidden" name="old" value="{{ item.name }}">
+            <label class="sr-only" for="tag-rename-{{ loop.index }}">新标签名</label>
+            <input class="input tag-manage__input" id="tag-rename-{{ loop.index }}" type="text" name="new" value="{{ item.name }}" maxlength="40" required>
+            <button class="btn btn--ghost btn--sm" type="submit">重命名</button>
+          </form>
+          <form method="post" action="/tags/delete" data-confirm="删除标签《{{ item.name }}》？所有笔记上的这个标签都会被移除。">
+            <input type="hidden" name="_csrf" value="{{ csrf }}">
+            <input type="hidden" name="name" value="{{ item.name }}">
+            <button class="btn btn--danger btn--sm" type="submit">🗑 删除</button>
+          </form>
+        </div>
+      </details>
+    </div>
+    {% endfor %}
+  </div>
+{% endif %}
+<form class="toolbar tag-toolbar" method="get" action="/tags">
+  <label class="field tag-toolbar__field">
+    <span class="field__label">搜索标签</span>
+    <input class="input" type="search" name="q" value="{{ q }}" placeholder="输入标签名…">
+  </label>
+  <label class="field tag-toolbar__field">
+    <span class="field__label">排序</span>
+    <select class="select" name="sort">
+      <option value="count"{{ ' selected' if sort != 'name' }}>按使用次数</option>
+      <option value="name"{{ ' selected' if sort == 'name' }}>按名称</option>
+    </select>
+  </label>
+  <button class="btn btn--ghost btn--sm" type="submit">筛选</button>
+  {% if q or sort == 'name' %}<a class="btn btn--ghost btn--sm" href="/tags">重置</a>{% endif %}
+</form>
+
+
+{% if tag %}
+  <h2 class="section-title">标签「{{ tag }}」下的笔记（{{ total }}）</h2>
+  {% if notes %}
+    <div class="note-grid">
+      {% for note in notes %}{{ note_card(note, request, tag_base='/tags') }}{% endfor %}
+    </div>
+    {{ pagination(request, page, pages) }}
+  {% else %}
+    {{ empty_state('这个标签下还没有笔记', '', 'tag') }}
+  {% endif %}
+{% elif groups %}
+  {% for group in groups %}
+    <section class="tag-group">
+      <h2 class="section-title">
+        {{ tag_pill(group.tag.name, count=group.tag.count, href='/tags?tag=' ~ (group.tag.name | urlencode)) }}
+      </h2>
+      <ul class="note-lines">
+        {% for note in group.notes %}
+          <li class="note-line">
+            <a class="note-line__title" href="{{ note.url }}">{{ note.title }}</a>
+            <span class="note-line__meta meta">
+              <span class="meta__item">{{ note.updated_at | rel }}</span>
+              <span class="meta__divider">·</span>
+              <span class="meta__item">{{ note.word_count | number }} 字</span>
+            </span>
+          </li>
+        {% endfor %}
+      </ul>
+      {% if group.tag.count > group.notes | length %}
+        <a class="tag-group__more" href="/tags?tag={{ group.tag.name | urlencode }}">查看全部 {{ group.tag.count }} 篇 →</a>
+      {% endif %}
+    </section>
+  {% endfor %}
+{% else %}
+  {{ empty_state('还没有标签', '编辑笔记时填上标签，或在正文里写 #标签。', 'tag', '/notes/new', '写一篇带标签的笔记') }}
+{% endif %}
+{% endblock %}

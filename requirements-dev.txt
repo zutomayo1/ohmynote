@@ -1,0 +1,5 @@
+-r requirements.txt
+
+# 开发 / 自测依赖 —— pip install -r requirements-dev.txt
+pytest>=8.0
+httpx>=0.27                  # starlette TestClient 依赖

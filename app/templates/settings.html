@@ -1,0 +1,601 @@
+{% extends "base.html" %}
+{% from '_macros.html' import icon with context %}
+{% block page %}settings{% endblock %}
+{% block title %}设置 · {{ settings.site_title }}{% endblock %}
+{% block description %}配置站点信息与 AI 服务：站点名、每页条数、回收站天数、模型连接、用量统计与向量索引。{% endblock %}
+
+{% macro src_of(source) -%}
+  {%- if source == 'env' %}<span class="badge badge--warn">来自 .env</span>
+  {%- elif source == 'db' %}<span class="badge badge--public">来自本页</span>
+  {%- else %}<span class="badge">默认值</span>{%- endif %}
+{%- endmacro %}
+
+{% macro src(field) -%}
+  {{- src_of(ai.sources.get(field)) -}}
+{%- endmacro %}
+
+{# 分任务模型的状态摘要：没单独配就写「都用通用模型」 #}
+{% macro task_note() -%}
+  {%- set parts = [] -%}
+  {%- if ai.model_summary %}{% set _ = parts.append('摘要：' ~ ai.model_summary) %}{% endif -%}
+  {%- if ai.model_tags %}{% set _ = parts.append('打标签：' ~ ai.model_tags) %}{% endif -%}
+  {%- if ai.model_answer %}{% set _ = parts.append('问答：' ~ ai.model_answer) %}{% endif -%}
+  {%- if parts %}{{ parts | join(' · ') }}{% else %}都用通用模型{% endif -%}
+{%- endmacro %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">设置</h1>
+    <p class="page-sub">站点信息（站点名 / 每页条数 / 回收站天数…）和 AI 配置都可以在这里改；页面保存的值优先于项目根目录的 <code>.env</code>。</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn--ghost" href="/manual">使用说明</a>
+  </div>
+</div>
+
+<div class="ai-alert" id="ai-feedback" hidden role="alert" aria-live="polite"></div>
+
+{# ===== 顶部「当前状态」条：其它区块收起来后，关键信息也不缺 ===== #}
+<div class="settings-status" role="status" aria-label="AI 当前状态">
+  <span class="settings-status__item">
+    <span class="settings-status__label">AI 服务</span>
+    {% if ai.enabled %}<span class="badge badge--saved">已启用</span>{% else %}<span class="badge badge--draft">未启用</span>{% endif %}
+  </span>
+  <span class="settings-status__item">
+    <span class="settings-status__label">模型</span>
+    {% if ai.model %}<code class="settings-status__code">{{ ai.model }}</code>{% else %}<span class="muted">未填写</span>{% endif %}
+  </span>
+  <span class="settings-status__item">
+    <span class="settings-status__label">密钥</span>
+    {% if ai.has_key %}<span class="badge badge--public">已设置</span>{% else %}<span class="muted">未设置</span>{% endif %}
+  </span>
+  {% if ai.base_url %}
+    <span class="settings-status__item settings-status__item--wide">
+      <span class="settings-status__label">地址</span>
+      <code class="settings-status__code">{{ ai.base_url }}</code>
+    </span>
+  {% endif %}
+</div>
+
+{% if ai.env_keys %}
+  <p class="settings-status__env micro">
+    检测到 <code>.env</code> 里也配了 AI（{{ ai.env_keys | join('、') }}），目前被本页保存的值覆盖；想让 <code>.env</code> 生效，点下面的「清除本页配置」。
+  </p>
+{% endif %}
+
+{# ===== 站点信息：页面保存的值优先于 .env，保存后立即生效 ===== #}
+{% set site_form_values = site_form if site_form is defined and site_form else site %}
+<form class="settings-form" method="post" action="/settings/site">
+  <input type="hidden" name="_csrf" value="{{ csrf }}">
+  <details class="settings-block settings-block--primary" open>
+    <summary class="settings-block__summary">
+      <span class="settings-block__chevron" aria-hidden="true">▸</span>
+      <span class="settings-block__title">站点信息</span>
+      <span class="settings-block__note">{{ site.site_title }} · 每页 {{ site.per_page }} 条 · 回收站 {{ site.trash_days }} 天</span>
+      <span class="settings-block__state">
+        {% set overrides = site.sources.values() | select('eq', 'db') | list | length %}
+        {% if overrides %}<span class="badge badge--public">本页已改 {{ overrides }} 项</span>{% else %}<span class="badge">跟随 .env</span>{% endif %}
+      </span>
+    </summary>
+    <div class="settings-block__body">
+      <p class="micro">保存后立即生效（不用重启）；本页保存的值优先于 <code>.env</code>，想回到 <code>.env</code> 点下面的「恢复 .env 默认值」。</p>
+      <div class="field-grid">
+        <label class="field field--wide">
+          <span class="field__label">站点名 {{ src_of(site.sources.get('site_title')) }}</span>
+          <input class="input" type="text" name="site_title" value="{{ site_form_values.get('site_title', '') }}" maxlength="60" required>
+          <span class="micro">最多 60 个字，显示在浏览器标题、页头与页脚</span>
+        </label>
+
+        <label class="field">
+          <span class="field__label">副标题 {{ src_of(site.sources.get('site_subtitle')) }}</span>
+          <input class="input" type="text" name="site_subtitle" value="{{ site_form_values.get('site_subtitle', '') }}">
+        </label>
+
+        <label class="field">
+          <span class="field__label">作者 {{ src_of(site.sources.get('author')) }}</span>
+          <input class="input" type="text" name="author" value="{{ site_form_values.get('author', '') }}">
+          <span class="micro">显示在页脚署名处</span>
+        </label>
+
+        <label class="field field--wide">
+          <span class="field__label">站点描述 {{ src_of(site.sources.get('site_description')) }}</span>
+          <textarea class="textarea" name="site_description" rows="2">{{ site_form_values.get('site_description', '') }}</textarea>
+          <span class="micro">用于首页与文章页的 <code>meta description</code></span>
+        </label>
+
+        <label class="field field--wide">
+          <span class="field__label">对外地址 {{ src_of(site.sources.get('base_url')) }}</span>
+          <input class="input" type="text" name="base_url" value="{{ site_form_values.get('base_url', '') }}" placeholder="例如 https://notes.example.com" spellcheck="false">
+          <span class="micro">影响 RSS / sitemap / 分享链接里的完整网址</span>
+        </label>
+
+        <label class="field">
+          <span class="field__label">每页条数 {{ src_of(site.sources.get('per_page')) }}</span>
+          <input class="input" type="number" name="per_page" value="{{ site_form_values.get('per_page', 12) }}" min="5" max="200" step="1" required>
+          <span class="micro">列表每页显示几篇（5~200）</span>
+        </label>
+
+        <label class="field">
+          <span class="field__label">回收站保留天数 {{ src_of(site.sources.get('trash_days')) }}</span>
+          <input class="input" type="number" name="trash_days" value="{{ site_form_values.get('trash_days', 30) }}" min="0" max="3650" step="1" required>
+          <span class="micro">0~3650 天，超期自动清理；0 表示尽快清理</span>
+        </label>
+      </div>
+    </div>
+    <div class="settings-form__actions">
+      <button class="btn btn--primary" type="submit">保存站点信息</button>
+      <button class="btn btn--ghost btn--danger" type="submit" name="reset" value="1"
+              data-confirm="清除本页保存的站点信息，恢复 .env / 默认值？（不会删除笔记）">恢复 .env 默认值</button>
+    </div>
+  </details>
+</form>
+
+<form class="settings-form" id="ai-settings-form" method="post" action="/settings/ai"
+      data-models-url="/api/ai/models"
+      data-probe-url="/api/ai/probe"
+      data-embed-status-url="/api/ai/embed/status"
+      data-embed-rebuild-url="/api/ai/embed/rebuild">
+  <input type="hidden" name="_csrf" value="{{ csrf }}">
+
+  {# ===== 主区块：AI 服务（唯一默认展开） ===== #}
+  <details class="settings-block settings-block--primary" open>
+    <summary class="settings-block__summary">
+      <span class="settings-block__chevron" aria-hidden="true">▸</span>
+      <span class="settings-block__title">AI 服务</span>
+      <span class="settings-block__note">填地址和模型名就能用；本地模型通常不用密钥</span>
+      <span class="settings-block__state">
+        {% if ai.enabled %}<span class="badge badge--saved">已启用</span>{% else %}<span class="badge badge--draft">未启用</span>{% endif %}
+      </span>
+    </summary>
+    <div class="settings-block__body">
+      {% if ai.enabled %}
+        <p class="meta">
+          <span class="meta__item">当前使用 <code>{{ ai.model }}</code> · {{ ai.base_url }}</span>
+          {% if ai.has_key %}<span class="meta__item">密钥：{{ ai.key_mask }}</span>{% endif %}
+        </p>
+      {% else %}
+        <p class="muted">
+          填上下面两项就能用：<strong>Base URL</strong>（服务商地址）和<strong>模型名</strong>。
+          密钥看服务商要求，本地模型（Ollama）通常不用填。
+        </p>
+      {% endif %}
+
+      <!-- 一键预设：data-* 里带好 base_url / model / embed_model，前端只负责往表单里填 -->
+      <h3 class="section-title">一键预设（点一下自动填）</h3>
+      <div class="ai-presets" role="group" aria-label="服务商预设">
+        {% for p in ai.providers %}
+          <div class="ai-preset-card{{ ' is-active' if p.base_url == ai.base_url else '' }}">
+            <button class="ai-preset" type="button"
+                    data-base-url="{{ p.base_url }}"
+                    data-model="{{ p.model }}"
+                    data-embed-model="{{ p.embed_model }}"
+                    aria-label="使用 {{ p.name }} 预设">
+              <span class="ai-preset__name">{{ p.name }}</span>
+              <span class="ai-preset__note">{{ p.note }}</span>
+            </button>
+            {% if p.key_url %}
+              <a class="ai-preset__key" href="{{ p.key_url }}" target="_blank" rel="noopener noreferrer">去 {{ p.name }} 拿 Key ↗</a>
+            {% else %}
+              <span class="ai-preset__key ai-preset__key--none">本地服务，不用 Key</span>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+      <p class="micro">预设只会填进下面的输入框、<strong>不会自动保存</strong>；确认无误后点「保存配置」才会生效。想手动抄地址和模型名，展开下面的「常见服务商怎么填」。</p>
+
+      <div class="field-grid">
+        <label class="field field--wide">
+          <span class="field__label">Base URL {{ src('base_url') }}</span>
+          <input class="input" type="text" name="base_url" id="ai-base-url" value="{{ ai.base_url }}"
+                 placeholder="例如 https://api.deepseek.com/v1" autocomplete="off" spellcheck="false">
+          <span class="micro">填到 <code>/v1</code> 为止即可，程序会自己接 <code>/chat/completions</code></span>
+        </label>
+
+        <label class="field field--wide">
+          <span class="field__label">API Key {{ src('api_key') }}</span>
+          <input class="input" type="password" name="api_key" id="ai-api-key" value=""
+                 placeholder="{{ ('已保存：' ~ ai.key_mask ~ '，留空表示不修改') if ai.has_key else '本地模型可以留空' }}"
+                 autocomplete="new-password" spellcheck="false">
+          <span class="micro">只存在你自己电脑的数据库里（明文，和放在 .env 一样）；页面上不会回显完整密钥</span>
+        </label>
+
+        <div class="field field--wide">
+          <label class="field__label" for="ai-model">通用模型名 {{ src('model') }}</label>
+          <span class="ai-inline">
+            <span class="combo" data-model-combo>
+              <input class="input combo__input" type="text" name="model" id="ai-model"
+                     value="{{ ai.model }}" placeholder="点右边 ▾ 选，或直接输入，例如 deepseek-chat"
+                     autocomplete="off" spellcheck="false" role="combobox"
+                     aria-expanded="false" aria-autocomplete="list">
+              <button class="combo__toggle" type="button" aria-label="展开可选模型列表" tabindex="-1">▾</button>
+              <div class="combo__panel" role="listbox" hidden></div>
+            </span>
+            <button class="btn" type="button" id="ai-fetch-models">获取可用模型</button>
+          </span>
+          <span class="ai-status" id="ai-models-status" role="status"></span>
+        </div>
+
+        <label class="field">
+          <span class="field__label">超时（秒）</span>
+          <input class="input" type="number" name="timeout" id="ai-timeout" value="{{ ai.timeout }}" min="5" max="600" step="5">
+        </label>
+      </div>
+    </div>
+  </details>
+
+  {# ===== 分任务模型（收起） ===== #}
+  <details class="settings-block">
+    <summary class="settings-block__summary">
+      <span class="settings-block__chevron" aria-hidden="true">▸</span>
+      <span class="settings-block__title">分任务模型</span>
+      <span class="settings-block__note">{{ task_note() }}</span>
+    </summary>
+    <div class="settings-block__body">
+      <p class="micro">想让便宜模型干简单的活？可以给每个任务单独指定；留空就回退到上面的通用模型。</p>
+      <div class="field-grid">
+        <div class="field">
+          <label class="field__label" for="ai-model-summary">摘要用模型 {{ src('model_summary') }}</label>
+          <span class="combo" data-model-combo>
+            <input class="input combo__input" type="text" name="model_summary" id="ai-model-summary"
+                   value="{{ ai.model_summary }}" placeholder="留空 = 用通用模型"
+                   autocomplete="off" spellcheck="false" role="combobox"
+                   aria-expanded="false" aria-autocomplete="list">
+            <button class="combo__toggle" type="button" aria-label="展开可选模型列表" tabindex="-1">▾</button>
+            <div class="combo__panel" role="listbox" hidden></div>
+          </span>
+          <span class="ai-effective">实际生效：<code>{{ ai.tasks.summary or '（未配置）' }}</code></span>
+        </div>
+
+        <div class="field">
+          <label class="field__label" for="ai-model-tags">打标签用模型 {{ src('model_tags') }}</label>
+          <span class="combo" data-model-combo>
+            <input class="input combo__input" type="text" name="model_tags" id="ai-model-tags"
+                   value="{{ ai.model_tags }}" placeholder="留空 = 用通用模型"
+                   autocomplete="off" spellcheck="false" role="combobox"
+                   aria-expanded="false" aria-autocomplete="list">
+            <button class="combo__toggle" type="button" aria-label="展开可选模型列表" tabindex="-1">▾</button>
+            <div class="combo__panel" role="listbox" hidden></div>
+          </span>
+          <span class="ai-effective">实际生效：<code>{{ ai.tasks.tags or '（未配置）' }}</code></span>
+        </div>
+
+        <div class="field">
+          <label class="field__label" for="ai-model-answer">问答用模型 {{ src('model_answer') }}</label>
+          <span class="combo" data-model-combo>
+            <input class="input combo__input" type="text" name="model_answer" id="ai-model-answer"
+                   value="{{ ai.model_answer }}" placeholder="留空 = 用通用模型"
+                   autocomplete="off" spellcheck="false" role="combobox"
+                   aria-expanded="false" aria-autocomplete="list">
+            <button class="combo__toggle" type="button" aria-label="展开可选模型列表" tabindex="-1">▾</button>
+            <div class="combo__panel" role="listbox" hidden></div>
+          </span>
+          <span class="ai-effective">实际生效：<code>{{ ai.tasks.answer or '（未配置）' }}</code></span>
+        </div>
+      </div>
+    </div>
+  </details>
+
+  {# ===== 安全与隐私（收起） ===== #}
+  <details class="settings-block">
+    <summary class="settings-block__summary">
+      <span class="settings-block__chevron" aria-hidden="true">▸</span>
+      <span class="settings-block__title">安全与隐私</span>
+      <span class="settings-block__note">脱敏：{{ '开' if ai.redact else '关' }} · 只允许本机：{{ '开' if ai.local_only else '关' }}</span>
+    </summary>
+    <div class="settings-block__body">
+      <div class="ai-switches field--wide">
+        <label class="ai-switch">
+          <input type="checkbox" name="local_only" value="1" {% if ai.local_only %}checked{% endif %}>
+          <span class="ai-switch__body">
+            <span class="ai-switch__title">只允许本机模型</span>
+            <span class="ai-switch__desc">打开后，任何指向公网的地址都会被直接拦下，笔记不会被发出去；自建 / 局域网模型请打开。</span>
+          </span>
+        </label>
+        <label class="ai-switch">
+          <input type="checkbox" name="redact" value="1" {% if ai.redact %}checked{% endif %}>
+          <span class="ai-switch__body">
+            <span class="ai-switch__title">发送前脱敏</span>
+            <span class="ai-switch__desc">发给 AI 之前，自动把正文里像密钥、手机号、身份证、银行卡号的片段打码；介意隐私就打开。</span>
+          </span>
+        </label>
+      </div>
+      <div class="field field--checks">
+        <span class="field__label">密钥</span>
+        <label class="checkbox">
+          <input type="checkbox" name="clear_key" value="1">
+          清除已保存的密钥
+        </label>
+      </div>
+    </div>
+  </details>
+
+  {# ===== 向量检索（收起）：向量模型 + 索引状态 + 重建 ===== #}
+  <details class="settings-block">
+    <summary class="settings-block__summary">
+      <span class="settings-block__chevron" aria-hidden="true">▸</span>
+      <span class="settings-block__title">向量检索</span>
+      <span class="settings-block__note">{% if ai.embed_model %}向量模型：{{ ai.embed_model }}{% else %}未配置{% endif %}</span>
+    </summary>
+    <div class="settings-block__body">
+      <p class="muted">
+        给笔记建好向量索引后，「问笔记」就能按语义检索，而不只是关键词匹配。
+        需要先在下面填「向量模型」，并且服务商要支持 <code>/embeddings</code>。
+      </p>
+      <div class="field">
+        <label class="field__label" for="ai-embed-model">向量模型 {{ src('embed_model') }}</label>
+        <span class="combo" data-model-combo>
+          <input class="input combo__input" type="text" name="embed_model" id="ai-embed-model"
+                 value="{{ ai.embed_model }}" placeholder="例如 text-embedding-3-small；留空 = 不做向量索引"
+                 autocomplete="off" spellcheck="false" role="combobox"
+                 aria-expanded="false" aria-autocomplete="list">
+          <button class="combo__toggle" type="button" aria-label="展开可选模型列表" tabindex="-1">▾</button>
+          <div class="combo__panel" role="listbox" hidden></div>
+        </span>
+        <span class="micro">给「问笔记」做语义检索用；留空就退回关键词检索</span>
+      </div>
+      <div class="ai-embed" id="ai-embed"
+           data-status-url="/api/ai/embed/status"
+           data-rebuild-url="/api/ai/embed/rebuild">
+        <div class="ai-embed__head">
+          <span class="ai-embed__count" id="ai-embed-count">正在读取状态…</span>
+          <button class="btn btn--sm" type="button" id="ai-embed-rebuild">重建索引</button>
+        </div>
+        <div class="ai-progress" id="ai-embed-progress" hidden>
+          <div class="ai-progress__bar" id="ai-embed-progress-bar"></div>
+        </div>
+        <p class="ai-embed__hint micro" id="ai-embed-hint">
+          这个区块需要 JavaScript 才能显示进度；直接访问 <a href="/api/ai/embed/status">/api/ai/embed/status</a> 也能看到原始状态。
+        </p>
+      </div>
+    </div>
+  </details>
+
+  <div class="settings-form__actions">
+    <button class="btn btn--primary" type="submit">保存配置</button>
+    <button class="btn" type="submit" id="ai-probe" formaction="/settings/ai/test">{{ icon('sparkles', 16) }} 测试连接</button>
+    <button class="btn btn--ghost btn--danger" type="submit" name="clear_all" value="1"
+            data-confirm="清除页面里保存的 AI 配置？会回到 .env 或未配置状态（不会删除你的笔记）。">
+      清除本页配置
+    </button>
+  </div>
+  <p class="micro">
+    「测试连接」会逐步体检地址、密钥、模型名，<strong>不会保存</strong>；「保存配置」才会写进去并立即生效。
+    没开 JavaScript 时「测试连接」会走普通表单提交，结果以顶部提示条展示。
+  </p>
+
+  <div class="ai-probe" id="ai-probe-result" hidden aria-live="polite"></div>
+</form>
+
+{# ===== 提示词模板（收起）：三套可改，占位符缺失/超长保存时会被拒绝 ===== #}
+<form class="settings-form" method="post" action="/settings/ai/prompts">
+  <input type="hidden" name="_csrf" value="{{ csrf }}">
+  {% set pf = prompt_form if prompt_form is defined and prompt_form else {} %}
+  {% set prompt_custom_count = prompts.values() | selectattr('custom', 'equalto', true) | list | length %}
+  <details class="settings-block"{{ ' open' if prompts_open else '' }}>
+    <summary class="settings-block__summary">
+      <span class="settings-block__chevron" aria-hidden="true">▸</span>
+      <span class="settings-block__title">提示词</span>
+      <span class="settings-block__note">摘要 / 标签 / 问答 · 已自定义 {{ prompt_custom_count }} 项</span>
+    </summary>
+    <div class="settings-block__body">
+      <p class="micro">下面三段是发给 AI 的「用户消息」模板，<code>{...}</code> 是会被替换的占位符；留空表示不改这一项，点「恢复默认」清除全部自定义。</p>
+      <div class="ai-prompts">
+        {% for task, info in prompts.items() %}
+          <div class="ai-prompt">
+            <label class="field__label" for="ai-prompt-{{ task }}">
+              {{ info.label }}模板
+              {% if info.custom %}<span class="badge badge--public">已自定义</span>{% else %}<span class="badge">默认</span>{% endif %}
+            </label>
+            <textarea class="textarea" id="ai-prompt-{{ task }}" name="{{ task }}" rows="6"
+                      maxlength="{{ info.max_chars }}" spellcheck="false">{{ pf.get(task, info.value) }}</textarea>
+            <span class="micro ai-prompt__hint">占位符：
+              {% for ph in info.placeholders %}<code>{{ '{' }}{{ ph }}{{ '}' }}</code>{% if not loop.last %} {% endif %}{% endfor %}
+              · 最多 {{ info.max_chars }} 字符
+            </span>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="settings-form__actions">
+      <button class="btn btn--primary" type="submit">保存提示词</button>
+      <button class="btn btn--ghost btn--danger" type="submit" name="reset" value="1"
+              data-confirm="恢复三套提示词为内置默认？已自定义的内容会被清除。">恢复默认</button>
+    </div>
+  </details>
+</form>
+
+{# ===== 账号：改登录密码（会话 cookie 与口令无关，改完不踢下线） ===== #}
+<form class="settings-form" method="post" action="/settings/password">
+  <input type="hidden" name="_csrf" value="{{ csrf }}">
+  <details class="settings-block settings-block--account"{{ ' open' if account_open else '' }}>
+    <summary class="settings-block__summary">
+      <span class="settings-block__chevron" aria-hidden="true">▸</span>
+      <span class="settings-block__title">账号</span>
+      <span class="settings-block__note">密码：{{ account.label }}</span>
+      <span class="settings-block__state">
+        {% if account.source == 'db' %}<span class="badge badge--public">页面已改</span>
+        {% elif account.source == 'default' %}<span class="badge">默认密码</span>
+        {% else %}<span class="badge badge--warn">来自 .env</span>{% endif %}
+      </span>
+    </summary>
+    <div class="settings-block__body">
+      <p class="micro">
+        改完<strong>立即生效</strong>，下次登录请用新密码。会话 cookie 是 HMAC 签名的、跟口令无关，
+        所以<strong>已经登录的设备不会被踢下线</strong>；想让全部设备重新登录，改 <code>.env</code> 里的
+        <code>INKNOTE_SECRET</code> 再重启服务。
+      </p>
+      <div class="field-grid">
+        <label class="field field--wide">
+          <span class="field__label">旧密码</span>
+          <input class="input" type="password" name="old_password" autocomplete="current-password" required>
+        </label>
+        <label class="field">
+          <span class="field__label">新密码</span>
+          <input class="input" type="password" name="new_password" autocomplete="new-password" minlength="8" required>
+          <span class="micro">至少 8 位；建议用一句好记的长口令</span>
+        </label>
+        <label class="field">
+          <span class="field__label">确认新密码</span>
+          <input class="input" type="password" name="confirm_password" autocomplete="new-password" minlength="8" required>
+        </label>
+      </div>
+      <p class="micro">
+        忘了密码？删掉数据库里的 <code>account.password_hash</code>（点下面的「清除本页改的密码」）就会回到
+        <code>.env</code> 里的口令；也可以直接在 <code>.env</code> 里改
+        <code>INKNOTE_PASSWORD_HASH</code> 或 <code>INKNOTE_PASSWORD</code>，改完重启。
+      </p>
+    </div>
+    <div class="settings-form__actions">
+      <button class="btn btn--primary" type="submit">修改密码</button>
+      <button class="btn btn--ghost btn--danger" type="submit" name="reset_password" value="1"
+              data-confirm="清除本页改的密码，登录回到 .env 里的口令？（不会影响已登录的设备）">清除本页改的密码</button>
+    </div>
+  </details>
+</form>
+
+{# ===== 用量统计（收起）：本月数字 + 拆解 + 柱状图 + 重置 ===== #}
+<details class="settings-block">
+  <summary class="settings-block__summary">
+    <span class="settings-block__chevron" aria-hidden="true">▸</span>
+    <span class="settings-block__title">用量统计</span>
+    <span class="settings-block__note">
+      {%- if usage.month_calls -%}
+        本月 {{ usage.month_calls | number }} 次 · {% if usage.month_tokens >= 10000 %}{{ (usage.month_tokens / 10000) | round(1) }} 万 token{% else %}{{ usage.month_tokens | number }} token{% endif %}
+      {%- else -%}
+        本月还没有调用
+      {%- endif -%}
+    </span>
+  </summary>
+  <div class="settings-block__body">
+    {% if usage.month_calls %}
+      <p class="ai-usage-total">
+        本月 <strong>{{ usage.month_calls | number }}</strong> 次调用 ·
+        <strong>{{ usage.month_tokens | number }}</strong> token
+        <span class="muted">（输入 {{ usage.month_prompt | number }} / 输出 {{ usage.month_completion | number }}）</span>
+      </p>
+    {% else %}
+      <p class="muted">本月还没有调用记录。配置好 AI 之后，摘要 / 打标签 / 问笔记的每次调用都会记在这里。</p>
+    {% endif %}
+
+    {% if usage.last_call %}
+      <p class="micro">
+        最近一次：<code>{{ usage.last_call.model or '（未记录模型）' }}</code> ·
+        {{ task_labels.get(usage.last_call.task, usage.last_call.task or '其它') }} ·
+        {{ usage.last_call.created_at | rel }}
+      </p>
+    {% endif %}
+
+    {% if usage.by_task %}
+      <h3 class="section-title">按任务拆分</h3>
+      <div class="prose">
+        <table class="ai-usage-table">
+          <thead><tr><th>任务</th><th>调用次数</th><th>token</th></tr></thead>
+          <tbody>
+            {% for item in usage.by_task %}
+              <tr>
+                <td>{{ task_labels.get(item.task, item.task) }}</td>
+                <td>{{ item.calls | number }}</td>
+                <td>{{ item.tokens | number }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+
+    <h3 class="section-title">最近 30 天（按天）</h3>
+    <div class="ai-chart" role="img" aria-label="最近 30 天每日调用次数柱状图">
+      {% for bar in usage_chart %}
+        <div class="ai-chart__col">
+          <div class="ai-chart__bar{{ ' is-empty' if bar.empty else '' }}" style="height: {{ bar.percent }}%"
+               title="{{ bar.day }}：{{ bar.calls }} 次调用 · {{ bar.tokens }} token"></div>
+        </div>
+      {% endfor %}
+    </div>
+    <div class="ai-chart__axis"><span>{{ usage_chart[0].label }}</span><span>今天 {{ usage_chart[-1].label }}</span></div>
+
+    <form class="ai-usage-reset" method="post" action="/settings/ai/usage/reset"
+          data-confirm="确定重置用量统计？只清空调用记录，不影响 AI 配置。">
+      <input type="hidden" name="_csrf" value="{{ csrf }}">
+      <button class="btn btn--ghost btn--danger btn--sm" type="submit">重置用量统计</button>
+    </form>
+  </div>
+</details>
+
+{# ===== 常见服务商怎么填（收起）：地址 / 模型速查表 ===== #}
+<details class="settings-block">
+  <summary class="settings-block__summary">
+    <span class="settings-block__chevron" aria-hidden="true">▸</span>
+    <span class="settings-block__title">常见服务商怎么填</span>
+    <span class="settings-block__note">{{ ai.providers | length }} 家常用服务商的地址与模型速查</span>
+  </summary>
+  <div class="settings-block__body">
+    <p class="muted">上面的预设是「点一下自动填」；这张表方便你手动抄地址和模型名。</p>
+    <div class="settings-ref prose">
+      <table>
+        <thead><tr><th>服务商</th><th>Base URL</th><th>通用模型</th><th>向量模型</th><th>密钥</th></tr></thead>
+        <tbody>
+          {% for p in ai.providers %}
+            <tr>
+              <td>{{ p.name }}</td>
+              <td><code>{{ p.base_url }}</code></td>
+              <td><code>{{ p.model }}</code></td>
+              <td>{% if p.embed_model %}<code>{{ p.embed_model }}</code>{% else %}<span class="muted">不支持向量</span>{% endif %}</td>
+              <td>{% if p.key_url %}<a href="{{ p.key_url }}" target="_blank" rel="noopener noreferrer">获取 Key ↗</a>{% else %}<span class="muted">本地不用 Key</span>{% endif %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</details>
+
+{# ===== 其它选项（收起）：仍在 .env 里改 ===== #}
+<details class="settings-block">
+  <summary class="settings-block__summary">
+    <span class="settings-block__chevron" aria-hidden="true">▸</span>
+    <span class="settings-block__title">其它选项（仍在 .env 里改）</span>
+    <span class="settings-block__note">版本保留数、密码哈希等</span>
+  </summary>
+  <div class="settings-block__body">
+    <p class="muted">站点名、副标题、描述、作者、对外地址、每页条数、回收站天数已经搬到上面的「站点信息」；下面这些还只能改 <code>.env</code>。</p>
+    <div class="prose">
+      <table>
+        <thead><tr><th>变量</th><th>作用</th></tr></thead>
+        <tbody>
+          <tr><td><code>INKNOTE_VERSION_KEEP</code></td><td>每篇保留的历史版本数（默认 20）</td></tr>
+          <tr><td><code>INKNOTE_PASSWORD_HASH</code></td><td>用哈希代替明文密码，更安全</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="micro">
+      改完 <code>.env</code> 要重启服务才生效。完整的配置项列表见 <a href="/manual">使用说明</a> 或项目里的 <code>README.md</code>。
+    </p>
+  </div>
+</details>
+
+{# ===== 配好之后能干什么（收起） ===== #}
+<details class="settings-block">
+  <summary class="settings-block__summary">
+    <span class="settings-block__chevron" aria-hidden="true">▸</span>
+    <span class="settings-block__title">配好 AI 之后能干什么</span>
+    <span class="settings-block__note">问笔记、AI 摘要、推荐标签</span>
+  </summary>
+  <div class="settings-block__body">
+    <ul class="related">
+      <li class="related__item"><a href="/ask">问笔记</a><span class="related__why">用一句话提问，先检索你的笔记再让 AI 依据这些内容作答</span></li>
+      <li class="related__item"><span>AI 生成摘要</span><span class="related__why">编辑器「发布设置」里的按钮，生成一句话摘要</span></li>
+      <li class="related__item"><span>AI 推荐标签</span><span class="related__why">同上，推荐 3–5 个标签，优先复用你已有的标签</span></li>
+    </ul>
+    <p class="micro">
+      隐私提醒：调用 AI 时，<strong>被检索到的那几篇笔记内容会发送给服务商</strong>。介意的话就打开上面的「发送前脱敏」，
+      或者用本地模型（Ollama / 局域网地址）并打开「只允许本机模型」。
+    </p>
+  </div>
+</details>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/settings.js?v={{ asset_v }}" defer></script>
+{% endblock %}

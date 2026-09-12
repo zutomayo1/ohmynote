@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% from '_macros.html' import icon, tag_pill with context %}
+{% block page %}stats{% endblock %}
+{% block title %}统计 · {{ settings.site_title }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">写作统计</h1>
+    <p class="page-sub">看看自己写了多少、坚持了多少天。</p>
+  </div>
+  <div class="page-actions"><a class="btn btn--ghost" href="/notes">返回笔记</a></div>
+</div>
+
+<section class="stats-strip stats-strip--wide">
+  <div class="stat"><div class="stat__value">{{ stats.total | number }}</div><div class="stat__label">笔记总数</div></div>
+  <div class="stat"><div class="stat__value">{{ stats.words | number }}</div><div class="stat__label">累计字数</div></div>
+  <div class="stat"><div class="stat__value">{{ stats.streak }}<small>天</small></div><div class="stat__label">连续写作</div></div>
+  <div class="stat"><div class="stat__value">{{ stats.active_days }}<small>天</small></div><div class="stat__label">有记录的天数</div></div>
+  <div class="stat"><div class="stat__value">{{ stats.public_count | number }}</div><div class="stat__label">已公开</div></div>
+  <div class="stat"><div class="stat__value">{{ stats.drafts | number }}</div><div class="stat__label">草稿</div></div>
+  <div class="stat"><div class="stat__value">{{ stats.tags | number }}</div><div class="stat__label">标签</div></div>
+  <div class="stat"><div class="stat__value">{{ stats.today_updated }}<small>篇</small></div><div class="stat__label">今日更新</div></div>
+</section>
+
+<div class="stats-grid">
+  <section class="card">
+    <h2 class="card__title">最近写下的</h2>
+    <ul class="note-lines">
+      {% for note in recent %}
+        <li class="note-line">
+          <a class="note-line__title" href="{{ note.url }}">{{ note.title }}</a>
+          <span class="note-line__meta meta"><span class="meta__item">{{ note.created_at | rel }}</span></span>
+        </li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2 class="card__title">标签分布</h2>
+    {% if tags %}
+      <div class="tag-cloud tag-cloud--compact">
+        {% for item in tags %}{{ tag_pill(item.name, count=item.count, href='/tags?tag=' ~ (item.name | urlencode)) }}{% endfor %}
+      </div>
+    {% else %}<p class="muted">还没有标签。</p>{% endif %}
+  </section>
+
+  <section class="card">
+    <h2 class="card__title">按月统计（含草稿）</h2>
+    {% if months %}
+      <ul class="archive-list archive-list--compact">
+        {% for item in months %}
+          <li class="archive-month">
+            <span class="archive-month__label">{{ item.label }}</span>
+            <span class="archive-count">{{ item.count }} 篇</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}<p class="muted">还没有数据。</p>{% endif %}
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% from '_macros.html' import icon, empty_state, pagination with context %}
+{% block page %}images{% endblock %}
+{% block title %}图片 · {{ settings.site_title }}{% endblock %}
+
+{% block content %}
+{# 开发期自包含样式：.scratch/css-patch-media3.css 合并进 style.css 后可删。 #}
+{% if media_css %}<style>{{ media_css | safe }}</style>{% endif %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">图片</h1>
+    <p class="page-sub media-stats">
+      共 <strong>{{ stats.total }}</strong> 张 · 占用 <strong>{{ stats.total_size | filesize }}</strong>
+      · 孤立 <span class="is-orphan">{{ stats.orphan_count }} 张（{{ stats.orphan_size | filesize }}）</span>
+      · 重复 <span class="is-dup">{{ stats.duplicate_groups }} 组，可省 {{ stats.duplicate_removable_bytes | filesize }}</span>
+      {%- if only_orphans %} · 当前显示 {{ filtered_total }} 张{% endif %}
+    </p>
+  </div>
+  <div class="page-actions">
+    {% if only_orphans %}
+      <a class="btn btn--ghost btn--sm" href="/images">{{ icon('image', 15) }} 显示全部图片</a>
+    {% elif stats.orphan_count %}
+      <a class="btn btn--ghost btn--sm" href="/images?orphan=1">{{ icon('image', 15) }} 只看孤立图片（{{ stats.orphan_count }}）</a>
+    {% endif %}
+    {% if stats.orphan_count %}
+      <form method="post" action="/images/delete-orphans"
+            data-confirm="清理全部 {{ stats.orphan_count }} 张孤立图片？共 {{ stats.orphan_size | filesize }}，删除后无法恢复。">
+        <input type="hidden" name="_csrf" value="{{ csrf }}">
+        <button class="btn btn--danger btn--sm" type="submit">{{ icon('trash', 15) }} 清理全部孤立图片</button>
+      </form>
+    {% endif %}
+    {% if stats.duplicate_removable %}
+      <form method="post" action="/images/cleanup-duplicates"
+            data-confirm="清理 {{ stats.duplicate_removable }} 份未被引用的重复副本？共 {{ stats.duplicate_removable_bytes | filesize }}，删除后无法恢复。被笔记引用的副本会保留。">
+        <input type="hidden" name="_csrf" value="{{ csrf }}">
+        <button class="btn btn--danger btn--sm" type="submit">{{ icon('trash', 15) }} 清理多余副本</button>
+      </form>
+    {% endif %}
+  </div>
+</div>
+
+{% if items %}
+  <div class="media-grid">
+    {% for item in items %}
+      <article class="media-card{{ ' media-card--orphan' if item.orphan }}">
+        <a class="media-card__thumb" href="{{ item.url }}" target="_blank" rel="noopener" title="查看原图：{{ item.name }}">
+          <img loading="lazy" src="{{ item.url }}" alt="{{ item.name }}" width="180" height="150">
+          {% if item.orphan %}<span class="media-card__flag">孤立</span>{% endif %}
+        </a>
+        <div class="media-card__body">
+          <div class="media-card__name" title="{{ item.name }}">{{ item.name }}</div>
+          <div class="media-card__meta">
+            <span>{{ item.size | filesize }}</span>
+            <span class="meta__divider">·</span>
+            <span>{{ item.uploaded | datetime_cn }}</span>
+          </div>
+          <div class="media-card__refs">
+            {% if item.duplicate_count %}
+              <span class="badge badge--warn media-card__dup">{{ icon('image', 12) }} 内容重复 · 与 {{ item.duplicate_count }} 张图内容相同</span>
+              {% if item.used_by %}<span class="media-card__dup-note">仍被笔记引用，不会自动清理</span>{% endif %}
+            {% endif %}
+            {% if item.used_by %}
+              <span class="badge badge--public">{{ item.used_by | length }} 篇引用</span>
+              <div class="media-card__links">
+                {% for note in item.used_by %}
+                  <a href="{{ note.url }}" title="《{{ note.title }}》"{% if loop.index > 3 %} class="media-card__link--extra" hidden{% endif %}>{{ note.title | truncate_cn(20) }}</a>
+                {% endfor %}
+              </div>
+              {% if item.used_by | length > 3 %}
+                <button type="button" class="media-refs-toggle" data-more-count="{{ item.used_by | length - 3 }}" aria-expanded="false">还有 {{ item.used_by | length - 3 }} 篇</button>
+              {% endif %}
+            {% else %}
+              <span class="badge badge--warn">{{ icon('trash', 12) }} 孤立图片</span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="media-card__actions">
+          <button type="button" class="btn btn--ghost btn--sm media-copy" data-copy="![]({{ item.url }})"
+                  title="复制 Markdown 链接：![]({{ item.url }})">
+            {{ icon('link', 14) }}<span class="media-copy__label">复制链接</span>
+          </button>
+          <form method="post" action="/images/delete"
+                data-confirm="删除 {{ item.name }}？{% if item.used_by %}这张图仍被 {{ item.used_by | length }} 篇笔记引用，删除后文章里的图片会失效。{% else %}文件会从磁盘上移除，无法恢复。{% endif %}">
+            <input type="hidden" name="_csrf" value="{{ csrf }}">
+            <input type="hidden" name="rel" value="{{ item.rel }}">
+            {% if item.used_by %}<input type="hidden" name="force" value="1">{% endif %}
+            <button class="btn btn--sm {{ 'btn--danger' if item.orphan else 'btn--ghost' }}" type="submit">
+              {{ icon('trash', 14) }} {{ '删除' if item.orphan else '强制删除' }}
+            </button>
+          </form>
+        </div>
+      </article>
+    {% endfor %}
+  </div>
+  {{ pagination(request, page, pages) }}
+{% elif only_orphans %}
+  {{ empty_state('没有孤立图片', '当前每张图片都有笔记在引用，很干净。', 'image', '/images', '返回全部图片') }}
+{% else %}
+  {{ empty_state('还没有图片', '在编辑器里拖拽或粘贴图片，就会自动上传到这里。', 'image', '/notes/new', '去写笔记') }}
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script nonce="{{ nonce }}">
+  // 图片库增强：复制 Markdown 链接 + 展开引用列表（纯前端，无外部依赖）。
+  (function () {
+    function showToast(message) {
+      var wrap = document.getElementById('toast-wrap');
+      if (!wrap) return;
+      if (window.InkNote && typeof window.InkNote.toast === 'function') {
+        window.InkNote.toast(message, 'ok');
+        return;
+      }
+      // app.js 尚未加载完时的兜底：自己插一条，短暂显示后移除。
+      var el = document.createElement('div');
+      el.className = 'toast toast--ok';
+      el.setAttribute('role', 'status');
+      el.textContent = message;
+      wrap.appendChild(el);
+      window.setTimeout(function () { el.classList.add('is-out'); }, 1600);
+      window.setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 2200);
+    }
+
+    function fallbackCopy(text) {
+      // 剪贴板 API 不可用（非安全上下文 / 旧浏览器）时退回 prompt。
+      try {
+        return window.prompt('复制下面的 Markdown 链接（Ctrl+C）：', text) !== null;
+      } catch (error) {
+        return false;
+      }
+    }
+
+    function copyText(text, done) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        try {
+          navigator.clipboard.writeText(text).then(
+            function () { done(true); },
+            function () { done(fallbackCopy(text)); }
+          );
+          return;
+        } catch (error) {
+          // 少数浏览器在非安全上下文下调用会同步抛错，直接走 prompt 回退。
+        }
+      }
+      done(fallbackCopy(text));
+    }
+
+    function onCopyClick(button) {
+      var text = button.getAttribute('data-copy') || '';
+      if (!text) return;
+      copyText(text, function (ok) {
+        if (!ok) {
+          showToast('复制失败，请手动复制');
+          return;
+        }
+        var label = button.querySelector('.media-copy__label');
+        if (label) {
+          var original = label.textContent;
+          label.textContent = '已复制';
+          window.setTimeout(function () { label.textContent = original; }, 1500);
+        }
+        showToast('已复制 Markdown 链接');
+      });
+    }
+
+    function onRefsToggle(button) {
+      var card = button.closest('.media-card');
+      if (!card) return;
+      var extras = card.querySelectorAll('.media-card__link--extra');
+      if (!extras.length) return;
+      var expand = extras[0].hasAttribute('hidden');
+      for (var i = 0; i < extras.length; i++) {
+        if (expand) extras[i].removeAttribute('hidden');
+        else extras[i].setAttribute('hidden', '');
+      }
+      button.setAttribute('aria-expanded', expand ? 'true' : 'false');
+      button.textContent = expand ? '收起' : '还有 ' + (button.getAttribute('data-more-count') || '') + ' 篇';
+    }
+
+    document.addEventListener('click', function (event) {
+      var target = event.target;
+      if (!target || !target.closest) return;
+      var copyButton = target.closest('.media-copy');
+      if (copyButton) {
+        event.preventDefault();
+        onCopyClick(copyButton);
+        return;
+      }
+      var toggle = target.closest('.media-refs-toggle');
+      if (toggle) {
+        event.preventDefault();
+        onRefsToggle(toggle);
+      }
+    });
+  })();
+</script>
+{% endblock %}

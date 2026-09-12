@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% from '_macros.html' import empty_state, icon with context %}
+{% block page %}archive{% endblock %}
+{% block title %}归档 · {{ settings.site_title }}{% endblock %}
+{% block canonical %}<link rel="canonical" href="{{ absolute('/blog/archive') }}">{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">按月归档</h1>
+    <p class="page-sub">共 {{ total }} 篇文章，按更新时间归入 {{ groups | length }} 个月。</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn--ghost" href="/feed.xml">{{ icon('rss', 16) }} 订阅</a>
+    <a class="btn btn--ghost" href="/blog">返回博客</a>
+  </div>
+</div>
+
+{% if groups %}
+  <div class="archive-list">
+    {% for group in groups %}
+      <section class="archive-year">
+        <h2 class="archive-year__label">{{ group.month.label }}</h2>
+        <ul class="archive-notes">
+          {% for note in group.notes %}
+            <li class="archive-note">
+              <a class="archive-note__title" href="{{ note.blog_url }}">{{ note.title }}</a>
+              <span class="archive-note__date">{{ note.updated_at | date_cn }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+      </section>
+    {% endfor %}
+  </div>
+{% else %}
+  {{ empty_state('还没有公开文章', '在笔记里打开「公开到博客」，归档会自动生成。', 'book', '/blog', '返回博客') }}
+{% endif %}
+{% endblock %}

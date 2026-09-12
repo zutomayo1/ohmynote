@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% from '_macros.html' import toc_nav with context %}
+{% block page %}manual{% endblock %}
+{% block title %}使用说明 · {{ settings.site_title }}{% endblock %}
+{% block description %}墨痕笔记的使用说明：怎么启动、每个按钮干嘛、Markdown 速查、常见问题。{% endblock %}
+
+{% block content %}
+<div class="page-head page-head--article">
+  <div>
+    <h1 class="page-title">使用说明</h1>
+    <p class="page-sub">
+      直接渲染项目根目录的 <code>{{ '使用说明.md' }}</code> ·
+      {{ word_count | number }} 字 · {{ reading_minutes | reading }}
+    </p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn--ghost" href="/notes">返回笔记</a>
+  </div>
+</div>
+
+<div class="post-layout">
+  <article class="post-body prose" id="post-body">{{ html | safe }}</article>
+  <aside class="post-rail">
+    {{ toc_nav(toc, '本页目录') }}
+    <section class="rail-block">
+      <h2 class="rail-block__title">小提示</h2>
+      <p class="muted">这份说明就是项目里的 <code>使用说明.md</code>，
+        直接改那个文件，刷新这一页就会更新。</p>
+    </section>
+  </aside>
+</div>
+{% endblock %}

@@ -1,0 +1,8 @@
+# 运行依赖 —— pip install -r requirements.txt
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30
+jinja2>=3.1
+python-multipart>=0.0.9      # 表单 / 图片上传
+markdown>=3.5                # Markdown -> HTML
+pymdown-extensions>=10.7     # 任务清单 / 删除线 / 高亮等 GitHub 风味语法
+pygments>=2.17               # 代码块语法高亮（服务端渲染，无需 CDN）

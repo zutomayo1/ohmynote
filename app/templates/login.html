@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% from '_macros.html' import icon with context %}
+{% block page %}login{% endblock %}
+{% block title %}登录 · {{ settings.site_title }}{% endblock %}
+{% block description %}输入密码后即可管理自己的笔记。{% endblock %}
+
+{% block content %}
+<div class="login-page">
+  <form class="login-card" method="post" action="/login">
+    <div class="login-card__mark">墨</div>
+    <h1 class="login-card__title">{{ settings.site_title }}</h1>
+    <p class="login-card__sub">{{ settings.site_subtitle }}</p>
+
+    <input type="hidden" name="next" value="{{ next_url }}">
+
+    <label class="field">
+      <span class="field__label">访问密码</span>
+      <input class="input" type="password" name="password" autocomplete="current-password" autofocus required
+             placeholder="请输入密码">
+    </label>
+
+    {% if error %}<p class="login-card__error" role="alert">{{ error }}</p>{% endif %}
+
+    <button class="btn btn--primary btn--block" type="submit">{{ icon('lock', 16) }} 进入笔记</button>
+
+    <p class="login-card__hint">这是个人笔记站，只有输入密码后才能查看笔记列表与编辑页面。博客内容是公开的：<a href="/blog">去博客 →</a></p>
+  </form>
+</div>
+{% endblock %}

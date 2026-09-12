@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% from '_macros.html' import empty_state, tag_pill, icon with context %}
+{% block page %}blog{% endblock %}
+{% block title %}标签 · {{ settings.site_title }}{% endblock %}
+{% block canonical %}<link rel="canonical" href="{{ absolute('/blog/tags') }}">{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">标签</h1>
+    <p class="page-sub">共 {{ tags | length }} 个标签。</p>
+  </div>
+  <div class="page-actions"><a class="btn btn--ghost" href="/blog">返回博客</a></div>
+</div>
+
+{% if tags %}
+  <div class="tag-cloud">
+    {% for item in tags %}
+      <a class="tag-pill" href="{{ url_with_query('/blog', tag=item.name) }}">
+        {{ item.name }}<span class="tag-pill__count">{{ item.count }}</span>
+      </a>
+    {% endfor %}
+  </div>
+{% else %}
+  {{ empty_state('还没有标签', '', 'tag', '/blog', '返回博客') }}
+{% endif %}
+{% endblock %}

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% from '_macros.html' import icon, toc_nav, link_list, tag_pill with context %}
+{% block page %}post{% endblock %}
+{% block title %}{{ note.title }} · {{ settings.site_title }}{% endblock %}
+{% block description %}{{ note.meta_description or note.summary or settings.site_description }}{% endblock %}
+{% block og_type %}article{% endblock %}
+{% block og_title %}{{ note.title }}{% endblock %}
+{% block og_description %}{{ note.meta_description or note.summary }}{% endblock %}
+{% block canonical %}<link rel="canonical" href="{{ absolute(note.blog_url) }}">{% endblock %}
+
+{% block content %}
+<article class="post">
+  <header class="post-header">
+    <h1 class="post-title">{{ note.title }}</h1>
+    <div class="post-meta meta">
+      <span class="meta__item">发布于 {{ (note.published_at or note.created_at) | date_cn }}</span>
+      {% if note.updated_at != (note.published_at or note.created_at) %}
+        <span class="meta__divider">·</span>
+        <span class="meta__item">更新于 {{ note.updated_at | date_cn }}</span>
+      {% endif %}
+      <span class="meta__divider">·</span>
+      <span class="meta__item">{{ note.reading_minutes | reading }}</span>
+      <span class="meta__divider">·</span>
+      <span class="meta__item">{{ note.word_count | number }} 字</span>
+    </div>
+    {% if note.tags %}
+      <div class="pill-list pill-list--mt">
+        {% for tag in note.tags %}{{ tag_pill(tag, href=url_with_query('/blog', tag=tag), small=True) }}{% endfor %}
+      </div>
+    {% endif %}
+    {# 摘要常常就是从正文第一段自动抓的，那样会连着出现两次；重复时只留正文里的那份 #}
+    {% if note.summary and not (note.summary | summary_repeats(html)) %}<p class="post-summary">{{ note.summary }}</p>{% endif %}
+  </header>
+
+  <div class="post-layout">
+    <div class="post-body prose" id="post-body">{{ html | safe }}</div>
+    <aside class="post-rail">
+      {{ toc_nav(toc) }}
+      {% if related %}
+        <section class="rail-block">
+          <h2 class="rail-block__title">相关文章</h2>
+          {{ link_list(related, '') }}
+        </section>
+      {% endif %}
+      {% if backlinks %}
+        <section class="rail-block">
+          <h2 class="rail-block__title">引用本文的笔记</h2>
+          {{ link_list(backlinks, '') }}
+        </section>
+      {% endif %}
+      <section class="rail-block">
+        <h2 class="rail-block__title">订阅</h2>
+        <p class="muted"><a href="/feed.xml">Atom</a> · <a href="/rss.xml">RSS</a></p>
+      </section>
+    </aside>
+  </div>
+</article>
+
+<nav class="post-nav" aria-label="上一篇 / 下一篇">
+  {% if previous %}
+    <a class="post-nav__item post-nav__item--prev" href="{{ previous.blog_url }}">
+      <span class="post-nav__label">{{ icon('left', 14) }} 上一篇</span>
+      <span class="post-nav__title">{{ previous.title }}</span>
+    </a>
+  {% else %}<span class="post-nav__item is-empty"></span>{% endif %}
+  {% if next %}
+    <a class="post-nav__item post-nav__item--next" href="{{ next.blog_url }}">
+      <span class="post-nav__label">下一篇 {{ icon('right', 14) }}</span>
+      <span class="post-nav__title">{{ next.title }}</span>
+    </a>
+  {% else %}<span class="post-nav__item is-empty"></span>{% endif %}
+</nav>
+{% endblock %}

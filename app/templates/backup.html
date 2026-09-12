@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% from '_macros.html' import icon with context %}
+{% block page %}backup{% endblock %}
+{% block title %}备份与恢复 · {{ settings.site_title }}{% endblock %}
+{% block description %}导出全部笔记，或从 zip / JSON / Markdown 合并恢复；只合并、不删除。{% endblock %}
+
+{% block content %}
+{# 开发期自包含样式：把 .scratch/css-patch-backup.css 内联进来。
+   主 agent 合并补丁进 style.css 后，这段 <style> 可以删掉。 #}
+{% if backup_css %}<style>{{ backup_css | safe }}</style>{% endif %}
+
+<div class="page-head">
+  <div>
+    <h1 class="page-title">备份与恢复</h1>
+    <p class="page-sub">
+      导出全部笔记做备份；导入时按 slug（没有就按标题）匹配，
+      <strong>匹配到就更新、匹配不到就新建，绝不会删除现有笔记</strong>。
+    </p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn--ghost" href="/manual">使用说明</a>
+  </div>
+</div>
+
+{# 风险提示：备份文件里有明文 AI 密钥 / 密码哈希，别直接分享。 #}
+<div class="backup-risk" role="note">
+  <span class="backup-risk__icon" aria-hidden="true">{{ icon('lock', 18) }}</span>
+  <p class="backup-risk__text">
+    <strong>风险提示：</strong>备份文件里含 AI 密钥等敏感信息，别随手发人；要分享请用『脱敏备份』。
+  </p>
+</div>
+
+<section class="backup-grid">
+  <div class="backup-card">
+    <h2 class="backup-card__title">{{ icon('download', 18) }} 导出</h2>
+    <p class="backup-card__text">
+      导出的文件不依赖本工具，可以直接放进 Obsidian / Typora / VS Code 阅读。
+    </p>
+    <div class="backup-exports">
+      <a class="btn btn--primary" href="/export/zip">{{ icon('download', 16) }} 下载 zip（Markdown 打包）</a>
+      <a class="btn btn--ghost" href="/export/json">{{ icon('download', 16) }} 下载 JSON（结构化）</a>
+    </div>
+    <p class="micro">
+      zip 内含 <code>index.md</code>、<code>notes/</code>（每篇一个 .md）、
+      <code>notes.json</code>、<code>README.txt</code>。
+    </p>
+  </div>
+
+  <div class="backup-card">
+    <h2 class="backup-card__title">{{ icon('upload', 18) }} 导入 / 恢复</h2>
+    <form class="backup-form" method="post" action="/backup/import" enctype="multipart/form-data">
+      <input type="hidden" name="_csrf" value="{{ csrf }}">
+      <div class="backup-drop" data-backup-drop>
+        <input class="backup-drop__input" id="backup-file" type="file" name="file"
+               accept=".zip,.json,.md,.markdown,.txt,application/zip,application/json,text/markdown,text/plain">
+        <label class="backup-drop__label" for="backup-file">
+          <span class="backup-drop__icon">{{ icon('upload', 26) }}</span>
+          <span class="backup-drop__main">拖拽文件到这里，或<u>点击选择</u></span>
+          <span class="backup-drop__hint">支持 .zip / .json / .md（单篇 Markdown 也行）</span>
+        </label>
+      </div>
+      <label class="checkbox backup-form__dry">
+        <input type="checkbox" name="dry_run" value="1">
+        先预览（dry run）：只统计会新建 / 更新多少，不写入数据库
+      </label>
+      <button class="btn btn--primary" type="submit">{{ icon('upload', 16) }} 开始导入</button>
+    </form>
+    <ul class="backup-notes">
+      <li>会按 <code>slug</code>（没有就按标题）匹配：<strong>匹配到就更新，匹配不到就新建</strong>。</li>
+      <li><strong>绝不删除</strong>备份里没有的笔记，也不会清空回收站。</li>
+      <li>同一份备份导入多次不会翻倍。</li>
+      <li>坏掉的条目会记进错误列表，其它条目继续导入。</li>
+    </ul>
+  </div>
+</section>
+
+  <section class="backup-card backup-db">
+    <div class="backup-db__head">
+      <div>
+        <h2 class="backup-card__title">{{ icon('history', 18) }} 数据库自动备份</h2>
+        <p class="backup-card__text">
+          用 SQLite 的一致性快照生成，应用开着也能安全备份（不是直接复制数据库文件）。
+          备份存在 <code>data/backups/</code>（<code>{{ backups_dir }}</code>），
+          <strong>整个目录可以直接拷走</strong>。
+        </p>
+      </div>
+      <div class="backup-db__actions">
+        <form method="post" action="/backup/create">
+          <input type="hidden" name="_csrf" value="{{ csrf }}">
+          <button class="btn btn--primary" type="submit">{{ icon('download', 16) }} 立即备份</button>
+        </form>
+        <form method="post" action="/backup/create-sanitized"
+              title="清空快照里的 AI 密钥与密码哈希，适合发给别人">
+          <input type="hidden" name="_csrf" value="{{ csrf }}">
+          <button class="btn btn--ghost" type="submit">{{ icon('lock', 16) }} 脱敏备份（可安全分享）</button>
+        </form>
+      </div>
+    </div>
+
+    {% if snapshots %}
+    <div class="backup-table-wrap">
+      <table class="backup-table">
+        <thead>
+          <tr>
+            <th>时间</th>
+            <th>大小</th>
+            <th>原因</th>
+            <th class="backup-table__actions">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for snap in snapshots %}
+          <tr>
+            <td class="backup-table__time">{{ snap.mtime }}</td>
+            <td>{{ snap.size | filesize }}</td>
+            <td>
+              <span class="backup-reason backup-reason--{{ snap.reason }}">
+                {{ reason_labels.get(snap.reason, snap.reason) }}
+              </span>
+              {% if snap.sanitized %}
+              <span class="backup-badge" title="已清空 AI 密钥与密码哈希">{{ icon('lock', 12) }} 已脱敏</span>
+              {% endif %}
+            </td>
+            <td class="backup-row-actions">
+              <a class="btn btn--ghost btn--sm" href="/backup/download/{{ snap.name }}">{{ icon('download', 15) }} 下载</a>
+              <form method="post" action="/backup/restore/{{ snap.name }}"
+                    data-confirm="回滚会用这份备份覆盖当前全部数据（当前数据会先自动另存一份）。确定回滚到 {{ snap.name }}？">
+                <input type="hidden" name="_csrf" value="{{ csrf }}">
+                <button class="btn btn--sm btn--danger" type="submit">{{ icon('restore', 15) }} 回滚</button>
+              </form>
+              <form method="post" action="/backup/delete/{{ snap.name }}"
+                    data-confirm="删除备份 {{ snap.name }}？此操作不可恢复。">
+                <input type="hidden" name="_csrf" value="{{ csrf }}">
+                <button class="icon-btn icon-btn--sm icon-btn--danger" type="submit" title="删除备份">{{ icon('trash', 15) }}</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="backup-empty micro">还没有数据库备份。点「立即备份」生成第一份。</p>
+    {% endif %}
+  </section>
+
+{% if result %}
+<section class="backup-result{{ ' backup-result--warn' if result.errors }}" id="backup-result">
+  <h2 class="backup-result__title">最近一次导入</h2>
+  <div class="backup-result__stats">
+    <span class="backup-stat backup-stat--created"><b>{{ result.created }}</b> 新建</span>
+    <span class="backup-stat backup-stat--updated"><b>{{ result.updated }}</b> 更新</span>
+    <span class="backup-stat backup-stat--skipped"><b>{{ result.skipped }}</b> 跳过</span>
+    <span class="backup-stat"><b>{{ result.notes }}</b> 共处理</span>
+  </div>
+  <p class="micro">
+    来源：{{ {'zip': 'zip 压缩包', 'json': 'JSON', 'markdown': 'Markdown'}.get(result.source, result.source) }}
+    {% if result.dry_run %} · 预览模式（未写入数据库）{% else %} · 已写入数据库{% endif %}
+  </p>
+  {% if result.errors %}
+    <details class="backup-errors" open>
+      <summary>错误 {{ result.errors | length }} 条（不影响其它条目）</summary>
+      <ul>
+        {% for item in result.errors %}<li>{{ item }}</li>{% endfor %}
+      </ul>
+    </details>
+  {% endif %}
+</section>
+{% else %}
+<p class="backup-empty micro">还没有导入记录。选好文件点「开始导入」后，结果会显示在这里。</p>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script nonce="{{ nonce }}">
+(function () {
+  var zone = document.querySelector('[data-backup-drop]');
+  if (!zone) return;
+  var input = zone.querySelector('input[type="file"]');
+  if (!input) return;
+  ['dragenter', 'dragover'].forEach(function (evt) {
+    zone.addEventListener(evt, function (event) {
+      event.preventDefault();
+      zone.classList.add('is-dragover');
+    });
+  });
+  ['dragleave', 'dragend', 'drop'].forEach(function (evt) {
+    zone.addEventListener(evt, function () { zone.classList.remove('is-dragover'); });
+  });
+  zone.addEventListener('drop', function (event) {
+    event.preventDefault();
+    var files = event.dataTransfer && event.dataTransfer.files;
+    if (files && files.length) { input.files = files; }
+  });
+})();
+</script>
+{% endblock %}
