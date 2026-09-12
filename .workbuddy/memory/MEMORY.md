@@ -1,7 +1,7 @@
 # 墨痕 InkNote · 项目约定（跨会话）
 
 ## 跑测试
-- 全量：`.venv/Scripts/python.exe -m pytest tests -q`（约 72s，当前 **616 passed**）。
+- 全量：`.venv/Scripts/python.exe -m pytest tests -q`（约 78s，当前 **648 passed**）。
 - **必须把临时目录指到项目内**，否则 pytest 会去清理 `%TEMP%/pytest-of-<user>/garbage-*`，
   沙箱会拦下这条命令（表现为 "user cancelled the bulk delete request"）：
   ```bash
