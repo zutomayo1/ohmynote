@@ -63,7 +63,7 @@
     {{ tag_pill('全部', count=total if tag else none, href='/tags', active=(not tag)) }}
     {% for item in tags %}
       <div class="tag-manage">
-        <a class="tag-pill{{ ' is-active' if tag == item.name }}" href="/tags?tag={{ item.name | urlencode }}">
+        <a class="tag-pill tag-pill--c{{ item.name | tag_color }}{{ ' is-active' if tag == item.name }}" href="/tags?tag={{ item.name | urlencode }}">
         {{ item.name }}<span class="tag-pill__count">{{ item.count }}</span>
       </a>
       <details class="tag-manage__menu">
