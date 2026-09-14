@@ -98,6 +98,13 @@
   `.select-combo .select-combo__native { display: block; width: 100% }`
   （选择器要两段类，才能压过 `.toolbar .select { width: auto }`）。
 
+## 页面里「历史/记录」类区块的默认形态
+- **执行历史、审计记录这类区块默认必须折叠**（`details` + summary 里带条数徽标）：
+  它们是查证用的，不是浏览内容 —— 平铺会把主操作区挤下屏（笔记助手的历史任务曾占半屏）。
+  展开后单行一条，完整细节进 `title` 悬停看。
+- summary 里放操作按钮必须 `preventDefault() + stopPropagation()`（否则点按钮连面板一起折叠）。
+- 示例/提示类按钮用 flex wrap 药丸芯片，别一按钮一行；位置放在主操作正下方。
+
 ## 悬浮提示 / 图表（用量页）
 - 图表**不用原生 `title`**：它是浏览器画的（系统字体、固定位置、延迟约 1 秒、
   移动端几乎不触发、键盘用户看不到）。统一用 `app/static/js/chart-tip.js` 的自绘浮层
