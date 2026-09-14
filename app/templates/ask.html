@@ -81,21 +81,23 @@
       {% endif %}
     </div>
 
-    <form class="ask-form" id="ask-form" method="post" action="/ask"
+    <form class="composer ask-form" id="ask-form" method="post" action="/ask"
           data-stream-url="{{ '/ask/stream?note_id=' ~ scope_note.id if scope_note else '/ask/stream' }}" data-save-url="/ask/save" data-ai-ready="{{ '1' if ai_ready else '0' }}">
       <input type="hidden" name="_csrf" value="{{ csrf }}">
       {% if scope_note %}<input type="hidden" name="note_id" value="{{ scope_note.id }}">{% endif %}
       <input type="hidden" name="conversation_id" id="ask-conversation-id" value="{{ conversation.id if conversation else '' }}">
-      <label class="field field--grow ask-field">
-        <span class="sr-only">你的问题</span>
-        <textarea class="input input--lg ask-input" id="ask-input" name="question" rows="2" required
-                  placeholder="例如：我关于 SQLite 记过哪些坑？（Enter 发送，Shift+Enter 换行）"></textarea>
-      </label>
-      <div class="ask-form__actions">
-        <button class="btn btn--primary" type="submit" id="ask-send">{{ icon('search', 16) }} 提问</button>
-        <span class="ask-hint micro">回答来自你自己的笔记；AI 可能出错，重要结论请点开来源核对。</span>
+      <div class="composer__bar">
+        <span class="composer__label">你的问题</span>
+        <span class="composer__hint">Enter 发送 · Shift+Enter 换行</span>
+      </div>
+      <textarea class="composer-input" id="ask-input" name="question" rows="2"
+                placeholder="例如：我关于 SQLite 记过哪些坑？"></textarea>
+      <div class="composer__foot">
+        <span class="ai-status" id="ask-status" role="status"></span>
+        <button class="btn btn--primary" type="submit" id="ask-send">{{ icon('send', 15) }} 提问</button>
       </div>
     </form>
+    <p class="micro muted ask-disclaimer">回答来自你自己的笔记；AI 可能出错，重要结论请点开来源核对。</p>
 
     {% if sample_questions %}
       <div class="ask-samples">

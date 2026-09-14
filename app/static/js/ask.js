@@ -43,6 +43,21 @@
   ready(function () {
     var form = document.getElementById('ask-form');
     var input = document.getElementById('ask-input');
+    var statusEl = document.getElementById('ask-status');
+
+    // 行内状态提示（空填警告等）：替代原生校验气泡
+    function setAskStatus(text, kind) {
+      if (!statusEl) { return; }
+      statusEl.textContent = text || '';
+      statusEl.className = 'ai-status' + (kind ? ' ai-status--' + kind : '');
+      if (text) {
+        clearTimeout(statusEl._timer);
+        statusEl._timer = setTimeout(function () {
+          statusEl.textContent = '';
+          statusEl.className = 'ai-status';
+        }, 3500);
+      }
+    }
     var cidInput = document.getElementById('ask-conversation-id');
     var thread = document.getElementById('ask-thread');
     var sendBtn = document.getElementById('ask-send');
@@ -290,9 +305,12 @@
       event.preventDefault();
       var question = (input.value || '').trim();
       if (!question) {
+        // 空填：行内琥珀提示（原来靠 required 的浏览器气泡，又丑又慢还不出现在移动端）
+        setAskStatus('先输入你的问题', 'warn');
         input.focus();
         return;
       }
+      setAskStatus('');
       input.value = '';
       autosize();
       setBusy(true);

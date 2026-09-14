@@ -18,11 +18,11 @@
 
   {# 主列：输入 + 会话/结果（宽度跟随内容，不再锁在阅读栏里） #}
   <div class="agent-main">
-    <form class="agent-form" id="agent-form" method="post" action="/api/agent/stream"
+    <form class="composer" id="agent-form" method="post" action="/api/agent/stream"
           data-run-url="/api/agent/stream">
       <input type="hidden" name="_csrf" value="{{ csrf }}">
-      <div class="agent-form__bar">
-        <span class="agent-form__label">你想让它做什么</span>
+      <div class="composer__bar">
+        <span class="composer__label">你想让它做什么</span>
         <div class="seg" id="agent-mode" role="radiogroup" aria-label="执行模式">
           <button type="button" class="seg__btn is-on" data-mode="rw" aria-pressed="true"
                   title="完整能力：可以查也可以改">读写</button>
@@ -32,12 +32,12 @@
                   title="先审后放：只规划不动手，结束后给一份「将要做的事」清单">干跑</button>
         </div>
       </div>
-      <textarea class="agent-input" id="agent-task" name="task" rows="3" required
+      <textarea class="composer-input" id="agent-task" name="task" rows="3"
                 placeholder="例如：搜一下最近写过的关于部署的笔记，给它们都加上「服务器」标签，再新建一篇《部署清单》把这些笔记的要点列进去"></textarea>
-      <div class="agent-form__foot">
+      <div class="composer__foot">
         <span class="ai-status" id="agent-status" role="status"></span>
-        <span class="agent-form__hint">Ctrl + Enter 直接运行</span>
-        <button class="btn btn--primary" type="submit" id="agent-run">{{ icon('sparkles', 16) }} 让它去做</button>
+        <span class="composer__hint">Ctrl + Enter 直接运行</span>
+        <button class="btn btn--primary" type="submit" id="agent-run">{{ icon('play', 15) }} 让它去做</button>
       </div>
     </form>
 
