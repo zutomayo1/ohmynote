@@ -115,8 +115,13 @@
   </div>
 
   <aside class="post-rail ask-rail">
-    <section class="rail-block">
-      <h2 class="rail-block__title">{{ icon('history', 15) }} 最近提问</h2>
+    <details class="rail-block ask-recent-block" id="ask-recent-block">
+      <summary class="rail-block__title ask-recent-block__summary">
+        {{ icon('history', 15) }} 最近提问
+        {%- if recent %}<span class="ask-recent-block__count">{{ recent | length }}</span>{% endif %}
+        <span class="ask-recent-block__chevron" aria-hidden="true">{{ icon('down', 14) }}</span>
+      </summary>
+      <div class="ask-recent-block__body">
       {% if recent %}
         <ul class="ask-recent">
           {% for item in recent %}
@@ -134,7 +139,8 @@
       {% else %}
         <p class="muted">还没有提问记录。</p>
       {% endif %}
-    </section>
+      </div>
+    </details>
 
     <section class="rail-block">
       <h2 class="rail-block__title">{{ icon('search', 15) }} 怎么找来源</h2>

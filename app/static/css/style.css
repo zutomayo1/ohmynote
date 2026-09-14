@@ -6223,3 +6223,113 @@ body.split-dragging .editor__textarea { pointer-events: none; }
 
 /* 免责说明（问笔记输入台下方） */
 .ask-disclaimer { margin-top: 8px; }
+
+/* ===== 补丁：最近提问折叠 + 标签页重设计（2026-09-14 晚，已合并） ===== */
+
+/* --- 「最近提问」折叠块（details；::details-content 高度过渡，旧浏览器退化为瞬时） --- */
+
+.ask-recent-block { interpolate-size: allow-keywords; }
+
+.ask-recent-block::details-content {
+  display: block;
+  block-size: 0;
+  overflow-y: clip;
+  transition: block-size .24s cubic-bezier(.3, .8, .3, 1), content-visibility .24s allow-discrete;
+}
+
+.ask-recent-block[open]::details-content { block-size: auto; }
+
+.ask-recent-block__summary { cursor: pointer; list-style: none; user-select: none; }
+
+.ask-recent-block__summary::-webkit-details-marker { display: none; }
+
+.ask-recent-block__summary::marker { content: ''; }
+
+.ask-recent-block__count {
+  min-width: 18px; padding: 0 6px; border-radius: var(--radius-pill);
+  background: var(--surface-2); color: var(--ink-3);
+  font-family: var(--font-mono); font-size: 11px; line-height: 17px; text-align: center;
+}
+
+.ask-recent-block__chevron { margin-left: auto; color: var(--ink-3); transition: transform .2s ease; }
+
+.ask-recent-block[open] .ask-recent-block__chevron { transform: rotate(180deg); }
+
+.ask-recent-block[open] .ask-recent-block__summary { color: var(--ink-2); }
+
+.ask-recent-block__body { padding-top: 2px; }
+
+/* --- 标签页：芯片化标签云（中性底 + 标签色点 + 计数徽标） --- */
+
+.tag-cloud { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 18px; }
+
+.tag-cloud .tag-pill {
+  padding: 5px 13px; border-color: var(--line); background: var(--surface); color: var(--ink-2);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .04);
+  transition: background-color .15s ease, color .15s ease, border-color .15s ease,
+    transform .15s ease, box-shadow .15s ease;
+}
+
+/* 标签自己的颜色收进小色点（每个 --cN 一档，明暗主题都取中明度） */
+.tag-cloud .tag-pill::before {
+  content: ''; flex: none; width: 7px; height: 7px; border-radius: 50%;
+  background: currentColor; opacity: .55;
+}
+
+.tag-cloud .tag-pill--c0::before { background: hsl(6 45% 50%); }
+.tag-cloud .tag-pill--c1::before { background: hsl(38 50% 48%); }
+.tag-cloud .tag-pill--c2::before { background: hsl(75 38% 42%); }
+.tag-cloud .tag-pill--c3::before { background: hsl(130 38% 44%); }
+.tag-cloud .tag-pill--c4::before { background: hsl(175 42% 42%); }
+.tag-cloud .tag-pill--c5::before { background: hsl(215 45% 50%); }
+.tag-cloud .tag-pill--c6::before { background: hsl(270 42% 52%); }
+.tag-cloud .tag-pill--c7::before { background: hsl(330 45% 52%); }
+
+.tag-cloud .tag-pill:hover {
+  border-color: var(--brand); background: var(--brand-soft); color: var(--brand);
+  transform: translateY(-1px); box-shadow: 0 3px 8px rgba(0, 0, 0, .07);
+}
+
+.tag-cloud .tag-pill:hover::before { opacity: .8; }
+
+.tag-cloud .tag-pill.is-active,
+.tag-cloud .tag-pill.is-active:hover {
+  border-color: var(--brand); background: var(--brand); color: var(--surface);
+  font-weight: 600; transform: none; box-shadow: 0 2px 6px rgba(0, 0, 0, .1);
+}
+
+.tag-cloud .tag-pill.is-active::before { background: currentColor; opacity: .9; }
+
+.tag-cloud .tag-pill__count {
+  margin-left: 2px; padding: 0 7px; border: 0; border-radius: var(--radius-pill);
+  background: var(--bg-soft); color: var(--ink-3);
+}
+
+.tag-cloud .tag-pill.is-active .tag-pill__count {
+  background: rgba(255, 255, 255, .22); color: var(--surface);
+}
+
+/* --- 标签页：分组标题（标签名 + 计数 + 查看全部，一条基线） --- */
+
+.tag-group { margin-top: 28px; }
+
+.tag-group__head {
+  display: flex; align-items: baseline; gap: 10px;
+  margin: 0 0 10px; padding-bottom: 8px; border-bottom: 1px solid var(--line);
+}
+
+.tag-group__name {
+  color: var(--ink); font-family: var(--font-serif); font-size: 17px; font-weight: 700;
+  text-decoration: none; transition: color .15s ease;
+}
+
+.tag-group__name:hover { color: var(--brand); }
+
+.tag-group__count { color: var(--ink-3); font-family: var(--font-mono); font-size: 12px; }
+
+.tag-group__more {
+  margin-left: auto; color: var(--brand); text-decoration: none;
+  font-family: var(--font-sans); font-size: 13px; font-weight: 600;
+}
+
+.tag-group__more:hover { color: var(--brand-dark); text-decoration: underline; text-underline-offset: 3px; }

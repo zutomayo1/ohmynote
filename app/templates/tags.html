@@ -10,6 +10,22 @@
     <p class="page-sub">共 {{ tags | length }} 个标签。点标签筛选笔记，正文里写 <code>#标签</code> 也会自动归类。</p>
   </div>
 </div>
+<form class="toolbar tag-toolbar" method="get" action="/tags">
+  <label class="field field--grow">
+    <span class="sr-only">搜索标签</span>
+    <input class="input" type="search" name="q" value="{{ q }}" placeholder="搜索标签…">
+  </label>
+  <span class="toolbar__divider" aria-hidden="true"></span>
+  <label class="field">
+    <span class="sr-only">排序方式</span>
+    <select class="select" name="sort" aria-label="排序方式">
+      <option value="count"{{ ' selected' if sort != 'name' }}>按使用次数</option>
+      <option value="name"{{ ' selected' if sort == 'name' }}>按名称</option>
+    </select>
+  </label>
+  <button class="btn no-js-only" type="submit">筛选</button>
+  {% if q or sort == 'name' %}<a class="btn btn--ghost btn--sm" href="/tags">重置</a>{% endif %}
+</form>
 <details class="tag-admin">
   <summary class="tag-admin__summary">
     <span class="tag-admin__title">管理标签</span>
@@ -51,7 +67,7 @@
         {{ item.name }}<span class="tag-pill__count">{{ item.count }}</span>
       </a>
       <details class="tag-manage__menu">
-        <summary class="tag-manage__toggle" title="管理「{{ item.name }}」" aria-label="管理标签 {{ item.name }}">✎</summary>
+        <summary class="tag-manage__toggle" title="管理「{{ item.name }}」" aria-label="管理标签 {{ item.name }}">{{ icon('edit', 13) }}</summary>
         <div class="tag-manage__panel">
           <form class="tag-manage__form" method="post" action="/tags/rename">
             <input type="hidden" name="_csrf" value="{{ csrf }}">
@@ -71,21 +87,6 @@
     {% endfor %}
   </div>
 {% endif %}
-<form class="toolbar tag-toolbar" method="get" action="/tags">
-  <label class="field tag-toolbar__field">
-    <span class="field__label">搜索标签</span>
-    <input class="input" type="search" name="q" value="{{ q }}" placeholder="输入标签名…">
-  </label>
-  <label class="field tag-toolbar__field">
-    <span class="field__label">排序</span>
-    <select class="select" name="sort">
-      <option value="count"{{ ' selected' if sort != 'name' }}>按使用次数</option>
-      <option value="name"{{ ' selected' if sort == 'name' }}>按名称</option>
-    </select>
-  </label>
-  <button class="btn btn--ghost btn--sm" type="submit">筛选</button>
-  {% if q or sort == 'name' %}<a class="btn btn--ghost btn--sm" href="/tags">重置</a>{% endif %}
-</form>
 
 
 {% if tag %}
@@ -101,8 +102,12 @@
 {% elif groups %}
   {% for group in groups %}
     <section class="tag-group">
-      <h2 class="section-title">
-        {{ tag_pill(group.tag.name, count=group.tag.count, href='/tags?tag=' ~ (group.tag.name | urlencode)) }}
+      <h2 class="tag-group__head">
+        <a class="tag-group__name" href="/tags?tag={{ group.tag.name | urlencode }}">{{ group.tag.name }}</a>
+        <span class="tag-group__count">{{ group.tag.count }} 篇</span>
+        {% if group.tag.count > group.notes | length %}
+          <a class="tag-group__more" href="/tags?tag={{ group.tag.name | urlencode }}">查看全部 {{ group.tag.count }} 篇 →</a>
+        {% endif %}
       </h2>
       <ul class="note-lines">
         {% for note in group.notes %}
@@ -116,9 +121,6 @@
           </li>
         {% endfor %}
       </ul>
-      {% if group.tag.count > group.notes | length %}
-        <a class="tag-group__more" href="/tags?tag={{ group.tag.name | urlencode }}">查看全部 {{ group.tag.count }} 篇 →</a>
-      {% endif %}
     </section>
   {% endfor %}
 {% else %}

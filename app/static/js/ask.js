@@ -351,4 +351,18 @@
     input.addEventListener('input', autosize);
     autosize();
   });
+
+  // 「最近提问」折叠状态：记住用户的展开/收起（无 JS 时 details 原生可用，默认收起）
+  ready(function () {
+    var block = document.getElementById('ask-recent-block');
+    if (!block) { return; }
+    try {
+      if (window.localStorage.getItem('inknote.ask-recent-open') === '1') { block.open = true; }
+    } catch (error) { /* 隐私模式等拿不到 localStorage 就用默认收起 */ }
+    block.addEventListener('toggle', function () {
+      try {
+        window.localStorage.setItem('inknote.ask-recent-open', block.open ? '1' : '0');
+      } catch (error) { /* 忽略 */ }
+    });
+  });
 })();
