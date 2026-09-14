@@ -4739,7 +4739,7 @@ body { transition: background-color .12s ease, color .12s ease; }
 
 /* ===== 补丁：笔记助手页（2026-09-13） ===== */
 /* 布局改由「双栏补丁（2026-09-14）」负责（grid 双栏），这里不再锁阅读栏宽度 */
-.agent-input { resize: vertical; min-height: 84px; }
+/* .agent-input 的样式由「命令输入台」补丁统一管（无边框、卡内输入区） */
 
 .agent-steps { margin: 0 0 14px; padding-left: 0; list-style: none; }
 .agent-steps__item {
@@ -6093,15 +6093,55 @@ body.split-dragging .editor__textarea { pointer-events: none; }
 /* 未配置 AI 的提示横跨整页 */
 .agent-flash { grid-column: 1 / -1; }
 
-.agent-form { margin-bottom: 0; }
+/* ---------- 命令输入台（composer）：整块一张卡 ---------- */
+/* 原来 .agent-form__row 是裸表单拼装；现在标题栏在卡内顶部、无边框输入区、
+   底部操作条，聚焦时整卡亮起品牌描边（focus-within 比只给 textarea 加框体面得多） */
 
-.agent-form__row {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 16px;
-  margin-top: 12px; }
+.agent-form {
+  margin-bottom: 0;
+  border: 1px solid var(--line-strong); border-radius: var(--radius);
+  background: var(--surface); box-shadow: var(--shadow-sm);
+  transition: border-color .15s ease, box-shadow .15s ease; }
 
-.agent-form__row .checkbox { margin: 0; }
+.agent-form:focus-within {
+  border-color: var(--brand);
+  box-shadow: var(--shadow-sm), 0 0 0 3px color-mix(in srgb, var(--brand) 14%, transparent); }
 
-.agent-form__row .ai-status { flex: 1 1 auto; min-width: 0; margin-top: 0; }
+.agent-form__bar {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 10px; padding: 10px 14px 0; }
+
+.agent-form__label {
+  font-family: var(--font-sans); font-size: 12px; font-weight: 700;
+  letter-spacing: .08em; color: var(--ink-3); }
+
+.agent-form__bar .checkbox { margin: 0; font-size: 13px; color: var(--ink-3); }
+
+.agent-form__bar .checkbox:has(input:checked) { color: var(--brand); }
+
+.agent-form .agent-input {
+  display: block; width: 100%; min-height: 92px; padding: 10px 14px;
+  border: 0; border-radius: 0; background: transparent;
+  font-size: 15px; line-height: 1.7; resize: vertical;
+  outline: none; box-shadow: none; }
+
+.agent-form .agent-input:focus { box-shadow: none; }
+
+.agent-form__foot {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 14px;
+  margin: 2px 10px 0; padding: 9px 4px 10px;
+  border-top: 1px dashed var(--line); }
+
+.agent-form__foot .ai-status { flex: 1 1 auto; min-width: 0; margin-top: 0; }
+
+.agent-form__hint {
+  color: var(--ink-3); font-family: var(--font-sans);
+  font-size: var(--fs-micro); white-space: nowrap; }
+
+@media (max-width: 640px) {
+  .agent-form__hint { display: none; }
+  .agent-form__foot { margin-inline: 8px; }
+}
 
 /* 侧栏：吸顶跟随（同详情页目录的手法），内容不宽，不会溢出 */
 .agent-rail {

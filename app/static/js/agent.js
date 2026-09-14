@@ -150,6 +150,16 @@
       });
     });
 
+    // Ctrl + Enter 直接运行（输入台脚注有提示；移动端没键盘，提示已隐藏）
+    taskInput.addEventListener('keydown', function (event) {
+      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+        event.preventDefault();
+        if (!runBtn.disabled) {
+          form.requestSubmit ? form.requestSubmit() : form.submit();
+        }
+      }
+    });
+
     function renderStep(item, index) {
       var li = document.createElement('li');
       li.className = 'agent-steps__item';
