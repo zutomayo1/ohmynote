@@ -11,7 +11,11 @@
  *                       用量图表的结构化行（缺口按需显示，0 值不显示）
  *   data-tip-lines      JSON：[["标签","值"], …] —— 通用键值行（历史任务、热力图等）
  *   data-tip-note       备注块（多行文本，pre-wrap：步骤链、错误原因这类长内容）
- * SSR 渲染的元素原生 title 保留 —— 没有 JS 的环境照旧能看到基础信息，这是渐进增强。
+ *
+ * 自动桥接：没有 data-tip-* 但带原生 title 的元素（图标提示、删除按钮这类）
+ * 也会走自绘浮层 —— show() 时把 title 摘下存进 data-tip-stash-title（防止
+ * 原生气泡和浮层叠出双份），hide() 时还原。所以 SSR 标记里的 title 仍然
+ * 是无 JS 环境的兜底，一个都不用从模板里删。
  *
  * 键盘：带 data-tip-nav 的容器 tabindex=0，方向键在柱子之间移动并显示提示。
  * 悬浮提示自身 pointer-events: none，不会挡住鼠标。
@@ -91,7 +95,19 @@
 
   function readInfo(el) {
     var data = el.dataset || {};
-    if (!data.tipTitle) { return null; }
+    var title = data.tipTitle;
+    var isUsage = false;
+    if (!title) {
+      // 自动桥接：纯原生 title 的元素（图标提示、删除按钮…）也走自绘浮层。
+      // title 可能已被摘到 stash（进入元素瞬间就摘，防原生气泡抢先）——兜底读暂存
+      title = el.getAttribute('title');
+      if (!title || !title.trim()) { title = data.tipStashTitle; }
+      if (!title || !title.trim()) { return null; }
+      return { title: title.trim(), simple: true };
+    }
+    if (data.tipCalls !== undefined || data.tipTokens !== undefined) {
+      isUsage = true;
+    }
     var lines = null;
     if (data.tipLines) {
       try {
@@ -100,7 +116,7 @@
       } catch (err) { /* 坏数据就当没有 */ }
     }
     return {
-      title: data.tipTitle,
+      title: title,
       calls: toNumber(data.tipCalls),
       tokens: toNumber(data.tipTokens),
       prompt: toNumber(data.tipPrompt),
@@ -108,7 +124,8 @@
       failed: toNumber(data.tipFailed),
       latency: toNumber(data.tipLatency),
       lines: lines,
-      note: data.tipNote || ''
+      note: data.tipNote || '',
+      usage: isUsage
     };
   }
 
@@ -150,7 +167,7 @@
     noteEl.textContent = info.note || '';
     noteEl.hidden = !info.note;
 
-    var usageEmpty = !info.calls && !info.tokens;
+    var usageEmpty = info.usage && !info.calls && !info.tokens;
     if (usageEmpty && !(info.lines || []).length && !info.note) {
       var blank = document.createElement('div');
       blank.className = 'chart-tip__empty';
@@ -178,19 +195,62 @@
     tip.style.setProperty('--arrow-x', Math.round(rect.left + rect.width / 2 - left) + 'px');
   }
 
+  // 原生 title 的摘下与还原：面板显示期间不让原生气泡和浮层叠出双份；
+  // 离开后还原属性，无 JS 环境的兜底不受影响
+  function stashTitle(el) {
+    if (el && el.hasAttribute('title')) {
+      el.setAttribute('data-tip-stash-title', el.getAttribute('title'));
+      el.removeAttribute('title');
+    }
+  }
+
+  function restoreTitle(el) {
+    if (el && el.hasAttribute('data-tip-stash-title')) {
+      el.setAttribute('title', el.getAttribute('data-tip-stash-title'));
+      el.removeAttribute('data-tip-stash-title');
+    }
+  }
+
   function show(el, keep) {
     var info = readInfo(el);
     if (!info) { return; }
     if (!tip) { build(); }   // 动态渲染的元素（如助手的历史任务）出现时才建浮层
+    if (anchor && anchor !== el) { restoreTitle(anchor); }
     render(info);
+    stashTitle(el);
     anchor = el;
+    pendingEl = null;
     pinned = !!keep;
     tip.classList.add('is-visible');
     tip.setAttribute('aria-hidden', 'false');
     place(el);
   }
 
+  // 悬停延迟：鼠标横扫页面时不闪面板；停住约 160ms 才出现，移开立即消失。
+  // 键盘导航（pinned）与已显示的元素不走延迟。
+  // 同一元素内部继续移动不重置计时——大卡片上扫过也能正常出现
+  var SHOW_DELAY = 160;
+  var showTimer = null;
+  var pendingEl = null;
+
+  function scheduleShow(el) {
+    if (showTimer && pendingEl === el) { return; }
+    cancelShow();
+    pendingEl = el;
+    showTimer = setTimeout(function () { show(el); }, SHOW_DELAY);
+  }
+
+  function cancelShow() {
+    clearTimeout(showTimer);
+    showTimer = null;
+    // 还在延迟等待中的元素：title 是一进来就摘掉的，撤销时还原
+    if (pendingEl && pendingEl !== anchor) { restoreTitle(pendingEl); }
+    pendingEl = null;
+  }
+
   function hide() {
+    cancelShow();
+    restoreTitle(anchor);
     anchor = null;
     pinned = false;
     if (!tip) { return; }
@@ -208,7 +268,11 @@
   }
 
   function closestTipped(node) {
-    var el = node && node.closest ? node.closest('[data-tip-title]') : null;
+    // data-tip-stash-title 也要算：title 在进入瞬间就被摘到 stash 里了，
+    // 不补上这条，指针事件的 target（stashed 的按钮）会跳过自身解析到外层元素
+    var el = node && node.closest
+      ? node.closest('[data-tip-title], [title], [data-tip-stash-title]')
+      : null;
     return el;
   }
 
@@ -216,17 +280,28 @@
     var el = closestTipped(event.target);
     // 键盘选中后鼠标又移过来：允许切换到鼠标指的这根
     if (pinned && el === anchor) { return; }
-    if (el) { show(el); return; }
+    if (el) {
+      // 已显示的就是它：不重渲染（避免面板在元素内部移动时闪烁）
+      if (el === anchor && tip && tip.classList.contains('is-visible')) { return; }
+      if (el !== anchor && anchor) { hide(); }   // 换了目标：旧面板立刻收起
+      // **一进来就摘 title**：不能等面板显示才摘——延迟窗口里 title 还在的话，
+      // 原生气泡（尤其刚展示过一次、再触发极快的）会抢在自绘面板前面冒出来
+      stashTitle(el);
+      scheduleShow(el);
+      return;
+    }
     if (tip && !tip.contains(event.target)) { hide(); }
   }
 
   function onPointerOut(event) {
     var el = closestTipped(event.target);
-    if (!el || el !== anchor || pinned) { return; }
+    if (!el || pinned) { return; }
     // 移到同一根柱子内部不算移开
     if (event.relatedTarget && el.contains(event.relatedTarget)) { return; }
-    if (closestTipped(event.relatedTarget)) { return; }
-    hide();
+    if (closestTipped(event.relatedTarget) === el) { return; }
+    // 延迟等待期间就离开：撤销计时（cancelShow 会把摘掉的 title 还原）
+    if (el === pendingEl) { cancelShow(); }
+    if (el === anchor) { hide(); }
   }
 
   function initNav(root) {

@@ -5868,7 +5868,7 @@ body.split-dragging .editor__textarea { pointer-events: none; }
 
 .chart-tip {
   position: fixed; top: 0; left: 0; z-index: 400;
-  width: max-content; min-width: 160px; max-width: min(300px, calc(100vw - 16px));
+  width: max-content; max-width: min(300px, calc(100vw - 16px));
   padding: 10px 12px;
   border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
   background: var(--surface); box-shadow: var(--shadow-md);
