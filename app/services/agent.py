@@ -18,6 +18,7 @@ import re
 import sqlite3
 import time
 from datetime import date, timedelta
+from uuid import uuid4
 from typing import Any, Callable
 
 from .. import repo
@@ -574,18 +575,21 @@ def _record_run(
     steps: list[dict[str, Any]],
     error: str,
     read_only: bool,
+    dry_run: bool = False,
     involved: dict[int, str] | None = None,
 ) -> None:
     """把一次任务落进执行历史（审计用）。绝不抛异常——审计挂了不能连累任务。"""
     try:
         runs = list_runs(conn)
         runs.insert(0, {
+            "id": uuid4().hex[:10],
             "at": now_iso(),
             "task": (task or "").strip()[:500],
             "ok": bool(ok),
             "error": (error or "")[:300],
             "answer": (answer or "")[:300],
             "read_only": bool(read_only),
+            "dry_run": bool(dry_run),
             "steps": [{"tool": s.get("tool"), "summary": s.get("summary")} for s in steps][:MAX_STEPS],
             "notes": [{"id": n.get("id"), "title": n.get("title")}
                       for n in _notes_list(involved or {})],
@@ -615,12 +619,44 @@ def clear_runs(conn: sqlite3.Connection) -> None:
         logger.warning("agent 执行历史清空失败", exc_info=True)
 
 
+def ensure_run_ids(conn: sqlite3.Connection) -> None:
+    """给没有 id 的历史记录补上 id（早期记录没有这个字段，单条删除需要它）。
+
+    读时归一化：只在确实缺 id 时才写回，幂等。
+    """
+    try:
+        runs = list_runs(conn)
+        if not any(not run.get("id") for run in runs):
+            return
+        for run in runs:
+            if not run.get("id"):
+                run["id"] = uuid4().hex[:10]
+        repo.save_meta_map(conn, {"runs": json.dumps(runs, ensure_ascii=False)}, prefix="agent.")
+    except Exception:
+        logger.warning("agent 执行历史补 id 失败", exc_info=True)
+
+
+def delete_run(conn: sqlite3.Connection, run_id: str) -> bool:
+    """删掉执行历史里的某一条。返回是否真的删了。"""
+    try:
+        runs = list_runs(conn)
+        kept = [run for run in runs if run.get("id") != str(run_id)]
+        if len(kept) == len(runs):
+            return False
+        repo.save_meta_map(conn, {"runs": json.dumps(kept, ensure_ascii=False)}, prefix="agent.")
+        return True
+    except Exception:
+        logger.warning("agent 执行历史单条删除失败", exc_info=True)
+        return False
+
+
 def iter_agent_events(
     conn: sqlite3.Connection,
     task: str,
     *,
     max_steps: int = MAX_STEPS,
     read_only: bool = False,
+    dry_run: bool = False,
     history: list[dict[str, str]] | None = None,
 ):
     """agent 循环的流式版本：每完成一步就 yield 一个事件 dict，而不是干等。
@@ -669,7 +705,7 @@ def iter_agent_events(
             # 模型调用重试后仍挂：**不丢掉已完成的步骤**，把进度和补救建议一起交付
             answer = _partial_answer(steps, last_error)
             _record_run(conn, task, ok=False, answer=answer, steps=steps,
-                        error=str(last_error), read_only=read_only, involved=involved)
+                        error=str(last_error), read_only=read_only, dry_run=dry_run, involved=involved)
             yield {"type": "final", "ok": False, "answer": answer, "steps": steps,
                    "error": str(last_error), "notes": _notes_list(involved)}
             return
@@ -678,7 +714,7 @@ def iter_agent_events(
         if data is None:
             # 模型没按格式回：直接把原话当最终回答收场，不再空转
             _record_run(conn, task, ok=True, answer=(raw or "").strip(), steps=steps,
-                        error="", read_only=read_only, involved=involved)
+                        error="", read_only=read_only, dry_run=dry_run, involved=involved)
             yield {"type": "final", "ok": True, "answer": (raw or "").strip(),
                   "steps": steps, "error": "", "notes": _notes_list(involved)}
             return
@@ -686,7 +722,7 @@ def iter_agent_events(
         action = str(data.get("action") or "").strip()
         if action == "final":
             _record_run(conn, task, ok=True, answer=str(data.get("answer") or "").strip(),
-                        steps=steps, error="", read_only=read_only, involved=involved)
+                        steps=steps, error="", read_only=read_only, dry_run=dry_run, involved=involved)
             yield {"type": "final", "ok": True,
                   "answer": str(data.get("answer") or "").strip(), "steps": steps, "error": "",
                   "notes": _notes_list(involved)}
@@ -704,6 +740,17 @@ def iter_agent_events(
                          "请换个做法，或者直接用 final 给出答案。"
             }
             summary = f"跳过重复的 {action} 调用"
+        elif dry_run:
+            # 干跑：所有工具都只「说要做什么」，不真正执行。模型会拿到固定的规划提示，
+            # 想清楚全部步骤后用 final 输出「将要做的事」清单 —— 适合先审后放。
+            repeat_streak = 0
+            observation = {
+                "dry_run": True,
+                "note": "干跑模式：本工具没有被真正调用。请继续规划后续步骤；"
+                        "全部想清楚后用 final 输出「将要做的事」清单（不要声称已执行）。",
+            }
+            summary = f"（干跑）将执行 {action}"
+            seen_calls.add(signature)
         elif read_only and action in _WRITE_TOOLS:
             repeat_streak = 0
             observation = {"error": "只读模式：本次任务不执行写操作，如需修改请关闭只读模式后重试"}
@@ -762,7 +809,7 @@ def iter_agent_events(
                 "已经完成的操作都生效了。你可以把任务说得更具体一点，或者告诉我下一步做什么。"
             )
             _record_run(conn, task, ok=True, answer=answer, steps=steps, error="",
-                        read_only=read_only, involved=involved)
+                        read_only=read_only, dry_run=dry_run, involved=involved)
             yield {"type": "final", "ok": True, "answer": answer, "steps": steps, "error": "",
                   "notes": _notes_list(involved)}
             return
@@ -770,7 +817,7 @@ def iter_agent_events(
     # 步数耗尽还没收尾：安全停下，绝不无限循环
     answer = "步骤太多，我先停下来了。已经完成的操作都生效了，你可以继续给我补充指令。"
     _record_run(conn, task, ok=True, answer=answer, steps=steps, error="",
-                read_only=read_only, involved=involved)
+                read_only=read_only, dry_run=dry_run, involved=involved)
     yield {"type": "final", "ok": True, "answer": answer, "steps": steps, "error": "",
           "notes": _notes_list(involved)}
 
@@ -781,6 +828,7 @@ def run_agent(
     *,
     max_steps: int = MAX_STEPS,
     read_only: bool = False,
+    dry_run: bool = False,
     history: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     """跑一次 agent 循环。等价于消费 `iter_agent_events` 并拼回 {ok, answer, steps, error}。
@@ -788,7 +836,7 @@ def run_agent(
     保留旧签名与返回值结构，原有 14 个测试无需改动即可全绿。
     """
     final: dict[str, Any] | None = None
-    for event in iter_agent_events(conn, task, max_steps=max_steps, read_only=read_only, history=history):
+    for event in iter_agent_events(conn, task, max_steps=max_steps, read_only=read_only, dry_run=dry_run, history=history):
         if event["type"] == "error":
             return {"ok": False, "answer": "", "steps": [], "error": event["error"]}
         if event["type"] == "final":

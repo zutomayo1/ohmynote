@@ -6166,3 +6166,37 @@ body.split-dragging .editor__textarea { pointer-events: none; }
   .agent-layout { grid-template-columns: minmax(0, 1fr); gap: 26px; }
   .agent-rail { position: static; }
 }
+
+/* ===== 补丁：执行模式分段切换 + 历史任务单条删除（2026-09-14） ===== */
+
+/* 分段切换（读写 / 只读 / 干跑）：药丸组，选中段亮品牌底 */
+.seg {
+  display: inline-flex; align-items: center; gap: 2px;
+  padding: 2px; border: 1px solid var(--line); border-radius: var(--radius-pill);
+  background: var(--surface-2); }
+
+.seg__btn {
+  border: 0; border-radius: var(--radius-pill); cursor: pointer;
+  padding: 4px 12px; background: transparent; color: var(--ink-3);
+  font-family: var(--font-sans); font-size: 12.5px; font-weight: 600;
+  transition: background-color .12s ease, color .12s ease; }
+
+.seg__btn:hover { color: var(--ink); }
+
+.seg__btn.is-on {
+  background: var(--brand); color: var(--bg); }
+
+.seg__btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+
+/* 历史任务单删：平时半透明，悬停该行时实色、点击删除 */
+.agent-runs__del {
+  flex: none; width: 20px; height: 20px; padding: 0;
+  border: 0; border-radius: var(--radius-pill); cursor: pointer;
+  background: transparent; color: var(--ink-3);
+  font-family: var(--font-sans); font-size: 14px; line-height: 1;
+  opacity: .25; transition: opacity .12s ease, color .12s ease, background-color .12s ease; }
+
+.agent-runs__item:hover .agent-runs__del,
+.agent-runs__del:focus-visible { opacity: 1; }
+
+.agent-runs__del:hover { background: var(--brand-soft); color: var(--danger); }

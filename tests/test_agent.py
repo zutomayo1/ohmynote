@@ -627,3 +627,126 @@ def test_agent_history_section_is_collapsible(auth_client):
     page = auth_client.get("/agent")
     assert '<details class="agent-history" id="agent-history" hidden>' in page.text
     assert "agent-history-count" in page.text
+
+
+# ---------------------------------------------------------------------------
+# 执行模式（读写 / 只读 / 干跑）与历史任务单条删除
+# ---------------------------------------------------------------------------
+def test_agent_dry_run_does_not_execute_tools(db_conn, seeded_note, monkeypatch):
+    """干跑模式：工具只「说要做什么」，绝不真正执行；结束时给规划清单。"""
+    script = ScriptedChat([
+        json.dumps({"action": "update_note",
+                    "params": {"note_id": seeded_note, "content": "被干跑改掉的内容"}},
+                   ensure_ascii=False),
+        json.dumps({"action": "final", "answer": "将要做：更新这篇笔记的正文"}, ensure_ascii=False),
+    ])
+    monkeypatch.setattr(agent_service.ai, "chat", script)
+
+    result = agent_service.run_agent(db_conn, "改这篇笔记", dry_run=True)
+
+    assert result["ok"] is True
+    assert "将要做" in result["answer"]
+    # 工具没有被真正执行：正文原封不动
+    assert agent_service.repo.get_note(db_conn, seeded_note)["content"] != "被干跑改掉的内容"
+    assert any("（干跑）" in step["summary"] for step in result["steps"])
+
+
+def test_agent_read_only_still_blocks_writes(db_conn, seeded_note, monkeypatch):
+    """只读模式照旧：写操作被拦（回归，防止干跑分支挡在它前面）。"""
+    script = ScriptedChat([
+        json.dumps({"action": "update_note",
+                    "params": {"note_id": seeded_note, "content": "只读下不该写入"}},
+                   ensure_ascii=False),
+        json.dumps({"action": "final", "answer": "好"}, ensure_ascii=False),
+    ])
+    monkeypatch.setattr(agent_service.ai, "chat", script)
+    result = agent_service.run_agent(db_conn, "改笔记", read_only=True)
+    assert agent_service.repo.get_note(db_conn, seeded_note)["content"] != "只读下不该写入"
+    assert any("已拦截写操作" in step["summary"] for step in result["steps"])
+
+
+def test_delete_run_removes_only_target(db_conn):
+    """单条删除：只删目标那条，别的留着；未知 id 返回 False。"""
+    from uuid import uuid4
+
+    agent_service.clear_runs(db_conn)
+    for task in ("任务甲", "任务乙"):
+        agent_service._record_run(db_conn, task, ok=True, answer="好", steps=[],
+                                  error="", read_only=False)
+    runs = agent_service.list_runs(db_conn)
+    for run in runs:
+        if not run.get("id"):
+            run["id"] = uuid4().hex[:10]
+    from app.services import agent as agent_mod
+
+    # 直接把带 id 的列表写回（_record_run 只给新记录加 id）
+    import json as json_mod
+    agent_mod.repo.save_meta_map(
+        db_conn, {"runs": json_mod.dumps(runs, ensure_ascii=False)}, prefix="agent.")
+
+    target = runs[0]["id"]
+    assert agent_service.delete_run(db_conn, target) is True
+    remaining = agent_service.list_runs(db_conn)
+    assert len(remaining) == 1
+    assert all(run["id"] != target for run in remaining)
+    assert agent_service.delete_run(db_conn, "不存在的id") is False
+
+
+def test_ensure_run_ids_backfills_legacy_records(db_conn):
+    """早期记录没有 id 字段：ensure_run_ids 一次性补齐且幂等。"""
+    import json as json_mod
+
+    legacy = [{"at": "2026-09-01T10:00:00", "task": "旧记录", "ok": True, "error": "",
+               "answer": "好", "read_only": False, "steps": []}]
+    agent_service.repo.save_meta_map(
+        db_conn, {"runs": json_mod.dumps(legacy, ensure_ascii=False)}, prefix="agent.")
+
+    agent_service.ensure_run_ids(db_conn)
+    runs = agent_service.list_runs(db_conn)
+    assert runs and runs[0].get("id")
+
+    first = runs[0]["id"]
+    agent_service.ensure_run_ids(db_conn)          # 再跑一遍不许换 id
+    assert agent_service.list_runs(db_conn)[0]["id"] == first
+
+
+def test_runs_delete_endpoint(auth_client, csrf):
+    """删除端点：真的删一条；缺 id 报 400。（走 HTTP 层验证 CSRF 与鉴权）
+
+    注意：写记录的事务要先提交，再走 HTTP —— 路由用的是另一个连接，
+    看不到未提交的数据（这也是这个测试曾经假红的原因）。
+    """
+    from app import db as db_mod
+
+    with db_mod.db() as conn:
+        agent_service.clear_runs(conn)
+        agent_service._record_run(conn, "要被删的任务", ok=True, answer="好",
+                                  steps=[], error="", read_only=False)
+
+    auth_client.get("/api/agent/runs")     # 顺手触发旧记录补 id
+    with db_mod.db() as conn:
+        runs = agent_service.list_runs(conn)
+    assert runs and runs[0].get("id")
+    target = runs[0]["id"]
+
+    res = auth_client.post("/api/agent/runs/delete",
+                           data=json.dumps({"id": target}),
+                           headers={"X-CSRF-Token": csrf})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["ok"] is True and body["remaining"] == 0
+
+    res = auth_client.post("/api/agent/runs/delete",
+                           data=json.dumps({}),
+                           headers={"X-CSRF-Token": csrf})
+    assert res.status_code == 400
+
+
+def test_agent_page_has_mode_segment_and_no_readonly_checkbox(auth_client):
+    """/agent 要有三段式模式切换，旧的只读复选框不该再出现。"""
+    page = auth_client.get("/agent")
+    assert page.status_code == 200
+    assert 'id="agent-mode"' in page.text
+    for mode in ("rw", "ro", "dry"):
+        assert f'data-mode="{mode}"' in page.text
+    assert "agent-readonly" not in page.text

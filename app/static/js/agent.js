@@ -102,13 +102,42 @@
         at.textContent = String(run.at || '').slice(5, 16).replace('T', ' ');
         var task = document.createElement('span');
         task.className = 'agent-runs__head';
-        task.textContent = (run.read_only ? '[只读] ' : '') + run.task;
+        var modeLabel = run.dry_run ? '[干跑] ' : (run.read_only ? '[只读] ' : '');
+        task.textContent = modeLabel + run.task;
         var mark = document.createElement('span');
         mark.className = 'agent-runs__mark';
         mark.textContent = run.ok ? '✓' : '✗';
+        var del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'agent-runs__del';
+        del.setAttribute('aria-label', '删除这条记录');
+        del.title = '删除这条记录';
+        del.textContent = '×';
+        del.addEventListener('click', function (e) {
+          e.stopPropagation();
+          if (!run.id) { return; }   // 早期记录会在列表加载时被补上 id，正常不会走到这
+          var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+          fetch('/api/agent/runs/delete', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRF-Token': csrfMeta ? csrfMeta.getAttribute('content') : ''
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({ id: run.id })
+          }).then(function (res) { return res.json(); }).then(function (data) {
+            if (data && data.ok) {
+              li.remove();
+              var count = document.getElementById('agent-runs-count');
+              if (count) { count.textContent = data.remaining ? String(data.remaining) : ''; }
+              if (!runsList.children.length) { runsSection.hidden = true; }
+            }
+          }).catch(function () { /* 静默 */ });
+        });
         li.appendChild(at);
         li.appendChild(task);
         li.appendChild(mark);
+        li.appendChild(del);
         runsList.appendChild(li);
       });
     }
@@ -140,6 +169,32 @@
       if (!statusEl) { return; }
       statusEl.textContent = text || '';
       statusEl.className = 'ai-status' + (kind ? ' ai-status--' + kind : '');
+    }
+
+    // ===== 执行模式切换（读写 / 只读 / 干跑） =====
+    var MODE_KEY = HISTORY_KEY + '.mode';
+    var modeBox = document.getElementById('agent-mode');
+    var currentMode = 'rw';
+    if (modeBox) {
+      try {
+        var savedMode = window.localStorage.getItem(MODE_KEY);
+        if (savedMode === 'ro' || savedMode === 'dry') { currentMode = savedMode; }
+      } catch (err) { /* 无痕模式就算了 */ }
+
+      var segBtns = modeBox.querySelectorAll('.seg__btn');
+      function applyMode(mode) {
+        currentMode = mode;
+        segBtns.forEach(function (btn) {
+          var on = btn.getAttribute('data-mode') === mode;
+          btn.classList.toggle('is-on', on);
+          btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+        try { window.localStorage.setItem(MODE_KEY, mode); } catch (err) { /* 静默 */ }
+      }
+      segBtns.forEach(function (btn) {
+        btn.addEventListener('click', function () { applyMode(btn.getAttribute('data-mode')); });
+      });
+      applyMode(currentMode);   // 恢复上次的选择
     }
 
     // 示例任务：点一下填进输入框
@@ -265,7 +320,6 @@
         loadRuns();
       }
 
-      var readonlyBox = document.getElementById('agent-readonly');
       fetch(form.getAttribute('data-run-url') || '/api/agent/stream', {
         method: 'POST',
         headers: {
@@ -275,7 +329,7 @@
         credentials: 'same-origin',
         body: JSON.stringify({
           task: task,
-          read_only: !!(readonlyBox && readonlyBox.checked),
+          mode: currentMode,
           history: history.reduce(function (acc, turn) {
             acc.push({ role: 'user', content: turn.task });
             acc.push({ role: 'assistant', content: turn.answer });

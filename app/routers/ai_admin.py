@@ -494,17 +494,45 @@ async def agent_run(request: Request, conn: sqlite3.Connection = Depends(db_conn
         return _json({"ok": False, "error": "任务太长了（上限 2000 字）"}, 400)
     # agent 循环可能跑几分钟（最多 agent.MAX_STEPS 步、每步一次模型调用），必须丢进线程池，
     # 否则同步阻塞事件循环——博客访客的请求也会被一起卡住
-    read_only = bool(payload.get("read_only"))
+    read_only, dry_run = _parse_agent_mode(payload)
     history = payload.get("history")
-    result = await run_in_threadpool(agent.run_agent, conn, task, read_only=read_only, history=history)
+    result = await run_in_threadpool(
+        agent.run_agent, conn, task, read_only=read_only, dry_run=dry_run, history=history)
     status = 200 if result.get("ok") else 502
     return _json(result, status)
 
 
+def _parse_agent_mode(payload: dict) -> tuple[bool, bool]:
+    """mode 字符串 → (read_only, dry_run)。兼容旧客户端只发 read_only 布尔。"""
+    mode = str(payload.get("mode") or "")
+    if mode == "ro":
+        return True, False
+    if mode == "dry":
+        return False, True
+    if mode == "rw":
+        return False, False
+    return bool(payload.get("read_only")), False
+
+
 @ai_api_router.get("/agent/runs")
 def agent_runs_list(conn: sqlite3.Connection = Depends(db_conn)):
-    """agent 执行历史（审计用，新→旧）。"""
+    """agent 执行历史（审计用，新→旧）。顺手给旧记录补 id（单条删除要用）。"""
+    agent.ensure_run_ids(conn)
     return _json({"ok": True, "runs": agent.list_runs(conn)})
+
+
+@ai_api_router.post("/agent/runs/delete")
+async def agent_run_delete(request: Request, conn: sqlite3.Connection = Depends(db_conn)):
+    """删除执行历史里的某一条。"""
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    run_id = str(payload.get("id") or "")
+    if not run_id:
+        return _json({"ok": False, "error": "缺少 id"}, 400)
+    deleted = agent.delete_run(conn, run_id)
+    return _json({"ok": deleted, "remaining": len(agent.list_runs(conn))})
 
 
 @ai_api_router.post("/agent/runs/clear")
@@ -528,12 +556,13 @@ async def agent_stream(request: Request, conn: sqlite3.Connection = Depends(db_c
         return _json({"ok": False, "error": "任务不能为空"}, 400)
     if len(task) > 2000:
         return _json({"ok": False, "error": "任务太长了（上限 2000 字）"}, 400)
-    read_only = bool(payload.get("read_only"))
+    read_only, dry_run = _parse_agent_mode(payload)
     history = payload.get("history")
 
     def gen():
         try:
-            for event in agent.iter_agent_events(conn, task, read_only=read_only, history=history):
+            for event in agent.iter_agent_events(
+                conn, task, read_only=read_only, dry_run=dry_run, history=history):
                 yield "data: " + json.dumps(event, ensure_ascii=False) + "\n\n"
         except Exception as exc:  # 流断了也要给前端一个明确错误
             logger.warning("agent 流式执行异常", exc_info=True)
