@@ -171,6 +171,18 @@
   （17 页逐动作区数按钮与尺寸，能报「同区尺寸不一」）。注意探针要排除
   关闭的 `<details>` 内容（Chrome 里它们仍有布局盒），但 summary 要放行。
 
+## 层叠上下文：动画残留 transform 是浮层的隐形杀手
+- `animation ... both/forwards` 会把末帧 transform **永远留在元素上**，而任何 transform
+  （哪怕 `translateY(0)`）都创建层叠上下文 → 内部浮层的 z-index 被困住，
+  DOM 靠后的 positioned 元素（如 sticky 目录）会整块盖上来。
+  实锤案例：`.page-head` 的 ink-rise 用 both，「更多」菜单被吸顶目录盖住。
+- **入场动画一律用 `backwards`**（结束回归自然态）；守卫在 `tests/test_css_rules.py`。
+- 排查「浮层被盖」三板斧：重合区 `document.elementFromPoint` 看命中谁 →
+  沿父链收集 computed 的 position/z/transform/filter/isolation/contain/will-change →
+  找到创建上下文的祖先。修复优先「消除上下文」，其次才给祖先提 z-index。
+- **功能没有入口等于不存在**：/stats 做完后全站没一个链接，用户从来不知道有统计页。
+  新页面落地的检查清单里要有「从导航能点进来」这一条（有守卫）。
+
 ## CSS：同一条规则别写两遍（有守卫）
 - `style.css` 是按轮次追加的，很容易出现「同一件事被两段规则同时管」：
   新规则想把下划线居中（`left:50%` + `translateX(-50%)`），旧规则的
