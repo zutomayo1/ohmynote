@@ -16,66 +16,71 @@
 
 <div class="agent-layout">
   {% if not ai_enabled %}
-    <div class="flash flash--warn">AI 服务还没配置。到<a href="/settings">「设置」</a>里选一个预设（比如免费的硅基流动 / 智谱）填上 Key 就能用。</div>
+    <div class="flash flash--warn agent-flash">AI 服务还没配置。到<a href="/settings">「设置」</a>里选一个预设（比如免费的硅基流动 / 智谱）填上 Key 就能用。</div>
   {% endif %}
 
-  <form class="agent-form" id="agent-form" method="post" action="/api/agent/stream"
-        data-run-url="/api/agent/stream">
-    <input type="hidden" name="_csrf" value="{{ csrf }}">
-    <label class="field">
-      <span class="field__label">你想让它做什么</span>
-      <textarea class="input agent-input" id="agent-task" name="task" rows="3" required
-                placeholder="例如：搜一下最近写过的关于部署的笔记，给它们都加上「服务器」标签，再新建一篇《部署清单》把这些笔记的要点列进去"></textarea>
-    </label>
-    <label class="checkbox agent-form__readonly">
-      <input type="checkbox" id="agent-readonly">
-      只读模式（只查不改，写操作会被拦下）
-    </label>
-    <div class="agent-form__row">
-      <button class="btn btn--primary" type="submit" id="agent-run">{{ icon('sparkles', 16) }} 让它去做</button>
-      <span class="ai-status" id="agent-status" role="status"></span>
-    </div>
-  </form>
+  {# 主列：输入 + 会话/结果（宽度跟随内容，不再锁在阅读栏里） #}
+  <div class="agent-main">
+    <form class="agent-form" id="agent-form" method="post" action="/api/agent/stream"
+          data-run-url="/api/agent/stream">
+      <label class="field">
+        <span class="field__label">你想让它做什么</span>
+        <textarea class="input agent-input" id="agent-task" name="task" rows="3" required
+                  placeholder="例如：搜一下最近写过的关于部署的笔记，给它们都加上「服务器」标签，再新建一篇《部署清单》把这些笔记的要点列进去"></textarea>
+      </label>
+      <div class="agent-form__row">
+        <label class="checkbox agent-form__readonly" title="只查不改：写操作会被拦下">
+          <input type="checkbox" id="agent-readonly">
+          只读模式
+        </label>
+        <button class="btn btn--primary" type="submit" id="agent-run">{{ icon('sparkles', 16) }} 让它去做</button>
+        <span class="ai-status" id="agent-status" role="status"></span>
+      </div>
+    </form>
 
-  <section class="agent-examples">
-    <h2 class="section-title">可以这样指挥它</h2>
-    <ul class="agent-examples__list">
-      <li><button type="button" class="agent-example" data-task="搜一下标题或正文里提到 Docker 的笔记，把它们都加上「部署」标签">给提到 Docker 的笔记加「部署」标签</button></li>
-      <li><button type="button" class="agent-example" data-task="帮我总结《空白笔记》，总结好之后续写在这篇笔记的正文后面">总结一篇并写回笔记</button></li>
-      <li><button type="button" class="agent-example" data-task="把最近七天内更新过的笔记按分类整理一下，列成清单给我看">这周都写了什么</button></li>
-      <li><button type="button" class="agent-example" data-task="列出所有标签，把那些只用过一次、而且只有一两个字的标签从笔记上删掉">清理没用过几次的标签</button></li>
-      <li><button type="button" class="agent-example" data-task="把最近三篇笔记的标题和摘要列给我看看">看看最近写了什么</button></li>
-      <li><button type="button" class="agent-example" data-task="新建一篇《读书清单》，正文列出我想读的三本书，打上「阅读」标签">新建一篇读书清单</button></li>
-      <li><button type="button" class="agent-example" data-task="找到《部署清单》这篇笔记，把它公开到博客，slug 用 deploy-checklist">把部署清单发布到博客</button></li>
-    </ul>
-  </section>
+    <section class="agent-result" id="agent-result" hidden>
+      <h2 class="section-title">执行过程</h2>
+      <ol class="agent-steps" id="agent-steps"></ol>
+      <div class="agent-answer" id="agent-answer"></div>
+      <div class="agent-notes" id="agent-notes" hidden></div>
+    </section>
 
-  <section class="agent-history" id="agent-history" hidden>
-    <div class="agent-history__head">
-      <h2 class="section-title">本轮会话</h2>
-      <button class="btn btn--ghost btn--sm" type="button" id="agent-history-clear">清空记忆</button>
-    </div>
-    <ol class="agent-history__list" id="agent-history-list"></ol>
-    <p class="micro">助手记得本轮会话里做过的事（最多 5 轮），也会自动带上「上一次任务动过哪几篇笔记」，所以换浏览器、隔一天再说「继续」「刚才那篇再加个标签」也接得上。点「清空记忆」重新开始。</p>
-  </section>
+    <section class="agent-history" id="agent-history" hidden>
+      <div class="agent-history__head">
+        <h2 class="section-title">本轮会话</h2>
+        <button class="btn btn--ghost btn--sm" type="button" id="agent-history-clear">清空记忆</button>
+      </div>
+      <ol class="agent-history__list" id="agent-history-list"></ol>
+      <p class="micro">记得本轮会话（最多 5 轮）和上次动过的笔记，说「继续」「刚才那篇再加个标签」接得上。</p>
+    </section>
+  </div>
 
-  <section class="agent-result" id="agent-result" hidden>
-    <h2 class="section-title">执行过程</h2>
-    <ol class="agent-steps" id="agent-steps"></ol>
-    <div class="agent-answer" id="agent-answer"></div>
-    <div class="agent-notes" id="agent-notes" hidden></div>
-  </section>
+  {# 侧栏：示例 + 历史任务（辅助信息，吸顶跟随） #}
+  <aside class="agent-rail">
+    <section class="agent-examples">
+      <h2 class="section-title">可以这样指挥它</h2>
+      <ul class="agent-examples__list">
+        <li><button type="button" class="agent-example" data-task="搜一下标题或正文里提到 Docker 的笔记，把它们都加上「部署」标签">给提到 Docker 的笔记加「部署」标签</button></li>
+        <li><button type="button" class="agent-example" data-task="帮我总结《空白笔记》，总结好之后续写在这篇笔记的正文后面">总结一篇并写回笔记</button></li>
+        <li><button type="button" class="agent-example" data-task="把最近七天内更新过的笔记按分类整理一下，列成清单给我看">这周都写了什么</button></li>
+        <li><button type="button" class="agent-example" data-task="列出所有标签，把那些只用过一次、而且只有一两个字的标签从笔记上删掉">清理没用过几次的标签</button></li>
+        <li><button type="button" class="agent-example" data-task="把最近三篇笔记的标题和摘要列给我看看">看看最近写了什么</button></li>
+        <li><button type="button" class="agent-example" data-task="新建一篇《读书清单》，正文列出我想读的三本书，打上「阅读」标签">新建一篇读书清单</button></li>
+        <li><button type="button" class="agent-example" data-task="找到《部署清单》这篇笔记，把它公开到博客，slug 用 deploy-checklist">把部署清单发布到博客</button></li>
+      </ul>
+      <p class="micro">点一条填进输入框，可以改完再发。</p>
+    </section>
 
-  <details class="agent-runs" id="agent-runs" hidden>
-    <summary class="agent-runs__summary">
-      <span class="section-title">历史任务</span>
-      <span class="agent-runs__count" id="agent-runs-count"></span>
-      <button class="btn btn--ghost btn--sm" type="button" id="agent-runs-clear">清空记录</button>
-    </summary>
-    <ul class="agent-runs__list" id="agent-runs-list"></ul>
-    <p class="micro">最近 20 次执行都记在这里（审计用），换浏览器也不会丢；鼠标悬停可看完整步骤。</p>
-  </details>
-
+    <details class="agent-runs" id="agent-runs" hidden>
+      <summary class="agent-runs__summary">
+        <span class="section-title">历史任务</span>
+        <span class="agent-runs__count" id="agent-runs-count"></span>
+      </summary>
+      <ul class="agent-runs__list" id="agent-runs-list"></ul>
+      <p class="micro">最近 20 次执行（审计用），悬停看完整步骤。
+        <button class="agent-runs__clear" type="button" id="agent-runs-clear">清空记录</button></p>
+    </details>
+  </aside>
 </div>
 {% endblock %}
 

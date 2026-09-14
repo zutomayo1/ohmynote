@@ -4738,10 +4738,8 @@ body { transition: background-color .12s ease, color .12s ease; }
   font-size: 11px; line-height: 1.5; }
 
 /* ===== 补丁：笔记助手页（2026-09-13） ===== */
-.agent-layout { max-width: var(--measure); }
-.agent-form { margin-bottom: 22px; }
+/* 布局改由「双栏补丁（2026-09-14）」负责（grid 双栏），这里不再锁阅读栏宽度 */
 .agent-input { resize: vertical; min-height: 84px; }
-.agent-form__row { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
 
 .agent-steps { margin: 0 0 14px; padding-left: 0; list-style: none; }
 .agent-steps__item {
@@ -6072,4 +6070,52 @@ body.split-dragging .editor__textarea { pointer-events: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .ask-bubble.is-typing .ask-bubble__role::after { animation: none; }
+}
+
+/* ===== 补丁：笔记助手双栏布局（2026-09-14） ===== */
+/* 原来 .agent-layout 锁在 68ch 阅读栏里，宽屏右边全空。
+   改成双栏：主列放输入与会话/结果（吃满剩余宽度），侧栏放示例与历史任务、
+   吸顶跟随；窄屏（<960px）叠回单栏，顺序 主列 → 侧栏。 */
+
+.agent-layout {
+  display: grid; grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 30px; align-items: start; }
+
+.agent-main { min-width: 0; display: grid; gap: 26px; }
+
+/* 未配置 AI 的提示横跨整页 */
+.agent-flash { grid-column: 1 / -1; }
+
+.agent-form { margin-bottom: 0; }
+
+.agent-form__row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 16px;
+  margin-top: 12px; }
+
+.agent-form__row .checkbox { margin: 0; }
+
+.agent-form__row .ai-status { flex: 1 1 auto; min-width: 0; margin-top: 0; }
+
+/* 侧栏：吸顶跟随（同详情页目录的手法），内容不宽，不会溢出 */
+.agent-rail {
+  position: sticky; top: calc(var(--header-h) + 20px);
+  display: grid; gap: 24px; min-width: 0; }
+
+.agent-examples { margin-bottom: 0; }
+
+.agent-example { text-align: left; }   /* 侧栏窄，芯片自然换行流，别锁 100% 宽 */
+
+/* 「清空记录」改成行内文字按钮（不再挤在 summary 行里） */
+.agent-runs__clear {
+  border: 0; padding: 0; background: none; cursor: pointer;
+  color: var(--ink-3); font-family: var(--font-sans); font-size: 12px;
+  text-decoration: underline; text-underline-offset: 3px; }
+
+.agent-runs__clear:hover { color: var(--danger); }
+
+.agent-runs__summary { padding: 2px 0; }
+
+@media (max-width: 960px) {
+  .agent-layout { grid-template-columns: minmax(0, 1fr); gap: 26px; }
+  .agent-rail { position: static; }
 }
