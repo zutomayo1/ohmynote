@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import RedirectResponse, Response
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 
 from .. import repo, search as search_mod
 from ..config import settings
@@ -268,6 +268,61 @@ def _parse_template_id(raw: str) -> tuple[bool, int | None]:
     if not 1 <= value <= MAX_SQLITE_INT:
         return False, None
     return True, value
+
+
+@router.post("/templates/ai-generate")
+def template_ai_generate(
+    conn: sqlite3.Connection = Depends(db_conn),
+    topic: str = Form(""),
+):
+    """AI 生成一篇模板（名称 / 说明 / 内容），返回 JSON 由前端填进编辑器。
+
+    生成结果只回显不落库——用户看一眼再点「创建模板」才保存。"""
+    topic = (topic or "").strip()[:120]
+    if not topic:
+        return JSONResponse({"error": "先写一句想要什么模板"}, status_code=400)
+    docs = "；".join(f"{name} {doc}" for name, doc in note_templates.VARIABLE_DOCS)
+    prompt = (
+        f"为个人笔记站设计一个「{topic}」笔记模板。"
+        "只返回一个严格的 JSON 对象（不要代码块围栏），字段："
+        'name（模板名，不超过 12 个字）、description（一句话说明，不超过 30 字）、'
+        "content（Markdown 模板正文：结构清晰、有小节和待办列表，"
+        f"适度使用这些模板变量让套用时自动填充：{docs}。控制在 25 行以内）。"
+    )
+    try:
+        text = ai.chat(
+            [{"role": "user", "content": prompt}],
+            task="template",
+            temperature=0.4,
+            max_tokens=900,
+            conn=conn,
+        )
+    except Exception as exc:  # 没配置 AI / 超时 / 网络错误
+        return JSONResponse({"error": f"AI 生成失败：{exc}"}, status_code=502)
+    data = _extract_json_object(text)
+    if not data or not (data.get("content") or "").strip():
+        return JSONResponse({"error": "AI 返回的内容不完整，请重试或换个说法"}, status_code=502)
+    return JSONResponse({
+        "name": (data.get("name") or topic)[:40],
+        "description": (data.get("description") or "")[:80],
+        "content": data.get("content") or "",
+    })
+
+
+def _extract_json_object(text: str) -> dict | None:
+    """从模型回复里抠出第一个 JSON 对象；容忍 ```json 围栏和前后废话。"""
+    text = (text or "").strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```[a-zA-Z]*\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+    start, end = text.find("{"), text.rfind("}")
+    if start < 0 or end <= start:
+        return None
+    try:
+        obj = json.loads(text[start:end + 1])
+    except ValueError:
+        return None
+    return obj if isinstance(obj, dict) else None
 
 
 @router.post("/templates/save")

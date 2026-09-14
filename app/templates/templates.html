@@ -27,7 +27,9 @@
             <p class="template-card__desc">{{ item.description or '（没有说明）' }}</p>
             <pre class="template-card__preview">{{ item.content | truncate_cn(160) }}</pre>
             <div class="template-card__actions">
-              <a class="btn btn--primary btn--sm" href="/notes/new?template={{ item.id }}">用这个模板</a>
+              <a class="btn btn--sm" href="/notes/new?template={{ item.id }}">用这个模板</a>
+              <button class="btn btn--ghost btn--sm tpl-copy" type="button"
+                      data-content="{{ item.content }}">复制内容</button>
               <a class="btn btn--ghost btn--sm" href="/templates?edit={{ item.id }}">编辑</a>
               <form class="template-card__default" method="post" action="/templates/default">
                 <input type="hidden" name="_csrf" value="{{ csrf }}">
@@ -66,6 +68,13 @@
       </label>
       <label class="field">
         <span class="field__label">模板内容（Markdown）</span>
+        <div class="tpl-ai">
+          <input class="input tpl-ai__topic" id="tpl-ai-topic" type="text" maxlength="120"
+                 placeholder="想要什么模板？例如：每周复盘 / 面试复盘 / 读书卡片">
+          <button class="btn btn--ghost btn--sm tpl-ai__btn" id="tpl-ai-btn" type="button">
+            {{ icon('sparkles', 14) }} AI 生成
+          </button>
+        </div>
         <div class="tpl-vars micro">
           <strong>可用变量</strong>（套用模板时自动替换成实际值）：
           {% for name, doc in variable_docs %}<code>{{ name }}</code> {{ doc }}{% if not loop.last %} · {% endif %}{% endfor %}
@@ -80,4 +89,8 @@
     </form>
   </aside>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/templates.js?v={{ asset_v }}" defer></script>
 {% endblock %}

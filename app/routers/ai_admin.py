@@ -61,6 +61,7 @@ TASK_LABELS = {
     "agent": "笔记助手",
     "title": "起标题",
     "category": "定分类",
+    "template": "模板生成",
     "embed": "向量",
 }
 
