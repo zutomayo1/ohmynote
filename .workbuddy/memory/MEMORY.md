@@ -147,6 +147,18 @@
 - 以后要打包 `.git` 备份或加远端；跑 `git stash` 这类批量改工作区的命令前，
   先确认 `.git` 完好（`git log -1` 能出）。
 
+## 按钮与动作区（规范见 docs/frontend-contract.md 第 4 节）
+- 层级 4 种（primary 每屏一个 / 默认 / ghost / danger 必带确认）；尺寸 3 档（36 / 30 / 44）。
+  **同一个动作区里所有控件必须同高**，混 36 和 30 就是「看着没对齐」。
+- 低频动作收进 `.menu-group`（details 实现，无 JS 可用）；菜单项留在 DOM 里
+  （文案断言与无障碍不受影响）；`app.js` 的 `initMenuGroup()` 管点外/Esc/点项收起。
+- 图标按钮必须 `title` + `aria-label`，状态开关加 `aria-pressed` 与 `is-on`。
+- 引用图标前先确认 `_macros.html` 里定义过：`icon('copy')` 曾经根本不存在，
+  渲染成空 svg（按钮上凭空一段空白）。守卫在 `tests/test_icon_macro.py`。
+- 量按钮用 `.scratch/button_audit.py` / `.scratch/button_verify.py`
+  （17 页逐动作区数按钮与尺寸，能报「同区尺寸不一」）。注意探针要排除
+  关闭的 `<details>` 内容（Chrome 里它们仍有布局盒），但 summary 要放行。
+
 ## CSS：同一条规则别写两遍（有守卫）
 - `style.css` 是按轮次追加的，很容易出现「同一件事被两段规则同时管」：
   新规则想把下划线居中（`left:50%` + `translateX(-50%)`），旧规则的
