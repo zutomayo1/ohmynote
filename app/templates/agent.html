@@ -24,6 +24,7 @@
       <div class="composer__bar">
         <span class="composer__label">你想让它做什么</span>
         <div class="seg" id="agent-mode" role="radiogroup" aria-label="执行模式">
+          <span class="seg__thumb" aria-hidden="true"></span>
           <button type="button" class="seg__btn is-on" data-mode="rw" aria-pressed="true"
                   title="完整能力：可以查也可以改">读写</button>
           <button type="button" class="seg__btn" data-mode="ro" aria-pressed="false"
@@ -36,7 +37,7 @@
                 placeholder="例如：搜一下最近写过的关于部署的笔记，给它们都加上「服务器」标签，再新建一篇《部署清单》把这些笔记的要点列进去"></textarea>
       <div class="composer__foot">
         <span class="ai-status" id="agent-status" role="status"></span>
-        <span class="composer__hint">Ctrl + Enter 直接运行</span>
+        <span class="composer__hint">Enter 发送 · Shift+Enter 换行</span>
         <button class="btn btn--primary" type="submit" id="agent-run">{{ icon('play', 15) }} 让它去做</button>
       </div>
     </form>

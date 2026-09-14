@@ -2423,6 +2423,14 @@ img { border-radius: var(--radius-sm); }
 
 .toolbar__row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; width: 100%; }
 
+/* 搜索框与筛选下拉之间的一条竖分隔：让「搜索」和「过滤」两组各自成块 */
+.toolbar__divider { flex: none; width: 1px; height: 22px; background: var(--line); margin: 0 2px; }
+
+/* JS 可用时这些元素隐藏：筛选按钮（下拉自动提交）、未选择时的批量条 */
+.js .no-js-only { display: none !important; }
+
+.js .batch-bar:not(.is-active) { display: none; }
+
 .toolbar__row .field { flex: 0 1 auto; min-width: 0; }
 
 .toolbar__row .field--grow { flex: 1 1 240px; }
@@ -5860,7 +5868,8 @@ body.split-dragging .editor__textarea { pointer-events: none; }
 
 .chart-tip {
   position: fixed; top: 0; left: 0; z-index: 400;
-  min-width: 172px; max-width: 268px; padding: 10px 12px;
+  width: max-content; min-width: 160px; max-width: min(300px, calc(100vw - 16px));
+  padding: 10px 12px;
   border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
   background: var(--surface); box-shadow: var(--shadow-md);
   color: var(--ink); font-family: var(--font-sans); font-size: 12.5px; line-height: 1.55;
@@ -5887,16 +5896,21 @@ body.split-dragging .editor__textarea { pointer-events: none; }
 
 .chart-tip__rows { display: grid; gap: 3px; }
 
-.chart-tip__row { display: flex; align-items: baseline; justify-content: space-between; gap: 18px; }
+.chart-tip__row { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; }
+
+/* 标签不折行（用户截图里「结果」被竖着挤成两行）；值可以换行但不断在任意字处 */
+.chart-tip__label { color: var(--ink-3); white-space: nowrap; }
+
+.chart-tip__value {
+  color: var(--ink-2); font-variant-numeric: tabular-nums;
+  white-space: normal; overflow-wrap: anywhere; text-align: right; }
 
 .chart-tip__row.is-strong { margin-top: 3px; padding-top: 4px; border-top: 1px dashed var(--line); }
 
 .chart-tip__row.is-warn .chart-tip__value { color: var(--danger); }
 
-.chart-tip__label { color: var(--ink-3); }
 
-.chart-tip__value {
-  color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
 
 .chart-tip__row.is-strong .chart-tip__value { color: var(--ink); font-weight: 700; }
 
@@ -6170,20 +6184,27 @@ body.split-dragging .editor__textarea { pointer-events: none; }
 
 /* 分段切换（读写 / 只读 / 干跑）：药丸组，选中段亮品牌底 */
 .seg {
+  position: relative;
   display: inline-flex; align-items: center; gap: 2px;
   padding: 2px; border: 1px solid var(--line); border-radius: var(--radius-pill);
   background: var(--surface-2); }
 
+/* 滑块：随选中段移动的药丸（transform 过渡，切换丝滑） */
+.seg__thumb {
+  position: absolute; top: 2px; bottom: 2px; left: 0; width: 0;
+  border-radius: var(--radius-pill); background: var(--brand);
+  transition: transform .18s cubic-bezier(.3, .8, .3, 1), width .18s cubic-bezier(.3, .8, .3, 1); }
+
 .seg__btn {
+  position: relative; z-index: 1;
   border: 0; border-radius: var(--radius-pill); cursor: pointer;
   padding: 4px 12px; background: transparent; color: var(--ink-3);
   font-family: var(--font-sans); font-size: 12.5px; font-weight: 600;
-  transition: background-color .12s ease, color .12s ease; }
+  transition: color .18s ease; }
 
 .seg__btn:hover { color: var(--ink); }
 
-.seg__btn.is-on {
-  background: var(--brand); color: var(--bg); }
+.seg__btn.is-on { color: var(--bg); }
 
 .seg__btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
 

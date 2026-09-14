@@ -182,12 +182,22 @@
       } catch (err) { /* 无痕模式就算了 */ }
 
       var segBtns = modeBox.querySelectorAll('.seg__btn');
+      var segThumb = modeBox.querySelector('.seg__thumb');
+
+      // 滑块跟手：宽度与位移都取当前选中按钮的实测值（切换时有过渡动画）
+      function moveThumb(btn) {
+        if (!segThumb || !btn) { return; }
+        segThumb.style.width = btn.offsetWidth + 'px';
+        segThumb.style.transform = 'translateX(' + btn.offsetLeft + 'px)';
+      }
+
       function applyMode(mode) {
         currentMode = mode;
         segBtns.forEach(function (btn) {
           var on = btn.getAttribute('data-mode') === mode;
           btn.classList.toggle('is-on', on);
           btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+          if (on) { moveThumb(btn); }
         });
         try { window.localStorage.setItem(MODE_KEY, mode); } catch (err) { /* 静默 */ }
       }
@@ -195,6 +205,9 @@
         btn.addEventListener('click', function () { applyMode(btn.getAttribute('data-mode')); });
       });
       applyMode(currentMode);   // 恢复上次的选择
+      window.addEventListener('resize', function () {
+        moveThumb(modeBox.querySelector('.seg__btn.is-on'));
+      });
     }
 
     // 示例任务：点一下填进输入框
@@ -205,13 +218,15 @@
       });
     });
 
-    // Ctrl + Enter 直接运行（输入台脚注有提示；移动端没键盘，提示已隐藏）
+    // 发送：Enter（与问笔记统一）；Shift+Enter 换行；Ctrl/⌘+Enter 也保留；
+    // 中文输入法组词时不误触
     taskInput.addEventListener('keydown', function (event) {
-      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
-        event.preventDefault();
-        if (!runBtn.disabled) {
-          form.requestSubmit ? form.requestSubmit() : form.submit();
-        }
+      var isSend = (event.key === 'Enter' && !event.shiftKey && !event.isComposing)
+        || ((event.ctrlKey || event.metaKey) && event.key === 'Enter');
+      if (!isSend) { return; }
+      event.preventDefault();
+      if (!runBtn.disabled) {
+        form.requestSubmit ? form.requestSubmit() : form.submit();
       }
     });
 

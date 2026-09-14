@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <script nonce="{{ nonce }}">document.documentElement.classList.add('js');</script>{# 渐进增强开关：JS 可用时隐藏 .no-js-only（如「筛选」按钮） #}
   <title>{% block title %}{{ settings.site_title }}{% endblock %}</title>
   <meta name="description" content="{% block description %}{{ settings.site_description }}{% endblock %}">
   {% block canonical %}{% endblock %}

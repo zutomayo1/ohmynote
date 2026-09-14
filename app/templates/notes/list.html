@@ -65,6 +65,7 @@
       <span class="sr-only">搜索笔记</span>
       <input class="input" type="search" name="q" value="{{ q }}" placeholder="搜索标题、正文、标签…">
     </label>
+    <span class="toolbar__divider" aria-hidden="true"></span>
     <label class="field">
       <span class="sr-only">状态</span>
       <select class="select" name="status">
@@ -90,7 +91,8 @@
         {% endfor %}
       </select>
     </label>
-    <button class="btn" type="submit">筛选</button>
+    {# 下拉改了就自动提交（app.js），「筛选」只给无 JS 的环境兜底 —— JS 可用时隐藏 #}
+    <button class="btn no-js-only" type="submit">筛选</button>
     {% if q or status or category or tag or fav %}
       <a class="btn btn--ghost" href="/notes">清空</a>
     {% endif %}
