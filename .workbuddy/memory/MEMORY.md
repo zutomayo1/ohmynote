@@ -44,12 +44,11 @@
 ## UI/UX 惯例
 - 历史/审计区块默认折叠（details + 条数徽标）；summary 里的按钮要 preventDefault + stopPropagation。
 - 「无 JS 才显示」：head 内联脚本给 html 挂 js 类（**CSP 要 nonce**，缺了静默失效——「JS 没生效」先查 CSP）+ `.js .no-js-only{display:none}`。
-- 快捷键统一：Enter 发送 / Shift+Enter 换行（IME 组词不误触）；合并 keydown 时 Enter 分支会吃掉 Ctrl+Enter。
+- 快捷键统一 Enter 发送 / Shift+Enter 换行（IME 组词不误触）；合并 keydown 时 Enter 分支会吃掉 Ctrl+Enter。
 - seg 滑块：绝对定位 .seg__thumb + transform/width 过渡，is-on 不自己画底色。
 
 ## 笔记助手（agent.py）
-- 每轮一个 JSON（action/params 或 final）；观察结果按工具给 `observe_limit`，统一截断会废掉 read 类工具（模型显得笨常是喂得不完整）。
-- 会话记忆靠服务端 `_last_run_recap`；防空转拦「同工具同参数」重复（影响步数类断言）；测试用 ScriptedChat monkeypatch ai.chat。
+- 每轮一个 JSON；观察结果按工具给 `observe_limit`（统一截断会废掉 read 工具，模型显得笨常是喂得不完整）；防空转拦「同工具同参数」重复；测试用 ScriptedChat monkeypatch ai.chat。
 
 ## 界面问题排查方法论
 - 用用户真实数据复现：复制 data/inknote.db 到临时目录 + INKNOTE_DATA_DIR 指过去；用户改过密码，用 `make_session()` 造 cookie。
