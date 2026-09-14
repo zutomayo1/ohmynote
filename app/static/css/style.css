@@ -958,9 +958,17 @@ img { border-radius: var(--radius-sm); }
 
 .palette__item.is-active .palette__item-title { color: var(--brand); }
 
-.palette__item-title { font-family: var(--font-serif); font-size: 15px; font-weight: 600; }
+/* 标题优先（占它需要的宽度），摘录最多 45%、超出省略：
+   原来 meta 是 flex:none 且不限长，1300px 的摘录把标题挤成一个字一行 */
+.palette__item-title {
+  flex: 1 1 auto; min-width: 0; overflow: hidden;
+  font-family: var(--font-serif); font-size: 15px; font-weight: 600;
+  white-space: nowrap; text-overflow: ellipsis; }
 
-.palette__item-meta { flex: none; color: var(--ink-3); font-family: var(--font-sans); font-size: 12px; }
+.palette__item-meta {
+  flex: 0 1 45%; min-width: 0; overflow: hidden; text-align: right;
+  color: var(--ink-3); font-family: var(--font-sans); font-size: 12px;
+  white-space: nowrap; text-overflow: ellipsis; }
 
 .palette__hint {
   display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 10px 16px;
@@ -4949,9 +4957,11 @@ body {
 /* ===== 补丁：写作热力图（2026-09-13） ===== */
 .heatmap-card { overflow: hidden; }
 
-/* direction: rtl 让最新的一周贴右侧，窄屏横滚时从旧到新 */
+/* 从旧到新、最新在最右（GitHub 惯例）。
+   原来用 row-reverse，结果最新的跑到了最左边——整年几乎全空时，
+   仅有的几个记录日出现在最左端，看上去「热力图是空的/没渲染」 */
 .heatmap {
-  display: flex; flex-direction: row-reverse; gap: 3px;
+  display: flex; flex-direction: row; gap: 3px;
   overflow-x: auto; padding: 6px 2px 2px; }
 
 .heatmap__week { display: grid; grid-template-rows: repeat(7, 11px); gap: 3px; }
@@ -5987,3 +5997,12 @@ body.split-dragging .editor__textarea { pointer-events: none; }
   .menu-group__panel { min-width: 0; width: min(78vw, 15em); }
   .ai-row__divider { display: none; }
 }
+
+/* ===== 补丁：详情/博客页「相关内容」移到正文下方（2026-09-14） ===== */
+/* 原来这些块和吸顶目录同在侧栏列：目录吸顶后，滚动时它们会从目录卡底下穿过
+   （实测「你可能还想看」最多被盖住 321px）。挪到正文下方，目录吸顶时无物可盖。 */
+.post-after {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 18px; align-items: start; margin-top: 26px; }
+
+.post-after .rail-block { margin: 0; }

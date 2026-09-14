@@ -459,8 +459,18 @@ def test_public_post_links_point_to_blog(auth_client, client, csrf):
     assert link, "博客列表里应该有「公开的目标」的链接"
     page = client.get(link)
     assert page.status_code == 200
+    # 侧栏现在只有吸顶目录；「相关内容」（相关文章 / 引用 / 订阅）在正文下方的
+    # .post-after —— 两处都不该出现指向后台 /notes/ 的链接（私密笔记不能漏出来）
+    # 侧栏现在只有吸顶目录；「相关内容」（相关文章 / 引用 / 订阅）在正文下方的
+    # .post-after —— 两处都不该出现指向后台 /notes/ 的链接（私密笔记不能漏出来）
     rail = page.text.split('<aside class="post-rail">')[-1]
     assert "/notes/" not in rail, "公开页面的侧栏不该出现 /notes/ 链接"
+    if '<div class="post-after">' in page.text:
+        after = page.text.split('<div class="post-after">')[-1].split("</div>")[0]
+        assert "/notes/" not in after, "公开页面的「相关内容」不该出现 /notes/ 链接"
+    if '<div class="post-after">' in page.text:
+        after = page.text.split('<div class="post-after">')[-1].split("</div>")[0]
+        assert "/notes/" not in after, "公开页面的「相关内容」不该出现 /notes/ 链接"
     # 私密引用者不能出现在公开页面上
     assert "私密的引用者" not in page.text
 

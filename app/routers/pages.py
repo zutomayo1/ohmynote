@@ -480,7 +480,10 @@ def stats_page(request: Request, conn: sqlite3.Connection = Depends(db_conn)):
     tags = repo.list_tags(conn, limit=30)
     months = repo.archive_months(conn, public_only=False)
     recent, _total = repo.list_notes(conn, per_page=8, sort="created")
-    heatmap = stats_heatmap.build_heatmap(repo.daily_note_counts(conn))
+    heatmap_counts = repo.daily_note_counts(conn)
+    heatmap = stats_heatmap.build_heatmap(heatmap_counts)
+    heatmap_written = sum(heatmap_counts.values())
+    heatmap_last = max(heatmap_counts) if heatmap_counts else ""
     return render(
         request,
         "stats.html",
@@ -489,4 +492,6 @@ def stats_page(request: Request, conn: sqlite3.Connection = Depends(db_conn)):
         months=months,
         recent=recent,
         heatmap=heatmap,
+        heatmap_written=heatmap_written,
+        heatmap_last=heatmap_last,
     )

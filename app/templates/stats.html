@@ -25,7 +25,10 @@
 
 <section class="card heatmap-card">
   <h2 class="card__title">写作热力</h2>
-  <p class="micro">过去一年，每天写了几篇。</p>
+  <p class="micro">
+    过去一年写下 <strong>{{ heatmap_written | number }}</strong> 篇{% if heatmap_last %}，最近一次是 {{ heatmap_last }}{% endif %}。
+    {% if heatmap_written < 10 %}<span class="muted">刚开始写——坚持几天，这里的格子会越来越深。</span>{% endif %}
+  </p>
   <div class="heatmap" role="img" aria-label="近一年写作热力图">
   {% for week in heatmap %}<div class="heatmap__week">{% for cell in week %}{% if cell %}<span class="hm-cell hm-l{{ cell.level }}" title="{{ cell.date }} · {{ cell.count }} 篇"></span>{% else %}<span class="hm-cell hm-blank"></span>{% endif %}{% endfor %}</div>{% endfor %}
   </div>

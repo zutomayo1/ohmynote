@@ -118,6 +118,10 @@
   <aside class="post-rail">
     {{ toc_nav(toc) }}
 
+  </aside>
+</div>
+
+<div class="post-after">
     <section class="rail-block">
       <h2 class="rail-block__title">你可能还想看</h2>
       {{ link_list(related, '还没有相关笔记。', why=True) }}
@@ -162,7 +166,6 @@
         <a class="rail-block__more" href="{{ note.url }}/versions">查看全部版本 →</a>
       </section>
     {% endif %}
-  </aside>
 </div>
 
 {% if previous or next %}

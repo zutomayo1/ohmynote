@@ -36,23 +36,27 @@
     <div class="post-body prose" id="post-body">{{ html | safe }}</div>
     <aside class="post-rail">
       {{ toc_nav(toc) }}
-      {% if related %}
-        <section class="rail-block">
-          <h2 class="rail-block__title">相关文章</h2>
-          {{ link_list(related, '') }}
-        </section>
-      {% endif %}
-      {% if backlinks %}
-        <section class="rail-block">
-          <h2 class="rail-block__title">引用本文的笔记</h2>
-          {{ link_list(backlinks, '') }}
-        </section>
-      {% endif %}
-      <section class="rail-block">
-        <h2 class="rail-block__title">订阅</h2>
-        <p class="muted"><a href="/feed.xml">Atom</a> · <a href="/rss.xml">RSS</a></p>
-      </section>
     </aside>
+  </div>
+
+  {# 相关内容放在正文下方而不是侧栏：侧栏只有吸顶目录，互不遮挡 #}
+  <div class="post-after">
+    {% if related %}
+      <section class="rail-block">
+        <h2 class="rail-block__title">相关文章</h2>
+        {{ link_list(related, '') }}
+      </section>
+    {% endif %}
+    {% if backlinks %}
+      <section class="rail-block">
+        <h2 class="rail-block__title">引用本文的笔记</h2>
+        {{ link_list(backlinks, '') }}
+      </section>
+    {% endif %}
+    <section class="rail-block">
+      <h2 class="rail-block__title">订阅</h2>
+      <p class="muted"><a href="/feed.xml">Atom</a> · <a href="/rss.xml">RSS</a></p>
+    </section>
   </div>
 </article>
 
