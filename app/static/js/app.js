@@ -681,6 +681,15 @@
   // 供 editor.js 在预览重渲染后复用
   InkNote.enhanceContent = enhanceContent; InkNote.setupCodeCopy = setupCodeCopy;
 
+  // ===== 统计页：热力图初始定位到最新（右端） =====
+  // 53 周的格子比卡片宽，overflow 裁掉右半边；有记录的日子几乎总在最新那几周，
+  // 不自动滚过去的话用户看到的就是一整片空白灰格（2026-09-14 用户实报「看不见热力图」）
+  function initHeatmapScroll() {
+    var heat = document.querySelector('.heatmap');
+    if (!heat) { return; }
+    heat.scrollLeft = heat.scrollWidth;
+  }
+
   // ===== 今日待办页：勾选回写原笔记 =====
   function initTodoPage() {
     var root = document.getElementById('todo-groups');
@@ -888,7 +897,7 @@
   }
 
   ready(function () {
-    safe(initTheme); safe(initPalette); safe(initConfirm); safe(initCodeCopy); safe(initNoteCopy); safe(initTodoPage); safe(initPalettePicker); safe(initTaskToggle);
+    safe(initTheme); safe(initPalette); safe(initConfirm); safe(initCodeCopy); safe(initNoteCopy); safe(initHeatmapScroll); safe(initTodoPage); safe(initPalettePicker); safe(initTaskToggle);
     safe(initToc); safe(initOffline); safe(initTitleAutoSize); safe(initKbdNav); safe(initMenuGroup);
     safe(function () { enhanceContent(document); });
     safe(initToolbarAutoSubmit);

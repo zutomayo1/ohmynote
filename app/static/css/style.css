@@ -4942,9 +4942,14 @@ body {
 .prose tbody tr:hover { background: color-mix(in srgb, var(--surface-2) 62%, transparent); }
 
 /* --- 7. 轻入场动效（减弱动效的用户完全无感） --- */
+/* fill 必须用 backwards 不能用 both：both 的 forwards 会把末帧的
+   transform: translateY(0) 永远留在元素上，而任何 transform（哪怕是恒等值）
+   都会创建层叠上下文 —— 页头里的「更多」菜单 z-index 就被困住，
+   被后写的吸顶目录整个盖住（2026-09-14 用户截图实锤）。backwards 只在
+   动画开始前应用 from 帧，结束后元素回归无 transform 的自然状态。 */
 @media (prefers-reduced-motion: no-preference) {
   main .page-head, main .stats-strip, main .note-grid, main .prose {
-    animation: ink-rise .4s ease both; }
+    animation: ink-rise .4s ease backwards; }
 
   main .note-grid { animation-delay: .05s; }
   main .prose { animation-delay: .03s; }

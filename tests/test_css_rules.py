@@ -138,3 +138,30 @@ def test_active_nav_underline_keeps_its_width_on_hover():
         assert ":not(.is-active)" in selector, (
             f"hover 规则要排除选中的链接，否则选中项的下划线会在鼠标移上去时缩短：{selector}"
         )
+
+
+def test_entry_animations_do_not_use_forwards_fill():
+    """入场动画不能用带 forwards 的填充（both / forwards）。
+
+    forwards 会把末帧的 transform 永远留在元素上，而任何 transform
+    （哪怕 translateY(0)）都会创建层叠上下文 —— 页头里的「更多」菜单
+    z-index 被困住，整个页头会被后写的吸顶目录盖住（2026-09-14 用户截图实锤）。
+    """
+    import re
+
+    for match in re.finditer(r"animation:([\w-]+)\s+[^;]*;\n?", CSS):
+        shorthand = match.group(0).strip()
+        if match.group(1) == "ink-rise":
+            assert "both" not in shorthand and "forwards" not in shorthand, (
+                f"ink-rise 不能用 forwards/both 填充（会残留 transform、困住菜单 z-index）：{shorthand}"
+            )
+
+
+def test_stats_page_is_reachable_from_nav():
+    """/stats 曾经全站没有任何入口（用户因此一直没见过热力图）。"""
+    from pathlib import Path
+
+    base = (Path(__file__).resolve().parent.parent / "app/templates/base.html").read_text(
+        encoding="utf-8"
+    )
+    assert 'href="/stats"' in base, "顶栏导航里必须有 /stats 入口"
