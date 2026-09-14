@@ -97,9 +97,9 @@
         <option value="title"{{ ' selected' if sort == 'title' }}>标题</option>
       </select>
     </label>
-    <button class="btn btn--ghost btn--sm" type="submit">筛选</button>
+    <button class="btn btn--ghost" type="submit">筛选</button>
     {% if has_filter or sort %}
-      <a class="btn btn--ghost btn--sm" href="{{ filter_url(request, fav=None, tag=None, category=None, status=None, sort=None) }}">重置条件</a>
+      <a class="btn btn--ghost" href="{{ filter_url(request, fav=None, tag=None, category=None, status=None, sort=None) }}">重置条件</a>
     {% endif %}
   </div>
 </form>

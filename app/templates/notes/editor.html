@@ -202,19 +202,22 @@
     </div>
 
     <div class="ai-row">
+      <span class="ai-row__label">AI</span>
       <button class="btn btn--ghost btn--sm" type="button" id="ai-summary">
-        {{ icon('sparkles', 15) }} AI 生成摘要
+        {{ icon('sparkles', 15) }} 生成摘要
       </button>
       <button class="btn btn--ghost btn--sm" type="button" id="ai-tags">
-        {{ icon('tag', 15) }} AI 推荐标签
+        {{ icon('tag', 15) }} 推荐标签
       </button>
       <button class="btn btn--ghost btn--sm" type="button" id="ai-title">
-        {{ icon('sparkles', 15) }} AI 起标题
+        {{ icon('sparkles', 15) }} 起标题
       </button>
       <button class="btn btn--ghost btn--sm" type="button" id="ai-category">
-        {{ icon('inbox', 15) }} AI 推荐分类
+        {{ icon('inbox', 15) }} 推荐分类
       </button>
+      {# 存为模板不是 AI 动作，用分隔线隔开，别混进 AI 组 #}
       {% if note.id %}
+      <span class="ai-row__divider" aria-hidden="true"></span>
       <button class="btn btn--ghost btn--sm" type="submit" formaction="/notes/{{ note.id }}/save-as-template">
         {{ icon('copy', 15) }} 存为模板
       </button>

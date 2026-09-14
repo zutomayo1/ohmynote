@@ -113,7 +113,7 @@ Pygments 代码高亮的 **token 颜色**由 `app/static/css/highlight.css`（�
     <div class="header-actions">
       <button class="icon-btn" id="search-open" type="button" title="搜索 (Ctrl+K)" aria-label="搜索">…svg…</button>
       <button class="icon-btn theme-toggle" id="theme-toggle" type="button" aria-label="切换深色模式">…svg…</button>
-      <form class="logout-form" method="post" action="/logout">…<button class="btn btn--ghost btn--sm">退出</button></form>
+      <form class="logout-form" method="post" action="/logout">…<button class="btn btn--ghost">退出</button></form>
     </div>
   </div>
 </header>
@@ -302,8 +302,9 @@ Pygments 代码高亮的 **token 颜色**由 `app/static/css/highlight.css`（�
       <label class="checkbox"><input type="checkbox" name="is_starred" value="1"> 星标</label>
     </div>
     <div class="ai-row">
-      <button class="btn btn--ghost btn--sm" type="button" id="ai-summary">AI 生成摘要</button>
-      <button class="btn btn--ghost btn--sm" type="button" id="ai-tags">AI 推荐标签</button>
+      <span class="ai-row__label">AI</span>
+      <button class="btn btn--ghost btn--sm" type="button" id="ai-summary">生成摘要</button>
+      <button class="btn btn--ghost btn--sm" type="button" id="ai-tags">推荐标签</button>
       <span class="ai-hint" id="ai-hint"></span>
     </div>
   </details>
@@ -334,7 +335,24 @@ Pygments 代码高亮的 **token 颜色**由 `app/static/css/highlight.css`（�
     <div class="post-meta meta">…时间 / 字数 / 阅读时长 / 分类…</div>
     <div class="pill-list">…tag-pill…</div>
   </div>
-  <div class="page-actions">…编辑 / 公开 / 置顶 / 星标 / 历史 / 导出 / 删除（都是小表单）…</div>
+  <div class="page-actions">
+    {# 只放「常用」：编辑 + 状态开关（图标，带 title/aria-label）+ 更多 + 危险动作 #}
+    <a class="btn btn--primary" href="/notes/12/edit">编辑</a>
+    <form method="post" action="/notes/12/flag">…<button class="btn btn--ghost btn--icon is-on" title="取消置顶" aria-label="取消置顶" aria-pressed="true">…</button></form>
+    <form method="post" action="/notes/12/flag">…<button class="btn btn--ghost btn--icon" title="标星" aria-label="标星" aria-pressed="false">…</button></form>
+    <form method="post" action="/notes/12/flag">…<button class="btn btn--ghost btn--icon" title="公开到博客" aria-label="公开到博客" aria-pressed="false">…</button></form>
+    <details class="menu-group">
+      <summary class="btn btn--ghost menu-group__toggle">…更多</summary>
+      <div class="menu-group__panel">
+        <a class="menu-group__item" href="/notes/12/export.html">导出网页</a>
+        <button class="menu-group__item" type="button" data-copy-note="md">复制 MD</button>
+        <div class="menu-group__divider"></div>
+        <a class="menu-group__item" href="/notes/12/versions">历史版本</a>
+        <form method="post" action="/notes/12/archive">…<button class="menu-group__item" type="submit">归档</button></form>
+      </div>
+    </details>
+    <form method="post" action="/notes/12/delete" data-confirm="…">…<button class="btn btn--ghost btn--danger btn--icon" title="移入回收站" aria-label="移入回收站">…</button></form>
+  </div>
 </div>
 <div class="post-layout">
   <article class="post-body prose" id="post-body"> …渲染后的 HTML… </article>
@@ -430,7 +448,54 @@ Pygments 代码高亮的 **token 颜色**由 `app/static/css/highlight.css`（�
 
 ---
 
-## 4. `/api/*` 契约
+## 4. 按钮与动作区
+
+### 层级：只有 4 种，别再发明
+
+| 类名 | 用途 | 硬约束 |
+|---|---|---|
+| `btn btn--primary` | 当前屏幕**唯一**的主操作 | 一屏最多一个；同一个动作不允许在两处都放主按钮 |
+| `btn`（默认） | 次要操作（筛选、获取可用模型、保存） | |
+| `btn btn--ghost` | 更弱的动作、返回、批量条里的辅助项 | |
+| `btn btn--danger` | 破坏性动作（清空回收站、回滚、移入回收站） | 必须带 `data-confirm` |
+
+### 尺寸：只有 3 档
+
+| 档位 | 高度 | 用在哪 |
+|---|---|---|
+| `btn--lg` | 44px | 极少（登录页） |
+| 默认 / `icon-btn` | 36px | 页面级动作区、工具栏、表单行、顶栏 |
+| `btn--sm` / `icon-btn--sm` | 30px | 卡片内 / 表格内 / 次要动作条这类紧凑区 |
+
+**同一个动作区里所有控件（按钮、输入、下拉、图标按钮）必须同高** ——
+混着 36 与 30 就是「看着没对齐又说不出哪里不对」。一个区要么整片默认尺寸，要么整片 `--sm`。
+
+### 图标按钮
+
+- 必须带 `title` + `aria-label`；状态开关再加 `aria-pressed`
+- 当前生效时加 `is-on`（`btn--icon is-on`）单独上品牌色
+- 纯图标不做「唯一入口」的破坏性动作
+
+### 「更多」菜单（低频动作别平铺）
+
+整理前详情页动作区平铺了 13 个按钮、两行，其中 3 个是无标签图标。现在常用 5 个 + 菜单。
+
+```html
+<details class="menu-group">
+  <summary class="btn btn--ghost menu-group__toggle">…更多</summary>
+  <div class="menu-group__panel">
+    <a class="menu-group__item" href="…">…</a>
+    <div class="menu-group__divider"></div>
+    <form method="post" action="…"><button class="menu-group__item is-danger" type="submit">…</button></form>
+  </div>
+</details>
+```
+
+- `details` 实现：无 JS 也能开合；点菜单项 / 点面板外 / Esc 由 `app.js` 的 `initMenuGroup()` 收起
+- 菜单项是真实链接与表单，**照旧留在 DOM 里**（测试与无障碍不受影响）
+- 分组用 `.menu-group__divider`，危险项加 `.is-danger`
+
+## 5. `/api/*` 契约
 
 所有 `/api/*` 都需要登录；写操作需要 `X-CSRF-Token` 头或 `_csrf` 表单字段。
 
@@ -484,7 +549,7 @@ JS 需要把 `error` 文案显示在 `#ai-hint` 里（`.ai-hint`，失败时加 
 
 ---
 
-## 5. JS 行为清单
+## 6. JS 行为清单
 
 ### `app.js`（所有页面）
 
@@ -499,6 +564,7 @@ JS 需要把 `error` 文案显示在 `#ai-hint` 里（`.ai-hint`，失败时加 
 | 离线提示 | `online`/`offline` 事件 | 切换 `#offline-banner` 的 `hidden` |
 | 标题字数自适应 | `.editor__title-input` | 可选：input 时按长度缩小字号（class `is-long` / `is-xlong`） |
 | 列表卡片键盘可达 | `.note-card a.card__title` | 不做额外处理（原生 a 即可） |
+| 「更多」动作菜单 | `details.menu-group` | `initMenuGroup()`：打开一个时收起其它；点菜单项 / 点面板外 / Esc 关闭（Esc 后把焦点还给 `summary`）。开合本身由 `<details>` 负责，无 JS 也能用 |
 
 ### `editor.js`（仅 `body[data-page="editor"]`）
 
@@ -517,7 +583,7 @@ JS 需要把 `error` 文案显示在 `#ai-hint` 里（`.ai-hint`，失败时加 
 
 ---
 
-## 6. 无障碍与响应式底线
+## 7. 无障碍与响应式底线
 
 - 所有可点击元素：`<button>` 或 `<a>`，图标按钮必须有 `aria-label`/`title`。
 - 焦点样式必须可见（`--brand` 描边），不要 `outline: none` 且不留替代。

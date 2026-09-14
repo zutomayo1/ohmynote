@@ -54,12 +54,12 @@
             <form method="post" action="{{ note.url }}/restore">
               <input type="hidden" name="_csrf" value="{{ csrf }}">
               <input type="hidden" name="next" value="{{ request.url.path }}">
-              <button class="btn btn--sm btn--ghost" type="submit">{{ icon('restore', 15) }} 恢复</button>
+              <button class="btn btn--ghost btn--sm" type="submit">{{ icon('restore', 15) }} 恢复</button>
             </form>
             <form method="post" action="{{ note.url }}/purge" data-confirm="彻底删除《{{ note.title }}》？此操作不可恢复。">
               <input type="hidden" name="_csrf" value="{{ csrf }}">
               <input type="hidden" name="next" value="{{ request.url.path }}">
-              <button class="btn btn--sm btn--danger" type="submit">彻底删除</button>
+              <button class="btn btn--danger btn--sm" type="submit">彻底删除</button>
             </form>
           </div>
         </div>

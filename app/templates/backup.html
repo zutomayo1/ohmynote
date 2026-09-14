@@ -126,7 +126,7 @@
               <form method="post" action="/backup/restore/{{ snap.name }}"
                     data-confirm="回滚会用这份备份覆盖当前全部数据（当前数据会先自动另存一份）。确定回滚到 {{ snap.name }}？">
                 <input type="hidden" name="_csrf" value="{{ csrf }}">
-                <button class="btn btn--sm btn--danger" type="submit">{{ icon('restore', 15) }} 回滚</button>
+                <button class="btn btn--danger btn--sm" type="submit">{{ icon('restore', 15) }} 回滚</button>
               </form>
               <form method="post" action="/backup/delete/{{ snap.name }}"
                     data-confirm="删除备份 {{ snap.name }}？此操作不可恢复。">

@@ -27,18 +27,18 @@
             <p class="template-card__desc">{{ item.description or '（没有说明）' }}</p>
             <pre class="template-card__preview">{{ item.content | truncate_cn(160) }}</pre>
             <div class="template-card__actions">
-              <a class="btn btn--sm btn--primary" href="/notes/new?template={{ item.id }}">用这个模板</a>
-              <a class="btn btn--sm btn--ghost" href="/templates?edit={{ item.id }}">编辑</a>
+              <a class="btn btn--primary btn--sm" href="/notes/new?template={{ item.id }}">用这个模板</a>
+              <a class="btn btn--ghost btn--sm" href="/templates?edit={{ item.id }}">编辑</a>
               <form class="template-card__default" method="post" action="/templates/default">
                 <input type="hidden" name="_csrf" value="{{ csrf }}">
                 <input type="hidden" name="template_id" value="{{ item.id if default_template_id != item.id else 0 }}">
-                <button class="btn btn--sm btn--ghost" type="submit">
+                <button class="btn btn--ghost btn--sm" type="submit">
                   {{ '取消默认' if default_template_id == item.id else '设为默认' }}
                 </button>
               </form>
               <form method="post" action="/templates/{{ item.id }}/delete" data-confirm="删除模板「{{ item.name }}」？已有的笔记不受影响。">
                 <input type="hidden" name="_csrf" value="{{ csrf }}">
-                <button class="btn btn--sm btn--ghost btn--danger" type="submit">删除</button>
+                <button class="btn btn--ghost btn--danger btn--sm" type="submit">删除</button>
               </form>
             </div>
           </article>

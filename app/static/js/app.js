@@ -847,9 +847,49 @@
     });
   }
 
+  // ===== 「更多」动作菜单（details.menu-group）：点外面 / Esc 关闭 =====
+  // details 只负责开合，不会自己收起来；同时开着两个菜单也会显得乱。
+  function initMenuGroup() {
+    var groups = Array.prototype.slice.call(document.querySelectorAll('details.menu-group'));
+    if (!groups.length) { return; }
+
+    function closeAll(except) {
+      groups.forEach(function (group) {
+        if (group !== except) { group.removeAttribute('open'); }
+      });
+    }
+
+    groups.forEach(function (group) {
+      group.addEventListener('toggle', function () {
+        if (group.open) { closeAll(group); }
+      });
+      // 点了菜单里的动作就收起来（链接会跳转、表单会提交，留着开着很怪）
+      group.addEventListener('click', function (event) {
+        if (event.target.closest && event.target.closest('.menu-group__item')) {
+          group.removeAttribute('open');
+        }
+      });
+    });
+
+    document.addEventListener('click', function (event) {
+      var node = event.target;
+      if (node && node.closest && node.closest('details.menu-group')) { return; }
+      closeAll(null);
+    });
+
+    document.addEventListener('keydown', function (event) {
+      if (event.key !== 'Escape') { return; }
+      var open = document.querySelector('details.menu-group[open]');
+      if (!open) { return; }
+      open.removeAttribute('open');
+      var trigger = open.querySelector('summary');
+      if (trigger) { trigger.focus(); }
+    });
+  }
+
   ready(function () {
     safe(initTheme); safe(initPalette); safe(initConfirm); safe(initCodeCopy); safe(initNoteCopy); safe(initTodoPage); safe(initPalettePicker); safe(initTaskToggle);
-    safe(initToc); safe(initOffline); safe(initTitleAutoSize); safe(initKbdNav);
+    safe(initToc); safe(initOffline); safe(initTitleAutoSize); safe(initKbdNav); safe(initMenuGroup);
     safe(function () { enhanceContent(document); });
     safe(initToolbarAutoSubmit);
   });

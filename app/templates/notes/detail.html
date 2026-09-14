@@ -40,49 +40,69 @@
   </div>
   <div class="page-actions">
     <a class="btn btn--primary" href="{{ note.url }}/edit">{{ icon('edit', 16) }} 编辑</a>
-    <a class="btn btn--ghost" href="/notes/{{ note.id }}/export.html">{{ icon('download', 16) }} 导出网页</a>
-    <button class="btn btn--ghost" type="button" data-copy-note="md">{{ icon('copy', 16) }} 复制 MD</button>
-    <button class="btn btn--ghost" type="button" data-copy-note="plain">{{ icon('copy', 16) }} 复制文本</button>
-    <form method="post" action="/notes/{{ note.id }}/archive">
-      <input type="hidden" name="_csrf" value="{{ csrf }}">
-      <input type="hidden" name="next" value="{{ note.url }}">
-      <button class="btn btn--ghost" type="submit">{{ icon('archive', 16) }} {{ '取消归档' if note.is_archived else '归档' }}</button>
-    </form>
-    <a class="btn btn--ghost" href="/ask?note={{ note.id }}">{{ icon('sparkles', 16) }} 问这篇</a>
-    <form method="post" action="{{ note.url }}/flag">
-      <input type="hidden" name="_csrf" value="{{ csrf }}">
-      <input type="hidden" name="next" value="{{ back }}">
-      <input type="hidden" name="flag" value="public">
-      <input type="hidden" name="value" value="{{ '0' if note.is_public else '1' }}">
-      <button class="btn btn--ghost" type="submit">
-        {{ icon('eye-off' if note.is_public else 'eye', 16) }} {{ '取消公开' if note.is_public else '公开到博客' }}
-      </button>
-    </form>
+
+    {# 状态开关：图标 + 悬停提示 + aria-pressed；当前生效时高亮（is-on） #}
     <form method="post" action="{{ note.url }}/flag">
       <input type="hidden" name="_csrf" value="{{ csrf }}">
       <input type="hidden" name="next" value="{{ back }}">
       <input type="hidden" name="flag" value="pin">
       <input type="hidden" name="value" value="{{ '0' if note.is_pinned else '1' }}">
-      <button class="btn btn--ghost btn--icon" type="submit" title="{{ '取消置顶' if note.is_pinned else '置顶' }}">{{ icon('pin', 16) }}</button>
+      <button class="btn btn--ghost btn--icon{{ ' is-on' if note.is_pinned }}" type="submit"
+              title="{{ '取消置顶' if note.is_pinned else '置顶' }}"
+              aria-label="{{ '取消置顶' if note.is_pinned else '置顶' }}"
+              aria-pressed="{{ 'true' if note.is_pinned else 'false' }}">{{ icon('pin', 16) }}</button>
     </form>
     <form method="post" action="{{ note.url }}/flag">
       <input type="hidden" name="_csrf" value="{{ csrf }}">
       <input type="hidden" name="next" value="{{ back }}">
       <input type="hidden" name="flag" value="star">
       <input type="hidden" name="value" value="{{ '0' if note.is_starred else '1' }}">
-      <button class="btn btn--ghost btn--icon" type="submit" title="{{ '取消星标' if note.is_starred else '标星' }}">{{ icon('star', 16) }}</button>
+      <button class="btn btn--ghost btn--icon{{ ' is-on' if note.is_starred }}" type="submit"
+              title="{{ '取消星标' if note.is_starred else '标星' }}"
+              aria-label="{{ '取消星标' if note.is_starred else '标星' }}"
+              aria-pressed="{{ 'true' if note.is_starred else 'false' }}">{{ icon('star', 16) }}</button>
     </form>
-    <div class="menu-group">
-      <a class="btn btn--ghost" href="{{ note.url }}/versions">{{ icon('history', 16) }} 历史</a>
-      <a class="btn btn--ghost" href="{{ note.url }}/export.md" title="导出为 Markdown 文件">{{ icon('download', 16) }}</a>
-      {% if note.is_public %}<a class="btn btn--ghost" href="{{ note.blog_url }}" title="在博客中查看">{{ icon('book', 16) }}</a>{% endif %}
-                <form method="post" action="{{ note.url }}/delete"
-                data-confirm="把《{{ note.title }}》移入回收站？{% if _img_count %}正文引用了 {{ _img_count }} 张图片，删完可以去「图片」页清理。{% endif %}">
-        <input type="hidden" name="_csrf" value="{{ csrf }}">
-        <input type="hidden" name="next" value="/notes">
-        <button class="btn btn--ghost btn--danger btn--icon" type="submit" title="移入回收站">{{ icon('trash', 16) }}</button>
-      </form>
-    </div>
+    <form method="post" action="{{ note.url }}/flag">
+      <input type="hidden" name="_csrf" value="{{ csrf }}">
+      <input type="hidden" name="next" value="{{ back }}">
+      <input type="hidden" name="flag" value="public">
+      <input type="hidden" name="value" value="{{ '0' if note.is_public else '1' }}">
+      <button class="btn btn--ghost btn--icon{{ ' is-on' if note.is_public }}" type="submit"
+              title="{{ '取消公开（从博客撤下）' if note.is_public else '公开到博客' }}"
+              aria-label="{{ '取消公开' if note.is_public else '公开到博客' }}"
+              aria-pressed="{{ 'true' if note.is_public else 'false' }}">{{ icon('eye-off' if note.is_public else 'eye', 16) }}</button>
+    </form>
+
+    {# 低频动作收进「更多」：导出 / 复制 / 跳转 / 归档。
+       details 实现，不依赖 JS；所有链接仍在 DOM 里（测试与无障碍照旧） #}
+    <details class="menu-group">
+      <summary class="btn btn--ghost menu-group__toggle">{{ icon('more', 16) }} 更多</summary>
+      <div class="menu-group__panel">
+        <a class="menu-group__item" href="/notes/{{ note.id }}/export.html">{{ icon('download', 15) }} 导出网页</a>
+        <a class="menu-group__item" href="{{ note.url }}/export.md">{{ icon('download', 15) }} 导出 Markdown</a>
+        <button class="menu-group__item" type="button" data-copy-note="md">{{ icon('copy', 15) }} 复制 MD</button>
+        <button class="menu-group__item" type="button" data-copy-note="plain">{{ icon('copy', 15) }} 复制文本</button>
+        <div class="menu-group__divider"></div>
+        <a class="menu-group__item" href="/ask?note={{ note.id }}">{{ icon('sparkles', 15) }} 问这篇</a>
+        <a class="menu-group__item" href="{{ note.url }}/versions">{{ icon('history', 15) }} 历史版本</a>
+        {% if note.is_public %}
+          <a class="menu-group__item" href="{{ note.blog_url }}">{{ icon('book', 15) }} 在博客中查看</a>
+        {% endif %}
+        <div class="menu-group__divider"></div>
+        <form method="post" action="/notes/{{ note.id }}/archive">
+          <input type="hidden" name="_csrf" value="{{ csrf }}">
+          <input type="hidden" name="next" value="{{ note.url }}">
+          <button class="menu-group__item" type="submit">{{ icon('archive', 15) }} {{ '取消归档' if note.is_archived else '归档' }}</button>
+        </form>
+      </div>
+    </details>
+
+    <form method="post" action="{{ note.url }}/delete"
+          data-confirm="把《{{ note.title }}》移入回收站？{% if _img_count %}正文引用了 {{ _img_count }} 张图片，删完可以去「图片」页清理。{% endif %}">
+      <input type="hidden" name="_csrf" value="{{ csrf }}">
+      <input type="hidden" name="next" value="/notes">
+      <button class="btn btn--ghost btn--danger btn--icon" type="submit" title="移入回收站" aria-label="移入回收站">{{ icon('trash', 16) }}</button>
+    </form>
   </div>
 </div>
 

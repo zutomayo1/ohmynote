@@ -39,7 +39,7 @@
           <div class="version-item__summary muted">{{ item.summary or '（无摘要）' }}</div>
         </div>
         <div class="version-item__actions">
-          <a class="btn btn--sm btn--ghost" href="{{ note.url }}/versions/{{ item.id }}">查看差异</a>
+          <a class="btn btn--ghost btn--sm" href="{{ note.url }}/versions/{{ item.id }}">查看差异</a>
           <form method="post" action="{{ note.url }}/versions/{{ item.id }}/restore"
                 data-confirm="回滚到 {{ item.created_at | datetime_cn }} 的版本？当前内容会先自动存成一个新版本。">
             <input type="hidden" name="_csrf" value="{{ csrf }}">
