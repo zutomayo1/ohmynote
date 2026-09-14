@@ -147,6 +147,18 @@
 - 以后要打包 `.git` 备份或加远端；跑 `git stash` 这类批量改工作区的命令前，
   先确认 `.git` 完好（`git log -1` 能出）。
 
+## 用用户真实数据复现界面问题（有效且安全）
+- 复制 `data/inknote.db` 到临时目录、`INKNOTE_DATA_DIR` 指过去 —— 绝不动原库。
+- **用户改过密码**，默认密码登不进去。浏览器探测：
+  `from app.security import make_session; token, _ = make_session(settings.secret_key, max_age=3600)`
+  然后 `context.add_cookies([{name: settings.session_cookie, value: token, url: base}])`。
+  注意 `is_authed` 是模板上下文变量，光覆盖 `require_login` 依赖顶栏仍是未登录版。
+- 排查「布局乱」先量再改：`.scratch/repro_three.py` 是范例（真实数据 + 逐元素测量 + 截图）。
+- **「重叠」必须在视口内同时可见才算数**：两个都滚出屏幕的元素的 rect 差是幻影
+  （这次量出 851px「重叠」其实不存在）；关闭的 `<details>` 子元素也有布局盒，要排除。
+- sticky 吸顶元素的活动范围是**整个父容器列**：同列的后继块会从它底下穿过、被它盖住。
+  CSS 无解，要么把后继块挪出该列（本次：相关内容挪到正文下方 `.post-after`），要么 JS 钳制。
+
 ## 按钮与动作区（规范见 docs/frontend-contract.md 第 4 节）
 - 层级 4 种（primary 每屏一个 / 默认 / ghost / danger 必带确认）；尺寸 3 档（36 / 30 / 44）。
   **同一个动作区里所有控件必须同高**，混 36 和 30 就是「看着没对齐」。
