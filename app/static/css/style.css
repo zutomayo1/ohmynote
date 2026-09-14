@@ -6333,3 +6333,76 @@ body.split-dragging .editor__textarea { pointer-events: none; }
 }
 
 .tag-group__more:hover { color: var(--brand-dark); text-decoration: underline; text-underline-offset: 3px; }
+
+/* ===== 补丁：折叠动画铺开 + 全站微动效（2026-09-14 深夜二，已合并） ===== */
+
+/* 1) 折叠块高度过渡（这几块内容都是常规流、无浮层，clip 安全；
+      settings-block / editor__settings 内有 absolute 弹层（AI 下拉/标签联想），
+      overflow clip 会裁掉它们，故不参与高度动画，仅保留原有的箭头旋转）
+      旧浏览器不支持 ::details-content 时退化为瞬时开合 */
+.tag-admin, .agent-runs, .agent-history, .editor__templates,
+.ai-presets-more, .backup-errors { interpolate-size: allow-keywords; }
+
+.tag-admin::details-content, .agent-runs::details-content,
+.agent-history::details-content, .editor__templates::details-content,
+.ai-presets-more::details-content, .backup-errors::details-content {
+  display: block; block-size: 0; overflow-y: clip;
+  transition: block-size .26s cubic-bezier(.3, .8, .3, 1), content-visibility .26s allow-discrete;
+}
+
+.tag-admin[open]::details-content, .agent-runs[open]::details-content,
+.agent-history[open]::details-content, .editor__templates[open]::details-content,
+.ai-presets-more[open]::details-content, .backup-errors[open]::details-content { block-size: auto; }
+
+/* 2) 主题切换：月亮悬停「转一下」（每次移入重放）；切换瞬间全站颜色柔和过渡 */
+.theme-toggle svg { transform-origin: 50% 50%; }
+
+.theme-toggle:hover svg, .theme-toggle:focus-visible svg {
+  animation: theme-moon-wag .5s cubic-bezier(.34, .9, .3, 1);
+}
+
+@keyframes theme-moon-wag { from { transform: rotate(-110deg); } to { transform: rotate(0deg); } }
+
+html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *::after {
+  transition: background-color .28s ease, border-color .28s ease, color .28s ease,
+    fill .25s ease, stroke .25s ease !important;
+}
+
+html.theme-anim .theme-toggle svg { animation: theme-moon-flip .45s cubic-bezier(.3, .8, .3, 1); }
+
+@keyframes theme-moon-flip { to { transform: rotate(360deg); } }
+
+/* 3) 弹层面板入场（标签管理菜单 / 自绘下拉） */
+.tag-manage__menu[open] .tag-manage__panel {
+  animation: panel-pop .18s cubic-bezier(.3, .8, .3, 1) backwards;
+  transform-origin: 85% top;
+}
+
+.combo__panel { animation: panel-pop .16s cubic-bezier(.3, .8, .3, 1) backwards; transform-origin: 50% top; }
+
+@keyframes panel-pop { from { opacity: 0; transform: translateY(-4px) scale(.98); } }
+
+/* 4) toast 入场：底部滑上来 */
+.toast { animation: toast-in .26s cubic-bezier(.3, .8, .3, 1) backwards; }
+
+@keyframes toast-in { from { opacity: 0; transform: translateY(12px); } }
+
+/* 5) 批量条：勾选出现时滑入 */
+.batch-bar.is-active { animation: batch-in .22s cubic-bezier(.3, .8, .3, 1) backwards; }
+
+@keyframes batch-in { from { opacity: 0; transform: translateY(-6px); } }
+
+/* 6) 代码复制按钮成功态（JS 加 .is-copied） */
+.code-copy.is-copied { border-color: var(--accent); color: var(--accent); animation: copy-pop .3s ease; }
+
+@keyframes copy-pop { 40% { transform: scale(1.12); } }
+
+/* 7) 动效减免：系统要求减少动效时全部关掉 */
+@media (prefers-reduced-motion: reduce) {
+  .theme-toggle:hover svg, .theme-toggle:focus-visible svg, html.theme-anim .theme-toggle svg,
+  .tag-manage__menu[open] .tag-manage__panel, .combo__panel, .toast,
+  .batch-bar.is-active, .code-copy.is-copied { animation: none; }
+  .tag-admin::details-content, .agent-runs::details-content, .agent-history::details-content,
+  .editor__templates::details-content, .ai-presets-more::details-content,
+  .backup-errors::details-content { transition: none; }
+}

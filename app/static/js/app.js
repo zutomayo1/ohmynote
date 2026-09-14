@@ -87,7 +87,12 @@
   }
   // 只有用户没有显式选择过时才跟随系统
   function onSystemThemeChange() { if (!hasExplicitTheme()) applyTheme(systemTheme(), false); }
-  function onThemeToggleClick() { applyTheme(theme() === 'dark' ? 'light' : 'dark'); } // 显式选择 → 持久化
+  function onThemeToggleClick() { // 显式选择 → 持久化；切换瞬间给全站颜色一个柔和过渡
+    var root = document.documentElement;
+    root.classList.add('theme-anim');
+    applyTheme(theme() === 'dark' ? 'light' : 'dark');
+    setTimeout(function () { root.classList.remove('theme-anim'); }, 340);
+  }
 
   function initTheme() {
     applyTheme(theme(), false); // 与 base.html 首屏内联脚本保持一致
@@ -438,7 +443,10 @@
     copyText(codeTextOf(source)).then(function (ok) {
       if (!ok) { toast('复制失败，请手动选择代码', 'error'); return; }
       btn.textContent = '已复制';
-      setTimeout(function () { if (document.contains(btn)) btn.textContent = '复制'; }, 1500);
+      btn.classList.add('is-copied');
+      setTimeout(function () {
+        if (document.contains(btn)) { btn.textContent = '复制'; btn.classList.remove('is-copied'); }
+      }, 1500);
       toast('已复制到剪贴板', 'ok');
     });
   }
