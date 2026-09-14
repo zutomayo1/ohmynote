@@ -282,3 +282,4 @@ def test_tags_and_search_pages_render_without_checkboxes(auth_client, make_note)
     # 这两个页面不渲染批量复选框，避免出现没有归属表单的孤儿复选框
     assert 'name="note_ids"' not in tags_page.text
     assert 'name="note_ids"' not in search_page.text
+

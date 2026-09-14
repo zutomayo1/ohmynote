@@ -583,15 +583,273 @@
 
   // ===== 12. 对外接口 + 初始化 =====
   // editor.js 依赖这些方法，必须在 app.js 执行时立即挂载（defer 顺序保证）
+  // ===== 9. 键盘导航（列表/搜索结果卡片）与快捷键帮助（? 呼出）=====
+  function isTypingTarget(el) {
+    if (!el || el.nodeType !== 1) return false;
+    var tag = el.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' ||
+      el.isContentEditable || el.closest('dialog[open]');
+  }
+
+  function cardNodes() {
+    return document.querySelectorAll('.note-grid .note-card');
+  }
+
+  function titleLink(card) {
+    return card ? card.querySelector('.card__title a') : null;
+  }
+
+  function initKbdNav() {
+    var current = -1;
+
+    // 帮助浮层的关闭按钮与点击遮罩关闭
+    document.addEventListener('click', function (event) {
+      var help = document.getElementById('kbd-help');
+      if (!help) return;
+      if (event.target.closest('[data-kbd-help-close]')) {
+        help.close();
+      } else if (event.target === help && help.open) {
+        help.close(); // 点到 backdrop（dialog 本体）也算关闭
+      }
+    });
+
+    function clearActive() {
+      document.querySelectorAll('.note-card.kbd-active').forEach(function (card) {
+        card.classList.remove('kbd-active');
+        card.removeAttribute('aria-current');
+      });
+      current = -1;
+    }
+
+    function setActive(index, focusTitle) {
+      var cards = cardNodes();
+      if (!cards.length) return;
+      index = Math.max(0, Math.min(index, cards.length - 1));
+      clearActive();
+      current = index;
+      var card = cards[index];
+      card.classList.add('kbd-active');
+      card.setAttribute('aria-current', 'true');
+      card.scrollIntoView({ block: 'nearest' });
+      if (focusTitle) {
+        var link = titleLink(card);
+        if (link) link.focus({ preventScroll: true });
+      }
+    }
+
+    document.addEventListener('keydown', function (event) {
+      if (event.defaultPrevented) return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (isTypingTarget(event.target)) return;
+
+      var key = event.key;
+      var cards = cardNodes();
+      var help = document.getElementById('kbd-help');
+
+      // ? 呼出快捷键帮助（任意页面；不带 shift 的 / 已被命令面板占用）
+      if (key === '?') {
+        if (help && typeof help.showModal === 'function' && !help.open) {
+          event.preventDefault();
+          help.showModal();
+          return;
+        }
+      }
+
+      if (!cards.length) return;
+
+      if (key === 'j' || key === 'ArrowDown') {
+        event.preventDefault();
+        setActive(current < 0 ? 0 : current + 1, true);
+      } else if (key === 'k' || key === 'ArrowUp') {
+        event.preventDefault();
+        setActive(current < 0 ? 0 : current - 1, true);
+      } else if (key === 'x' && current >= 0) {
+        // 批量选择框（列表页有）：空格切换更自然，但 x 避免与滚动冲突
+        event.preventDefault();
+        var box = cards[current].querySelector('.note-select');
+        if (box) box.checked = !box.checked;
+      } else if (key === 'Escape') {
+        if (help && help.open) { help.close(); return; }
+        clearActive();
+      }
+    });
+  }
+
   var InkNote = window.InkNote = window.InkNote || {};
   InkNote.toast = toast; InkNote.csrf = csrf; InkNote.fetchJSON = fetchJSON;
   InkNote.escapeHtml = escapeHtml; InkNote.theme = theme; InkNote.applyTheme = applyTheme;
   // 供 editor.js 在预览重渲染后复用
   InkNote.enhanceContent = enhanceContent; InkNote.setupCodeCopy = setupCodeCopy;
 
+  // ===== 今日待办页：勾选回写原笔记 =====
+  function initTodoPage() {
+    var root = document.getElementById('todo-groups');
+    if (!root) { return; }
+    var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+
+    root.addEventListener('change', function (event) {
+      var box = event.target.closest('.todo-item__box');
+      if (!box) { return; }
+      var item = box.closest('.todo-item');
+      var noteId = box.getAttribute('data-task-note');
+      box.disabled = true;
+
+      fetch('/notes/' + noteId + '/task-toggle', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'X-CSRF-Token': csrfMeta ? csrfMeta.getAttribute('content') : ''
+        },
+        credentials: 'same-origin',
+        body: 'index=' + encodeURIComponent(box.getAttribute('data-task-index'))
+      }).then(function (res) {
+        return res.json().catch(function () { throw new Error('bad-json'); });
+      }).then(function (data) {
+        if (!data || !data.ok) { throw new Error((data && data.error) || '更新失败'); }
+        box.checked = !!data.checked;
+        if (item) { item.classList.toggle('is-done', !!data.checked); }
+        // 更新该组的未完成计数
+        var group = box.closest('[data-todo-group]');
+        if (group) {
+          var counter = group.querySelector('[data-open-count]');
+          if (counter) {
+            var n = parseInt(counter.textContent, 10) || 0;
+            counter.textContent = String(Math.max(0, n + (data.checked ? -1 : 1)));
+          }
+        }
+        toast(data.checked ? '已完成，原笔记已同步' : '已恢复为未完成', 'ok');
+      }).catch(function () {
+        box.checked = !box.checked;  // 回滚
+        toast('没能回写原笔记，请稍后再试', 'warn');
+      }).then(function () {
+        box.disabled = false;
+      });
+    });
+  }
+
+  // ===== 笔记快速复制：复制全文 Markdown / 纯文本 =====
+  function initNoteCopy() {
+    var dataEl = document.getElementById('note-copy-data');
+    if (!dataEl) { return; }
+    var data;
+    try { data = JSON.parse(dataEl.textContent || '{}'); } catch (err) { return; }
+
+    document.addEventListener('click', function (event) {
+      var btn = event.target.closest('[data-copy-note]');
+      if (!btn || !document.getElementById('note-copy-data')) { return; }
+      var kind = btn.getAttribute('data-copy-note');
+      var text = kind === 'plain' ? data.plain : data.md;
+      if (!text) { toast('这篇笔记没有可复制的内容', 'warn'); return; }
+      navigator.clipboard.writeText(text).then(function () {
+        toast(kind === 'plain' ? '已复制纯文本' : '已复制 Markdown', 'ok');
+      }, function () {
+        toast('复制失败，浏览器不允许访问剪贴板', 'error');
+      });
+    });
+  }
+
+  // ===== 配色预设：六套配色，与亮暗主题正交，自定义下拉切换 =====
+  function initPalettePicker() {
+    var root = document.documentElement;
+    var dd = document.getElementById('palette-dd');
+    if (!dd) { return; }
+    var KEY = 'inknote-palette';
+    var toggle = dd.querySelector('.palette-dd__toggle');
+    var menu = dd.querySelector('.palette-dd__menu');
+    var label = dd.querySelector('.palette-dd__label');
+    var NAMES = { '': '墨迹', bamboo: '竹青', ocean: '墨蓝', plum: '霞紫', amber: '琥珀', slate: '石墨' };
+
+    function openMenu(on) {
+      menu.hidden = !on;
+      toggle.setAttribute('aria-expanded', on ? 'true' : 'false');
+      dd.classList.toggle('is-open', on);
+    }
+
+    function apply(palette) {
+      if (palette) { root.setAttribute('data-palette', palette); }
+      else { root.removeAttribute('data-palette'); }
+      if (label) { label.textContent = NAMES[palette] || '墨迹'; }
+      dd.querySelectorAll('.palette-dd__opt').forEach(function (opt) {
+        var active = (opt.getAttribute('data-palette-opt') || '') === palette;
+        opt.classList.toggle('is-active', active);
+        opt.setAttribute('aria-selected', active ? 'true' : 'false');
+      });
+      try { window.localStorage.setItem(KEY, palette); } catch (err) { /* 忽略 */ }
+    }
+
+    toggle.addEventListener('click', function () {
+      openMenu(menu.hidden);
+    });
+
+    menu.addEventListener('click', function (event) {
+      var opt = event.target.closest('[data-palette-opt]');
+      if (!opt) { return; }
+      apply(opt.getAttribute('data-palette-opt') || '');
+      openMenu(false);
+    });
+
+    // 点外面 / Esc 收起
+    document.addEventListener('click', function (event) {
+      if (!dd.contains(event.target)) { openMenu(false); }
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && !menu.hidden) { openMenu(false); }
+    });
+
+    // 初始高亮与文案（防闪烁脚本只设了 html 属性，label 在这里恢复）
+    var current = root.getAttribute('data-palette') || '';
+    if (label) { label.textContent = NAMES[current] || '墨迹'; }
+    dd.querySelectorAll('.palette-dd__opt').forEach(function (opt) {
+      var active = (opt.getAttribute('data-palette-opt') || '') === current;
+      opt.classList.toggle('is-active', active);
+      opt.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+  }
+
+  // ===== 任务清单点击回写：阅读视图里点任务复选框，勾选态写回笔记正文 =====
+  function initTaskToggle() {
+    var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+
+    // disabled 的 input 会吞掉鼠标事件，所以渲染时已放开 disabled；
+    // 这里在 document 级接管：详情页（有 data-task-note）回写，其它页面只拦不存
+    document.addEventListener('click', function (event) {
+      var label = event.target.closest('.task-list-control');
+      if (!label) { return; }
+      var prose = label.closest('.prose');
+      var noteId = prose && prose.getAttribute('data-task-note');
+      var box = label.querySelector('input[data-task-index]');
+      if (!box) { return; }
+      event.preventDefault();
+      if (!noteId || box.classList.contains('task-busy')) { return; }
+
+      box.classList.add('task-busy');
+      fetch('/notes/' + noteId + '/task-toggle', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'X-CSRF-Token': csrfMeta ? csrfMeta.getAttribute('content') : ''
+        },
+        credentials: 'same-origin',
+        body: 'index=' + encodeURIComponent(box.getAttribute('data-task-index'))
+      }).then(function (res) {
+        return res.json().catch(function () { throw new Error('bad-json'); });
+      }).then(function (data) {
+        if (data && data.ok) {
+          box.checked = !!data.checked;
+        } else {
+          toast((data && data.error) || '没能更新这个待办', 'warn');
+        }
+      }).catch(function () {
+        toast('网络问题，待办没有保存', 'warn');
+      }).then(function () {
+        box.classList.remove('task-busy');
+      });
+    });
+  }
+
   ready(function () {
-    safe(initTheme); safe(initPalette); safe(initConfirm); safe(initCodeCopy);
-    safe(initToc); safe(initOffline); safe(initTitleAutoSize);
+    safe(initTheme); safe(initPalette); safe(initConfirm); safe(initCodeCopy); safe(initNoteCopy); safe(initTodoPage); safe(initPalettePicker); safe(initTaskToggle);
+    safe(initToc); safe(initOffline); safe(initTitleAutoSize); safe(initKbdNav);
     safe(function () { enhanceContent(document); });
     safe(initToolbarAutoSubmit);
   });

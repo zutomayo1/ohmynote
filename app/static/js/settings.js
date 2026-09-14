@@ -120,6 +120,7 @@
         if (baseInput) { baseInput.value = btn.getAttribute('data-base-url') || ''; }
         if (modelInput) { modelInput.value = btn.getAttribute('data-model') || ''; }
         if (embedInput) { embedInput.value = btn.getAttribute('data-embed-model') || ''; }
+        reloadModelsForBase();
         cards.forEach(function (other) { other.classList.toggle('is-active', other === card); });
         var nameNode = btn.querySelector('.ai-preset__name');
         var name = nameNode ? nameNode.textContent : '预设';
@@ -131,22 +132,49 @@
 
   // ===== 2. 模型下拉：GET /api/ai/models → 自己画一个能点开、能搜索的下拉面板 =====
   // 刻意不用 <datalist>：它点一下不弹、只做前缀匹配、各浏览器还不一致，很难用。
+  // 缓存按 Base URL 分键：换服务商后绝不会显示上一家的旧列表。
   var MODEL_CACHE_KEY = 'inknote.ai.models';
+  var EMBED_HINT_RE = /embed|bge|embedding/i;
 
-  function readModelCache() {
+  function currentBase() {
+    var baseInput = $('#ai-base-url');
+    return baseInput ? String(baseInput.value || '').replace(/^\s+|\s+$/g, '') : '';
+  }
+
+  function readModelCache(base) {
     try {
       var raw = window.localStorage.getItem(MODEL_CACHE_KEY);
-      var list = raw ? JSON.parse(raw) : [];
-      return Array.isArray(list) ? list.filter(function (x) { return typeof x === 'string'; }) : [];
-    } catch (err) { return []; }
+      var data = raw ? JSON.parse(raw) : null;
+      if (data && data.base === base && Array.isArray(data.models)) {
+        return {
+          models: data.models.filter(function (x) { return typeof x === 'string'; }),
+          free: Array.isArray(data.free) ? data.free : []
+        };
+      }
+    } catch (err) { /* 坏缓存当没有 */ }
+    return null;
   }
 
-  function writeModelCache(models) {
-    try { window.localStorage.setItem(MODEL_CACHE_KEY, JSON.stringify(models || [])); }
-    catch (err) { /* 无痕模式就算了 */ }
+  function writeModelCache(base, models, free) {
+    try {
+      window.localStorage.setItem(
+        MODEL_CACHE_KEY, JSON.stringify({ base: base, models: models || [], free: free || [] })
+      );
+    } catch (err) { /* 无痕模式就算了 */ }
   }
 
-  var MODEL_STATE = { models: readModelCache(), loading: false, lastError: '' };
+  // Base URL 变了（手改或点预设）：模型列表立刻切换到新服务商的缓存，绝无串台
+  function reloadModelsForBase() {
+    var data = readModelCache(currentBase());
+    MODEL_STATE.models = data ? data.models : [];
+    MODEL_STATE.free = data ? data.free : [];
+    MODEL_STATE.lastError = '';
+  }
+
+  var MODEL_STATE = (function () {
+    var data = readModelCache(currentBase());
+    return { models: data ? data.models : [], free: data ? data.free : [], loading: false, lastError: '' };
+  })();
 
   function comboPanelOf(combo) { return combo ? combo.querySelector('.combo__panel') : null; }
 
@@ -165,8 +193,23 @@
     var input = combo.querySelector('.combo__input');
     if (!panel || !input) { return; }
     var word = String(input.value || '').toLowerCase().replace(/^\s+|\s+$/g, '');
-    var models = MODEL_STATE.models.filter(function (name) {
+    var isEmbed = input.id === 'ai-embed-model';
+
+    // 向量模型下拉只列 embedding 类模型（各家命名差异大，匹配不到就回落全量列表）
+    var pool = MODEL_STATE.models;
+    if (isEmbed) {
+      var embeds = pool.filter(function (name) { return EMBED_HINT_RE.test(name); });
+      if (embeds.length) { pool = embeds; }
+    }
+    var models = pool.filter(function (name) {
       return !word || name.toLowerCase().indexOf(word) >= 0;
+    });
+    // 已知免费的排前面并加徽章
+    var freeSet = MODEL_STATE.free || [];
+    models = models.slice().sort(function (a, b) {
+      var fa = freeSet.indexOf(a) >= 0 ? 0 : 1;
+      var fb = freeSet.indexOf(b) >= 0 ? 0 : 1;
+      return fa - fb || a.localeCompare(b);
     });
     panel.textContent = '';
 
@@ -183,7 +226,14 @@
         var item = el('div', 'combo__item');
         item.setAttribute('role', 'option');
         item.setAttribute('data-value', name);
-        item.textContent = name;
+        if (freeSet.indexOf(name) >= 0) {
+          var tag = el('span', 'combo__free');
+          tag.textContent = '免费';
+          item.appendChild(tag);
+        }
+        var label = el('span', 'combo__label');
+        label.textContent = name;
+        item.appendChild(label);
         if (name === String(input.value || '').replace(/^\s+|\s+$/g, '')) { item.classList.add('is-selected'); }
         panel.appendChild(item);
       });
@@ -275,7 +325,8 @@
     return requestJSON(url, { method: 'GET' }).then(function (data) {
       if (data && data.ok === false) { throw new Error(data.error || '服务商没有返回模型列表'); }
       MODEL_STATE.models = (data && data.models) || [];
-      writeModelCache(MODEL_STATE.models);
+      MODEL_STATE.free = (data && data.free) || [];
+      writeModelCache(base, MODEL_STATE.models, MODEL_STATE.free);
       return MODEL_STATE.models;
     }).catch(function (err) {
       MODEL_STATE.lastError = (err && err.message) || '获取失败';
@@ -308,6 +359,20 @@
 
     if (MODEL_STATE.models.length) {
       setStatus('已缓存 ' + MODEL_STATE.models.length + ' 个模型名，点输入框或 ▾ 就能选', 'ok');
+    }
+
+    // 手改 Base URL（change 在失焦时触发，不会打字打一半就重置）：
+    // 模型列表立即切到新服务商的缓存，避免显示上一家的旧列表
+    var baseInput = $('#ai-base-url');
+    if (baseInput) {
+      baseInput.addEventListener('change', function () {
+        reloadModelsForBase();
+        if (MODEL_STATE.models.length) {
+          setStatus('已缓存当前地址的 ' + MODEL_STATE.models.length + ' 个模型名', 'ok');
+        } else {
+          setStatus('地址变了，点「获取可用模型」拉取新服务商的模型列表', '');
+        }
+      });
     }
 
     if (!btn) { return; }

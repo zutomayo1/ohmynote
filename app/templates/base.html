@@ -27,6 +27,10 @@
           mode = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
         }
         document.documentElement.setAttribute('data-theme', mode);
+        var palette = localStorage.getItem('inknote-palette');
+        if (['bamboo', 'ocean', 'plum', 'amber', 'slate'].indexOf(palette) >= 0) {
+          document.documentElement.setAttribute('data-palette', palette);
+        }
       } catch (error) { /* 隐私模式下 localStorage 不可用，忽略 */ }
     })();
   </script>
@@ -51,6 +55,41 @@
           <div class="nav-more__menu">
             <a class="nav-link{{ ' is-active' if current_path.startswith('/templates') }}" href="/templates">模板</a>
             <a class="nav-link{{ ' is-active' if current_path.startswith('/ask') }}" href="/ask">问笔记</a>
+            <a class="nav-link{{ ' is-active' if current_path.startswith('/agent') }}" href="/agent">笔记助手</a>
+            <a class="nav-link" href="/notes/today">今日笔记</a>
+            <a class="nav-link{{ ' is-active' if current_path.startswith('/todos') }}" href="/todos">今日待办</a>
+            <div class="palette-dd" id="palette-dd">
+              <button class="palette-dd__toggle" type="button" aria-haspopup="listbox" aria-expanded="false">
+                <span class="palette-dd__label">墨迹</span>
+                <span class="palette-dd__caret" aria-hidden="true">▾</span>
+              </button>
+              <div class="palette-dd__menu" role="listbox" aria-label="配色方案" hidden>
+                <button class="palette-dd__opt is-active" type="button" role="option" aria-selected="true" data-palette-opt="">
+                  <span style="color: #B5533C">墨迹</span><span class="palette-dd__preview" aria-hidden="true" style="background: linear-gradient(135deg, #D89A8A, #B5533C)"></span>
+                  <svg class="palette-dd__check" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 8.5l3.5 3.5L13 5"/></svg>
+                </button>
+                <button class="palette-dd__opt" type="button" role="option" aria-selected="false" data-palette-opt="bamboo">
+                  <span style="color: #3D7A5F">竹青</span><span class="palette-dd__preview" aria-hidden="true" style="background: linear-gradient(135deg, #8FB8A4, #3D7A5F)"></span>
+                  <svg class="palette-dd__check" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 8.5l3.5 3.5L13 5"/></svg>
+                </button>
+                <button class="palette-dd__opt" type="button" role="option" aria-selected="false" data-palette-opt="ocean">
+                  <span style="color: #3B5BA5">墨蓝</span><span class="palette-dd__preview" aria-hidden="true" style="background: linear-gradient(135deg, #8FA6D9, #3B5BA5)"></span>
+                  <svg class="palette-dd__check" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 8.5l3.5 3.5L13 5"/></svg>
+                </button>
+                <button class="palette-dd__opt" type="button" role="option" aria-selected="false" data-palette-opt="plum">
+                  <span style="color: #8E4A7E">霞紫</span><span class="palette-dd__preview" aria-hidden="true" style="background: linear-gradient(135deg, #C4A0BA, #8E4A7E)"></span>
+                  <svg class="palette-dd__check" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 8.5l3.5 3.5L13 5"/></svg>
+                </button>
+                <button class="palette-dd__opt" type="button" role="option" aria-selected="false" data-palette-opt="amber">
+                  <span style="color: #B8742E">琥珀</span><span class="palette-dd__preview" aria-hidden="true" style="background: linear-gradient(135deg, #DDB476, #B8742E)"></span>
+                  <svg class="palette-dd__check" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 8.5l3.5 3.5L13 5"/></svg>
+                </button>
+                <button class="palette-dd__opt" type="button" role="option" aria-selected="false" data-palette-opt="slate">
+                  <span style="color: #4E5D6C">石墨</span><span class="palette-dd__preview" aria-hidden="true" style="background: linear-gradient(135deg, #9FB0C0, #4E5D6C)"></span>
+                  <svg class="palette-dd__check" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 8.5l3.5 3.5L13 5"/></svg>
+                </button>
+              </div>
+            </div>
             <a class="nav-link{{ ' is-active' if current_path.startswith('/trash') }}" href="/trash">回收站{% if nav_trash %}<span class="nav-badge">{{ nav_trash }}</span>{% endif %}</a>
           </div>
         </div>
@@ -124,7 +163,29 @@
 
 <div class="toast-wrap" id="toast-wrap" aria-live="polite" aria-atomic="false"></div>
 
+{# 快捷键帮助：任意页面按 ? 呼出（app.js 键盘导航模块） #}
+<dialog class="kbd-help" id="kbd-help" aria-label="键盘快捷键">
+  <div class="kbd-help__head">
+    <h2 class="kbd-help__title">键盘快捷键</h2>
+    <button class="kbd-help__close" type="button" data-kbd-help-close aria-label="关闭">✕</button>
+  </div>
+  <dl class="kbd-help__list">
+    <div class="kbd-help__row"><dt>全局</dt><dd></dd></div>
+    <div class="kbd-help__row"><dt><kbd>Ctrl</kbd>+<kbd>K</kbd> 或 <kbd>/</kbd></dt><dd>打开快速搜索</dd></div>
+    <div class="kbd-help__row"><dt><kbd>?</kbd></dt><dd>呼出本说明</dd></div>
+    <div class="kbd-help__row"><dt>列表 / 搜索结果</dt><dd></dd></div>
+    <div class="kbd-help__row"><dt><kbd>J</kbd> / <kbd>K</kbd>（或 <kbd>↓</kbd><kbd>↑</kbd>）</dt><dd>选中下一条 / 上一条</dd></div>
+    <div class="kbd-help__row"><dt><kbd>Enter</kbd></dt><dd>打开选中的笔记</dd></div>
+    <div class="kbd-help__row"><dt><kbd>X</kbd></dt><dd>勾选 / 取消选中（列表页批量操作）</dd></div>
+    <div class="kbd-help__row"><dt><kbd>Esc</kbd></dt><dd>取消选中 / 关闭浮层</dd></div>
+    <div class="kbd-help__row"><dt>编辑器</dt><dd></dd></div>
+    <div class="kbd-help__row"><dt><kbd>Ctrl</kbd>+<kbd>J</kbd></dt><dd>AI 接着写</dd></div>
+    <div class="kbd-help__row"><dt><kbd>Ctrl</kbd>+<kbd>S</kbd></dt><dd>保存笔记</dd></div>
+  </dl>
+</dialog>
+
 <script src="/static/js/app.js?v={{ asset_v }}" defer></script>
+<script src="/static/js/select.js?v={{ asset_v }}" defer></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

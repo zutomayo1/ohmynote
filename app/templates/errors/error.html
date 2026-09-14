@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% from '_macros.html' import icon with context %}
+{% from '_macros.html' import empty_art with context %}
 {% block title %}{{ code }} · {{ settings.site_title }}{% endblock %}
 {% block page %}error{% endblock %}
 
 {% block content %}
 <div class="empty-state empty-state--error">
-  <div class="empty-state__icon">{{ icon('inbox', 34) }}</div>
+  <div class="empty-state__art">{{ empty_art('inbox') }}</div>
   <h1 class="empty-state__title">{{ code }}</h1>
   <p class="empty-state__text">{{ message or '出现了点问题。' }}</p>
   <div class="empty-state__actions">

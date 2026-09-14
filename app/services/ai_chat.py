@@ -17,12 +17,23 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import sqlite3
 from typing import Any
 
 from ..utils import now_iso
 
 logger = logging.getLogger("inknote.ai_chat")
+
+# 多跳检索用的「是否需要再查」判断系统提示：要求模型只回一行 JSON，
+# 不用各家 API 的原生 function calling（兼容性原因，项目刻意如此）。
+SYSTEM_REFLECT = (
+    "你是一个只依据给定资料判断「还需要不需要再查资料」的中文助手。"
+    "下面已经贴了当前检索到的资料和你的问题。"
+    "规则：如果资料已经足够回答，只回 {\"enough\": true}；"
+    "如果资料还不够，只回 {\"enough\": false, \"search\": \"更精确、且和上一轮不同的检索词\"}。"
+    "只输出这一行 JSON，不要任何解释、不要 Markdown 围栏、不要多余文字。"
+)
 
 # 会话标题默认取第一句问题，最多留这么多字
 TITLE_LIMIT = 40
@@ -287,3 +298,139 @@ def get_turn(conn: sqlite3.Connection, message_id: int) -> dict | None:
         "sources": parse_sources(answer_row["sources"]) if answer_row else [],
         "engine": (answer_row["engine"] if answer_row else "") or "",
     }
+
+
+# ---------------------------------------------------------------------------
+# 多跳检索（反思循环）：检索 → 让模型判断是否够 → 不够就再查
+# ---------------------------------------------------------------------------
+def _src_id(item) -> int | None:
+    """取一条来源的笔记 id，用于按笔记去重合并；拿不到就返回 None。"""
+    if not isinstance(item, dict):
+        return None
+    for key in ("note_id", "id"):
+        value = item.get(key)
+        if value:
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                continue
+    return None
+
+
+def _norm_term(term: str) -> str:
+    return (term or "").strip().lower()
+
+
+def _parse_enough(raw: str) -> dict:
+    """从「是否需要再查」判断调用的回复里稳健解析出 {"enough": bool, "search": str}。
+
+    任何解析失败（不是 JSON / 没字段 / 空文本 / 没给新词）一律当
+    {"enough": True}——绝不允许因为判断失败把正常问答搞坏。
+    """
+    text = (raw or "").strip()
+    if not text:
+        return {"enough": True}
+    # 去掉可能的 ```json 围栏
+    text = re.sub(r"^```(?:json)?[ \t]*\n?|\n?[ \t]*```$", "", text, flags=re.I).strip()
+    try:
+        data = json.loads(text)
+    except ValueError:
+        match = re.search(r"\{.*\}", text, re.S)
+        if not match:
+            return {"enough": True}
+        try:
+            data = json.loads(match.group(0))
+        except ValueError:
+            return {"enough": True}
+    if not isinstance(data, dict):
+        return {"enough": True}
+    if data.get("enough") is True:
+        return {"enough": True}
+    if data.get("enough") is False:
+        search = (data.get("search") or "").strip()
+        if not search:
+            # 模型说不够却没给新词：当够了，避免空检索词空转
+            return {"enough": True}
+        return {"enough": False, "search": search}
+    return {"enough": True}
+
+
+def reflect_and_expand(
+    conn,
+    question,
+    contexts,
+    sources,
+    engine,
+    *,
+    extra_hops: int = 2,
+    retrieve=None,
+    conn_usage=None,
+):
+    """多跳检索：在首轮资料上做「是否需要再查」的反思，最多追加 extra_hops 次检索。
+
+    返回 (contexts, sources, engine)。extra_hops<=0 或没给 retrieve 时原样返回（保持旧行为）。
+    - 每跳检索词必须和已用过的（首轮问题 + 之前各跳）不同，无效/重复词直接视为够了
+    - 新资料按笔记 id 与首轮结果去重合并（来源 = 所有轮次并集）
+    - 判断调用失败 / 解析失败一律当 enough=True，绝不挡最终回答
+    - 判断调用走 ai.chat（非流式、temperature=0、max_tokens 小），用量照旧由它记录
+    """
+    hops = max(0, int(extra_hops))
+    if hops <= 0 or not callable(retrieve):
+        return contexts, sources, engine
+
+    from . import ai
+
+    current_ctx = list(contexts or [])
+    current_src = list(sources or [])
+    current_engine = engine or ""
+    used_terms = {_norm_term(question)}
+
+    for _hop in range(hops):
+        # 让模型基于「已检索资料 + 问题」判断是否还缺线索
+        messages = ai.build_qa_messages(question, current_ctx, history=None)
+        messages = [{"role": "system", "content": SYSTEM_REFLECT}, *messages[1:]]
+        try:
+            verdict = ai.chat(
+                messages,
+                temperature=0,
+                max_tokens=120,
+                task="answer",
+                conn=conn_usage,
+            )
+        except Exception:
+            # 判断调用失败：按「够了」处理，不挡正常回答
+            logger.warning("问笔记多跳判断调用异常，按 enough=true 继续", exc_info=True)
+            break
+
+        decision = _parse_enough(verdict)
+        if decision.get("enough"):
+            break
+
+        term = decision.get("search") or ""
+        if _norm_term(term) in used_terms:
+            # 无效 / 重复检索词：直接视为够了，避免无意义多查
+            break
+        used_terms.add(_norm_term(term))
+
+        new_hits, new_engine = retrieve(conn, term, limit=6)
+        if not new_hits:
+            # 这一跳啥都没查到：直接结束，不再烧 token 反复判断
+            break
+
+        # 按笔记 id 去重合并进上下文与来源
+        existing_ids = {_src_id(item) for item in current_src}
+        merged_any = False
+        for hit in new_hits:
+            hid = _src_id(hit)
+            if hid and hid not in existing_ids:
+                existing_ids.add(hid)
+                current_src.append(hit)
+                current_ctx.append(hit)
+                merged_any = True
+        if new_engine:
+            current_engine = new_engine
+        if not merged_any:
+            # 全是重复资料：没有新增，不必再查
+            break
+
+    return current_ctx, current_src, current_engine

@@ -1,0 +1,13 @@
+{# 公式 / mermaid 按需加载：正文里没出现就一个字节都不引（vendor 自托管，离线可用，无 CDN）。
+   依赖上下文里的 rendered（content_service.note_page_context 传入的 Rendered 对象）。 #}
+{% if rendered.has_math %}
+  <link rel="stylesheet" href="/static/vendor/katex/katex.min.css?v={{ asset_v }}">
+  <script src="/static/vendor/katex/katex.min.js?v={{ asset_v }}" defer></script>
+  <script src="/static/vendor/katex/auto-render.min.js?v={{ asset_v }}" defer></script>
+{% endif %}
+{% if rendered.has_mermaid %}
+  <script src="/static/vendor/mermaid/mermaid.min.js?v={{ asset_v }}" defer></script>
+{% endif %}
+{% if rendered.has_math or rendered.has_mermaid %}
+  <script src="/static/js/enrich.js?v={{ asset_v }}" defer></script>
+{% endif %}

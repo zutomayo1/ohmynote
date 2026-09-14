@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
+import time
 import urllib.error
 import urllib.request
 
@@ -149,6 +150,16 @@ def _sse(payload: dict) -> str:
 # ---------------------------------------------------------------------------
 # 页面
 # ---------------------------------------------------------------------------
+@router.get("/agent")
+def agent_page(request: Request):
+    """自然语言操作笔记的入口页。"""
+    return render(
+        request,
+        "agent.html",
+        ai_enabled=ai.is_enabled(),
+    )
+
+
 @router.get("/ask")
 def ask_page(
     request: Request,
@@ -238,6 +249,21 @@ def ask_submit(
     else:
         sources, engine = retrieve_sources(conn, question)
         contexts = sources
+        # 多跳检索：无 JS 降级路径默认关闭（extra_hops=0），保持既有回答不变；
+        # 主路径在 /ask/stream（默认开启）。scope 模式不做。
+        try:
+            contexts, sources, engine = ai_chat.reflect_and_expand(
+                conn,
+                question,
+                contexts,
+                sources,
+                engine,
+                extra_hops=0,
+                retrieve=retrieve_sources,
+                conn_usage=conn,
+            )
+        except Exception:
+            logger.warning("问笔记多跳检索异常，回退到首轮结果", exc_info=True)
 
     answer_text = ""
     if ai.is_enabled():
@@ -268,8 +294,13 @@ def ask_delete(
 # ---------------------------------------------------------------------------
 # 流式回答
 # ---------------------------------------------------------------------------
-def _stream_provider(messages: list[dict]):
-    """逐段产出模型输出。不走 ai.chat()，因为要边收边转发。"""
+def _stream_provider(messages: list[dict], usage_holder: dict | None = None):
+    """逐段产出模型输出。不走 ai.chat()，因为要边收边转发。
+
+    也正因为不走 ai.chat()，**用量得自己记** —— 否则问笔记的主路径（流式）
+    完全不进用量统计（查过：以前确实一条都没记）。
+    usage_holder 传进来，流尾的 usage 分片就填进去，调用方落库。
+    """
     conf = ai.credentials()
     base = conf.get("base_url") or ""
     model = ai.models_for("answer")
@@ -290,6 +321,8 @@ def _stream_provider(messages: list[dict]):
         "temperature": 0.2,
         "max_tokens": 1200,
         "stream": True,
+        # 让服务商在流尾带上 usage（OpenAI 兼容接口要显式要；不支持的会忽略这个字段）
+        "stream_options": {"include_usage": True},
     }
     headers = {"Content-Type": "application/json", "Accept": "text/event-stream"}
     if conf.get("api_key"):
@@ -302,7 +335,7 @@ def _stream_provider(messages: list[dict]):
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=conf.get("timeout") or 45) as response:
+        with ai._urlopen(request, conf.get("timeout") or 45) as response:
             for raw in response:
                 line = raw.decode("utf-8", errors="replace").strip()
                 if not line or not line.startswith("data:"):
@@ -316,6 +349,8 @@ def _stream_provider(messages: list[dict]):
                     # 部分服务商会插入非 JSON 的 keep-alive 行，跳过即可（debug 避免刷屏）
                     logger.debug("问笔记：忽略非 JSON 流式分片（chunk=%r）", chunk[:120], exc_info=True)
                     continue
+                if usage_holder is not None and isinstance(data.get("usage"), dict):
+                    usage_holder["usage"] = data["usage"]
                 choices = data.get("choices") or []
                 if not choices:
                     continue
@@ -376,6 +411,23 @@ async def ask_stream(
     else:
         sources, engine = retrieve_sources(conn, question)
         contexts = sources
+        # 多跳检索：检索后让模型判断是否还要再查（限定范围模式不做，仅问这一篇）
+        extra_hops = int(str(payload.get("extra_hops", 2)).strip() or 2)
+        try:
+            contexts, sources, engine = ai_chat.reflect_and_expand(
+                conn,
+                question,
+                contexts,
+                sources,
+                engine,
+                extra_hops=extra_hops,
+                retrieve=retrieve_sources,
+                conn_usage=conn,
+            )
+        except Exception:
+            # 反思循环整体异常：退回首轮结果，绝不能让这次回答挂掉
+            logger.warning("问笔记多跳检索异常，回退到首轮结果", exc_info=True)
+
     messages = ai.build_qa_messages(question, contexts, history)
 
     # 关键：先把请求级连接里的写入提交掉。否则它会在整个流式响应期间占着写锁，
@@ -390,8 +442,10 @@ async def ask_stream(
         yield _sse({"sources": sources, "engine": engine, "scope": "note" if scope_ctx else ""})
         pieces: list[str] = []
         error = ""
+        usage_holder: dict = {}
+        started = time.perf_counter()
         try:
-            for piece in _stream_provider(messages):
+            for piece in _stream_provider(messages, usage_holder):
                 pieces.append(piece)
                 yield _sse({"delta": piece})
         except ai.AIError as exc:
@@ -399,6 +453,19 @@ async def ask_stream(
         except Exception as exc:  # 兜底：任何意外都不要 500
             logger.warning("问笔记：流式输出异常（conversation=%s）", cid, exc_info=True)
             error = f"流式输出失败：{exc}"
+        finally:
+            # 流式路径不走 ai.chat()，用量得在这里自己记（成功和失败都记）。
+            # 请求级连接这时候可能已经关了，所以另开一条短连接。
+            try:
+                with db_mod.db() as fresh:
+                    ai.record_stream_usage(
+                        usage_holder, conn=fresh, task="ask",
+                        model=ai.models_for("answer"),
+                        latency_ms=int((time.perf_counter() - started) * 1000),
+                        ok=not error, error=error or "",
+                    )
+            except Exception:  # 记账是旁路，绝不影响这次回答
+                logger.warning("问笔记：记录流式用量失败（conversation=%s）", cid, exc_info=True)
 
         text = "".join(pieces)
         if not text and error:

@@ -47,6 +47,7 @@ def row_to_note(row: sqlite3.Row, tags: list[str] | None = None) -> dict[str, An
     note["is_public"] = bool(note.get("is_public"))
     note["is_pinned"] = bool(note.get("is_pinned"))
     note["is_starred"] = bool(note.get("is_starred"))
+    note["is_archived"] = bool(note.get("is_archived"))
     note["tags"] = tags or []
     note["url"] = f"/notes/{note['id']}"
     note["blog_url"] = f"/blog/{note['slug']}" if note["is_public"] and note.get("slug") else ""
@@ -428,6 +429,15 @@ def set_flags(conn: sqlite3.Connection, note_id: int, **flags: Any) -> dict[str,
     return get_note(conn, note_id)
 
 
+def set_archived(conn: sqlite3.Connection, note_id: int, archived: bool) -> dict[str, Any] | None:
+    """归档 / 取消归档。不算「编辑」，不更新 updated_at。"""
+    note = get_note(conn, note_id)
+    if note is None:
+        return None
+    conn.execute("UPDATE notes SET is_archived = ? WHERE id = ?", (int(bool(archived)), note_id))
+    return get_note(conn, note_id)
+
+
 def touch(conn: sqlite3.Connection, note_id: int) -> None:
     conn.execute("UPDATE notes SET updated_at = ? WHERE id = ?", (now_iso(), note_id))
 
@@ -587,8 +597,12 @@ def list_notes(
     per_page: int = 12,
     public_only: bool = False,
     include_deleted: bool = False,
+    archived: bool | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
-    """返回 (当前页笔记, 命中总数)。带关键词时走全文检索，其余筛选在 Python 里做。"""
+    """返回 (当前页笔记, 命中总数)。带关键词时走全文检索，其余筛选在 Python 里做。
+
+    archived=None 不过滤（搜索等场景）；False 排除归档（默认列表）；True 只看归档。
+    """
     # 页码在最里面也夹一次：无论调用方传了什么，都不会出现巨大的 OFFSET
     page = max(1, min(int(page or 1), 1_000_000))
     per_page = max(1, min(int(per_page or 12), 1000))
@@ -604,7 +618,8 @@ def list_notes(
         notes = [
             note
             for note in notes
-            if _apply_python_filters(
+            if (archived is None or bool(note.get("is_archived")) == archived)
+            and _apply_python_filters(
                 note, tag=tag, category=category, status=status, fav=fav, month=month
             )
         ]
@@ -629,6 +644,10 @@ def list_notes(
     if month:
         where.append("substr(n.updated_at, 1, 7) = ?")
         params.append(month)
+    if archived is not None:
+        where.append("n.is_archived = ?" if archived else "n.is_archived = 0")
+        if archived:
+            params.append(1)
     if tag:
         where.append(
             "EXISTS (SELECT 1 FROM note_tags nt JOIN tags t ON t.id = nt.tag_id "
@@ -1014,6 +1033,157 @@ def outgoing_links(conn: sqlite3.Connection, note_id: int) -> list[dict[str, Any
     return result
 
 
+def collect_tasks(
+    conn: sqlite3.Connection,
+    *,
+    include_done: bool = False,
+    limit_notes: int = 500,
+) -> list[dict[str, Any]]:
+    """聚合全部笔记里的任务清单（排除回收站与归档），按笔记分组。
+
+    每组的 tasks 里 index 与 /notes/{id}/task-toggle 的序号口径一致，可直接回写。
+    """
+    from .markdown_render import extract_tasks
+
+    rows = conn.execute(
+        "SELECT id, title, content FROM notes "
+        "WHERE deleted_at IS NULL AND is_archived = 0 AND ("
+        " content LIKE '%[ ]%' OR content LIKE '%[x]%' OR content LIKE '%[X]%') "
+        "ORDER BY updated_at DESC LIMIT ?",
+        (max(1, int(limit_notes)),),
+    ).fetchall()
+
+    groups: list[dict[str, Any]] = []
+    for row in rows:
+        items = extract_tasks(row["content"] or "")
+        if not items:
+            continue
+        open_count = sum(1 for item in items if not item["done"])
+        done_count = len(items) - open_count
+        if open_count == 0 and not include_done:
+            continue
+        shown = items if include_done else [item for item in items if not item["done"]]
+        groups.append(
+            {
+                "note_id": row["id"],
+                "title": row["title"],
+                "url": f"/notes/{row['id']}",
+                "tasks": shown,
+                "open_count": open_count,
+                "done_count": done_count,
+                "total": len(items),
+            }
+        )
+
+    # 未完成多的排前面
+    groups.sort(key=lambda g: (-g["open_count"], g["title"]))
+    return groups
+
+
+def find_this_day_in_past(
+    conn: sqlite3.Connection, *, limit: int = 3
+) -> list[dict[str, Any]]:
+    """那年今日：往年同月日创建的笔记（排除回收站），新的在前。"""
+    import datetime as _dt
+
+    today = _dt.date.today()
+    md = today.strftime("%m-%d")
+    rows = conn.execute(
+        "SELECT * FROM notes WHERE deleted_at IS NULL "
+        "AND substr(created_at, 6, 5) = ? AND substr(created_at, 1, 4) < ? "
+        "ORDER BY created_at DESC LIMIT ?",
+        (md, str(today.year), limit),
+    ).fetchall()
+    return hydrate(conn, rows)
+
+
+def daily_note_counts(conn: sqlite3.Connection, days: int = 371) -> dict[str, int]:
+    """最近 days 天每天创建的笔记篇数：{'YYYY-MM-DD': n}，排除回收站。"""
+    import datetime as _dt
+
+    since = (_dt.date.today() - _dt.timedelta(days=days)).isoformat()
+    rows = conn.execute(
+        "SELECT substr(created_at, 1, 10) AS d, COUNT(*) AS c FROM notes "
+        "WHERE deleted_at IS NULL AND substr(created_at, 1, 10) >= ? GROUP BY d",
+        (since,),
+    ).fetchall()
+    return {row["d"]: int(row["c"]) for row in rows}
+
+
+def notes_grouped_by_tags(
+    conn: sqlite3.Connection,
+    tag_names: Sequence[str],
+    *,
+    per_page: int = 5,
+) -> dict[str, list[dict[str, Any]]]:
+    """按标签批量取每个标签下最新的几篇（替代「每标签一次 list_notes」的 N+1）。
+
+    排序口径与 list_notes 默认一致（置顶优先，再按更新时间）。
+    返回 {标签名: [笔记, ...]}，一篇笔记出现在它命中的每个标签下（与逐个查询行为相同）。
+    """
+    names = [str(n) for n in tag_names if str(n).strip()][:60]
+    if not names:
+        return {}
+    placeholders = ",".join("?" for _ in names)
+    rows = conn.execute(
+        f"""
+        SELECT * FROM (
+            SELECT n.*, t.name AS _tag_name,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY t.name COLLATE NOCASE
+                       ORDER BY n.is_pinned DESC, n.updated_at DESC, n.id DESC
+                   ) AS _rn
+            FROM notes n
+            JOIN note_tags nt ON nt.note_id = n.id
+            JOIN tags t ON t.id = nt.tag_id
+            WHERE n.deleted_at IS NULL AND t.name COLLATE NOCASE IN ({placeholders})
+        ) WHERE _rn <= ?
+        """,
+        [*names, per_page],
+    ).fetchall()
+    tag_names_in_order = [row["_tag_name"] for row in rows]
+    hydrated = hydrate(conn, rows)
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for name, note in zip(tag_names_in_order, hydrated):
+        grouped.setdefault(name, []).append(note)
+    return grouped
+
+
+def notes_grouped_by_months(
+    conn: sqlite3.Connection,
+    month_keys: Sequence[str],
+    *,
+    per_page: int = 100,
+    public_only: bool = True,
+) -> dict[str, list[dict[str, Any]]]:
+    """按月份批量取每月最新的几篇公开笔记（替代「每月一次 list_notes」的 N+1）。"""
+    keys = [str(k) for k in month_keys if len(str(k)) >= 7][:120]
+    if not keys:
+        return {}
+    placeholders = ",".join("?" for _ in keys)
+    public_clause = " AND is_public = 1" if public_only else ""
+    rows = conn.execute(
+        f"""
+        SELECT * FROM (
+            SELECT n.*, substr(n.updated_at, 1, 7) AS _month,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY substr(n.updated_at, 1, 7)
+                       ORDER BY n.updated_at DESC, n.id DESC
+                   ) AS _rn
+            FROM notes n
+            WHERE n.deleted_at IS NULL{public_clause}
+        ) WHERE _rn <= ? AND _month IN ({placeholders})
+        """,
+        [per_page, *keys],
+    ).fetchall()
+    months_in_order = [row["_month"] for row in rows]
+    hydrated = hydrate(conn, rows)
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for month, note in zip(months_in_order, hydrated):
+        grouped.setdefault(month, []).append(note)
+    return grouped
+
+
 def related_notes(conn: sqlite3.Connection, note: dict[str, Any], *, limit: int = 5) -> list[dict[str, Any]]:
     """相关笔记 = 标签重合度 * 2 + 双链重合度 * 1。"""
     scores: dict[int, float] = {}
@@ -1030,7 +1200,6 @@ def related_notes(conn: sqlite3.Connection, note: dict[str, Any], *, limit: int 
     ).fetchall()
     for row in tag_rows:
         item = row_to_note(row)
-        item["tags"] = _tags_map(conn, [row["id"]]).get(row["id"], [])
         notes[item["id"]] = item
         scores[item["id"]] = scores.get(item["id"], 0) + 2.0 * float(row["shared"] or 0)
         reasons[item["id"]] = f"共同标签：{row['shared_names']}"
@@ -1044,11 +1213,14 @@ def related_notes(conn: sqlite3.Connection, note: dict[str, Any], *, limit: int 
     ).fetchall()
     for row in link_rows:
         item = notes.get(row["id"]) or row_to_note(row)
-        item["tags"] = _tags_map(conn, [row["id"]]).get(row["id"], [])
         notes[item["id"]] = item
         scores[item["id"]] = scores.get(item["id"], 0) + float(row["shared"] or 0)
         if row["id"] not in reasons:
             reasons[row["id"]] = "引用了同一篇笔记"
+
+    tags_map = _tags_map(conn, list(notes.keys()))
+    for item in notes.values():
+        item["tags"] = tags_map.get(item["id"], [])
 
     ordered = sorted(
         scores.items(), key=lambda pair: (pair[1], notes[pair[0]]["updated_at"] or ""), reverse=True

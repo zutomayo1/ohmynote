@@ -2,7 +2,8 @@
  * 墨痕 InkNote · batch.js
  * /notes 列表页「批量操作」的渐进增强（无 JS 时表单仍可原生提交）。
  * 做六件事：实时计数、全选/取消全选、选中「全部筛选结果」、选中后高亮操作条、
- * 按操作显示标签框、用 localStorage 跨页/跨筛选记住勾选（点「清空选择」或提交成功后清空）。筛选参数由服务端渲染成隐藏域，勾选后原生提交即可，不依赖本脚本；关掉 JS 就退化回「只勾当前页」的原生表单行为。
+ * 按操作显示标签框、用 localStorage 跨页/跨筛选记住勾选（点「清空选择」或提交成功后清空）。
+ * 「批量操作」下拉的自绘面板由 select.js 统一负责（它把值写回原生 select 并派发 change）。筛选参数由服务端渲染成隐藏域，勾选后原生提交即可，不依赖本脚本；关掉 JS 就退化回「只勾当前页」的原生表单行为。
  * 风格对齐 app.js：普通脚本、IIFE、'use strict'。
  */
 (function () {
@@ -17,6 +18,9 @@
   // ---- localStorage：记住选中的 id，翻页 / 换筛选都不丢 ----
   // key 带「站点 + 路径」区分不同页面，且不含 query，所以换筛选 URL 仍命中同一个 key。
   var STORAGE_PREFIX = 'inknote.batch.v1:';
+
+  // 和 app/services/ai.py 的 BACKFILL_LIMIT 保持一致（只用于确认文案）
+  var BACKFILL_HINT = 5;
 
   function storageKey() {
     try {
@@ -75,6 +79,7 @@
     var clearBtn = form.querySelector('[data-batch-clear]');
     var actionSelect = form.querySelector('[data-batch-action]');
     var tagField = form.querySelector('[data-batch-tag]');
+    var categoryField = form.querySelector('[data-batch-category]');
     // 「选中当前筛选出的全部 N 篇」：复选框 name="all"，N 由服务端渲染在 data 属性上。
     var selectAllFiltered = form.querySelector('[data-batch-select-all]');
     var confirmAllLabel = form.querySelector('[data-batch-confirm-all]');
@@ -140,6 +145,11 @@
       return value === 'add_tag' || value === 'remove_tag';
     }
 
+    function needsCategory() {
+      var value = actionSelect ? actionSelect.value : '';
+      return value === 'set_category';
+    }
+
     // 刷新：计数、全选按钮文案、操作条高亮、卡片高亮、标签框显隐
     function refresh() {
       var all = boxes();
@@ -180,7 +190,20 @@
         if (!allFiltered && confirmAllBox) confirmAllBox.checked = false;
       }
 
+      // 「补摘要」是唯一会调模型的动作（慢、要花 token），执行前先说清楚要发生什么
+      if (form) {
+        var picked = actionSelect ? actionSelect.value : '';
+        if (picked === 'backfill_summary') {
+          form.setAttribute('data-confirm',
+            '给选中的笔记生成摘要？只处理还没有摘要的，每篇一次模型调用，单次最多 '
+            + BACKFILL_HINT + ' 篇，可能要等一会儿。');
+        } else {
+          form.removeAttribute('data-confirm');
+        }
+      }
+
       if (tagField) tagField.classList.toggle('is-hidden', !needsTag());
+      if (categoryField) categoryField.classList.toggle('is-hidden', !needsCategory());
     }
 
     // 全选 / 取消全选：只要还有没选中的就全选，否则全部取消

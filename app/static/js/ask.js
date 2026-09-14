@@ -100,12 +100,28 @@
       body.className = 'ask-bubble__body ask-answer prose ask-stream';
       var cursor = document.createElement('span');
       cursor.className = 'ask-cursor';
+      cursor.hidden = true;   // 首个字符到达前先显示骨架
       body.appendChild(cursor);
+      // 骨架占位：检索与首 token 之间的等待不再是一片空白
+      var skeletons = [];
+      ['w80', 'w60', 'w80'].forEach(function (w) {
+        var bar = document.createElement('div');
+        bar.className = 'skeleton skeleton--text ' + w;
+        body.appendChild(bar);
+        skeletons.push(bar);
+      });
       bubble.appendChild(role);
       bubble.appendChild(body);
       thread.appendChild(bubble);
       scrollToBottom();
-      return { bubble: bubble, role: role, body: body, cursor: cursor };
+      return {
+        bubble: bubble, role: role, body: body, cursor: cursor,
+        clearSkeletons: function () {
+          skeletons.forEach(function (bar) { bar.remove(); });
+          skeletons = [];
+          cursor.hidden = false;
+        }
+      };
     }
 
     function renderSources(node, sources) {
@@ -193,6 +209,7 @@
       }
       if (typeof payload.delta === 'string') {
         state.answer += payload.delta;
+        if (node.clearSkeletons) { node.clearSkeletons(); node.clearSkeletons = null; }
         if (node.cursor) node.cursor.insertAdjacentText('beforebegin', payload.delta);
         scrollToBottom();
       }

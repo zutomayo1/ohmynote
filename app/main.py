@@ -27,6 +27,7 @@ from .config import STATIC_DIR, settings
 from .deps import SAFE_METHODS, RedirectException, current_session, db_conn
 from .services import ai
 from .services import account, db_backup, site_settings
+from .services import tidy as tidy_service
 from .services import ai_embed as ai_embed_service
 from .routers import (ai_admin, ai_embed, api, ask, auth, backup, blog, media, meta,
                       notes, pages, ai_inline)
@@ -123,8 +124,16 @@ def _tick_backup() -> None:
         logger.info("已自动备份数据库：%s", snapshot.get("name"))
 
 
+def _tick_tidy() -> None:
+    """看一眼该不该跑夜间整理（是否该做由 tidy.maybe_tidy 内部按时间 / 开关判断，幂等）。"""
+    with db_mod.db() as conn:
+        result = tidy_service.maybe_tidy(conn, interval_hours=24)
+    if result:
+        logger.info("夜间整理完成：%s", result)
+
+
 def _start_workers() -> None:
-    """启动后台守护线程：向量索引每 30 分钟跟进一次，备份每小时检查一次。
+    """启动后台守护线程：向量索引每 30 分钟跟进一次，备份 / 夜间整理每小时检查一次。
 
     放在后台线程里而不是 lifespan 里同步跑：两者都可能发外部请求，
     不能让服务启动等它们（没配 AI 时它们自己会立刻返回）。
@@ -134,6 +143,7 @@ def _start_workers() -> None:
         return
     _spawn_worker("inknote-index", 1800, _tick_index, run_immediately=True)
     _spawn_worker("inknote-backup", 3600, _tick_backup, run_immediately=False)
+    _spawn_worker("inknote-tidy", 3600, _tick_tidy, run_immediately=False)
 
 
 def _safe_print(text: str) -> None:
@@ -193,6 +203,11 @@ def create_app() -> FastAPI:
         description=DESCRIPTION,
         version="1.0.0",
         lifespan=lifespan,
+        # 接口文档默认关闭（settings.docs_enabled，INKNOTE_DOCS=1 时开启）：
+        # 私人笔记应用不该向匿名访客暴露 API 结构，见使用说明「安全」一节。
+        docs_url="/docs" if settings.docs_enabled else None,
+        redoc_url="/redoc" if settings.docs_enabled else None,
+        openapi_url="/openapi.json" if settings.docs_enabled else None,
     )
 
     STATIC_DIR.mkdir(parents=True, exist_ok=True)

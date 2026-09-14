@@ -24,6 +24,7 @@ import json
 import logging
 import re
 import sqlite3
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -108,31 +109,26 @@ _prompts: dict[str, str] = {}
 # 设置页「一键填充」用的预设
 PROVIDERS: list[dict] = [
     {
-        "key": "deepseek",
-        "name": "DeepSeek",
-        "base_url": "https://api.deepseek.com/v1",
-        "model": "deepseek-chat",
+        "key": "siliconflow",
+        "name": "硅基流动",
+        "base_url": "https://api.siliconflow.cn/v1",
+        "model": "Qwen/Qwen3-8B",
+        "embed_model": "BAAI/bge-m3",
+        "key_url": "https://cloud.siliconflow.cn/account/ak",
+        "note": "注册送额度；bge-m3 向量无限免费，一个 Key 全包",
+        "tag": "免费",
+        "featured": True,
+    },
+    {
+        "key": "zhipu",
+        "name": "智谱 GLM",
+        "base_url": "https://open.bigmodel.cn/api/paas/v4",
+        "model": "glm-4.7-flash",
         "embed_model": "",
-        "key_url": "https://platform.deepseek.com/api_keys",
-        "note": "国内直连、便宜，适合中文笔记",
-    },
-    {
-        "key": "openai",
-        "name": "OpenAI",
-        "base_url": "https://api.openai.com/v1",
-        "model": "gpt-4o-mini",
-        "embed_model": "text-embedding-3-small",
-        "key_url": "https://platform.openai.com/api-keys",
-        "note": "有 embedding，向量检索效果最好",
-    },
-    {
-        "key": "dashscope",
-        "name": "通义千问",
-        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-        "model": "qwen-plus",
-        "embed_model": "text-embedding-v3",
-        "key_url": "https://bailian.console.aliyun.com/",
-        "note": "阿里云百炼，中文友好",
+        "key_url": "https://open.bigmodel.cn/usercenter/apikeys",
+        "note": "Flash 系列对话免费不限量；向量搜索可换用硅基流动",
+        "tag": "对话免费",
+        "featured": True,
     },
     {
         "key": "ollama",
@@ -142,6 +138,41 @@ PROVIDERS: list[dict] = [
         "embed_model": "nomic-embed-text",
         "key_url": "",
         "note": "完全本地，不用密钥、不联网",
+        "tag": "离线免费",
+        "featured": True,
+    },
+    {
+        "key": "deepseek",
+        "name": "DeepSeek",
+        "base_url": "https://api.deepseek.com/v1",
+        "model": "deepseek-chat",
+        "embed_model": "",
+        "key_url": "https://platform.deepseek.com/api_keys",
+        "note": "国内直连、便宜，适合中文笔记",
+        "tag": "",
+        "featured": False,
+    },
+    {
+        "key": "openai",
+        "name": "OpenAI",
+        "base_url": "https://api.openai.com/v1",
+        "model": "gpt-4o-mini",
+        "embed_model": "text-embedding-3-small",
+        "key_url": "https://platform.openai.com/api-keys",
+        "note": "有 embedding，向量检索效果最好",
+        "tag": "",
+        "featured": False,
+    },
+    {
+        "key": "dashscope",
+        "name": "通义千问",
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "qwen-plus",
+        "embed_model": "text-embedding-v3",
+        "key_url": "https://bailian.console.aliyun.com/",
+        "note": "阿里云百炼，中文友好",
+        "tag": "",
+        "featured": False,
     },
 ]
 
@@ -424,6 +455,53 @@ def _format_prompt(task: str, **values) -> str:
         return DEFAULT_PROMPTS[task].format(**values)
 
 
+def _elapsed_ms(started: float) -> int:
+    return int((time.perf_counter() - started) * 1000)
+
+
+def record_stream_usage(
+    holder: dict | None,
+    *,
+    conn: sqlite3.Connection,
+    task: str,
+    model: str = "",
+    latency_ms: int = 0,
+    ok: bool = True,
+    error: str = "",
+) -> None:
+    """流式路径的记账入口。
+
+    流式（问笔记的 /ask/stream）绕过了 chat()，所以用量得由调用方把流尾的
+    usage 分片交回来。holder 里没有 usage 也不报错 —— 有些服务商不给，
+    这时候至少 latency / ok / error 这三项还有价值。
+    """
+    _record_usage(conn, model=model or "", task=task,
+                  usage=(holder or {}).get("usage") or {},
+                  latency_ms=latency_ms, ok=ok, error=error)
+
+
+def _record_usage(
+    conn: sqlite3.Connection | None,
+    *,
+    model: str,
+    task: str,
+    usage: dict | None = None,
+    latency_ms: int = 0,
+    ok: bool = True,
+    error: str = "",
+) -> None:
+    """记一次调用（成功和失败都记）。绝不抛异常 —— 记账失败不能影响正常使用。"""
+    if conn is None:
+        return
+    try:
+        from . import ai_usage
+
+        ai_usage.record(conn, model=model, task=task, usage=usage or {},
+                        latency_ms=latency_ms, ok=ok, error=error)
+    except Exception:  # pragma: no cover - 记账是旁路
+        logger.debug("记 AI 用量失败", exc_info=True)
+
+
 def _headers(conf: dict) -> dict:
     headers = {"Content-Type": "application/json"}
     if conf.get("api_key"):
@@ -457,6 +535,15 @@ def _assert_local_only(base_url: str, local_only: bool | None = None) -> None:
 def assert_base_url_allowed(base_url: str, local_only: bool | None = None) -> None:
     """公开版本：给路由层做保存前校验用（比如设置页）。"""
     _assert_local_only(base_url, local_only)
+
+
+def _urlopen(request, timeout: int):
+    """打开一个 AI 请求。本机/局域网地址（Ollama、局域网网关）绝不能走系统代理——
+    代理连不上内网地址只会回 502，让本地模型看起来像坏了。"""
+    if is_local_address(request.full_url):
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        return opener.open(request, timeout=timeout)
+    return urllib.request.urlopen(request, timeout=timeout)
 
 
 def is_local_address(base_url: str) -> bool:
@@ -494,7 +581,7 @@ def list_models(
         endpoint(conf["base_url"], "models"), headers=_headers(conf), method="GET"
     )
     try:
-        with urllib.request.urlopen(request, timeout=conf["timeout"]) as response:
+        with _urlopen(request, conf["timeout"]) as response:
             raw = response.read().decode("utf-8", errors="replace")
     except urllib.error.HTTPError as exc:
         detail = ""
@@ -522,6 +609,24 @@ def list_models(
         name = item.get("id") if isinstance(item, dict) else item
         if name:
             names.append(str(name))
+    return sorted(set(names))
+
+
+# 已知长期免费的模型（按 base_url 域名子串匹配）。这是快照，以服务商价格页为准。
+FREE_MODELS: dict[str, tuple[str, ...]] = {
+    "siliconflow.cn": ("BAAI/bge-m3",),
+    "bigmodel.cn": ("glm-4.7-flash", "glm-4.5-flash", "glm-4.6v-flash"),
+    "z.ai": ("glm-4.7-flash", "glm-4.5-flash", "glm-4.6v-flash"),
+}
+
+
+def free_models_for(base_url: str) -> list[str]:
+    """这个服务商有哪些已知免费模型（用于设置页下拉置顶标注）。"""
+    host = (base_url or "").lower()
+    names: list[str] = []
+    for needle, models in FREE_MODELS.items():
+        if needle in host:
+            names.extend(models)
     return sorted(set(names))
 
 
@@ -629,8 +734,10 @@ def _chat_direct(
         headers=_headers(conf),
         method="POST",
     )
+    # 量一下耗时：只记成功的调用，就永远看不到「到底是哪一类变慢了」
+    started = time.perf_counter()
     try:
-        with urllib.request.urlopen(request, timeout=conf["timeout"]) as response:
+        with _urlopen(request, conf["timeout"]) as response:
             raw = response.read().decode("utf-8", errors="replace")
     except urllib.error.HTTPError as exc:
         detail = ""
@@ -638,28 +745,37 @@ def _chat_direct(
             detail = exc.read().decode("utf-8", errors="replace")[:400]
         except Exception:  # pragma: no cover - 读错误体失败无所谓
             pass
-        raise AIError(humanize_error(exc.code, detail)) from exc
+        error = humanize_error(exc.code, detail)
+        _record_usage(conn, model=model, task=task, latency_ms=_elapsed_ms(started),
+                      ok=False, error=error)
+        raise AIError(error) from exc
     except urllib.error.URLError as exc:
-        raise AIError(f"连不上这个地址：{exc.reason}") from exc
+        error = f"连不上这个地址：{exc.reason}"
+        _record_usage(conn, model=model, task=task, latency_ms=_elapsed_ms(started),
+                      ok=False, error=error)
+        raise AIError(error) from exc
     except TimeoutError as exc:
-        raise AIError(f"等待超过 {conf['timeout']} 秒还没响应，可能是模型太慢或网络问题") from exc
+        error = f"等待超过 {conf['timeout']} 秒还没响应，可能是模型太慢或网络问题"
+        _record_usage(conn, model=model, task=task, latency_ms=_elapsed_ms(started),
+                      ok=False, error=error)
+        raise AIError(error) from exc
+    latency = _elapsed_ms(started)
 
     try:
         data = json.loads(raw)
     except ValueError as exc:
+        _record_usage(conn, model=model, task=task, latency_ms=latency,
+                      ok=False, error="返回的不是合法 JSON")
         raise AIError("AI 服务返回的不是合法 JSON") from exc
-
-    if conn is not None:
-        try:
-            from . import ai_usage
-
-            ai_usage.record(conn, model=model, task=task, usage=data.get("usage") or {})
-        except Exception:  # 记用量失败不该影响正常使用
-            pass
 
     choices = data.get("choices") or []
     if not choices:
+        _record_usage(conn, model=model, task=task, latency_ms=latency,
+                      ok=False, error="没有返回任何结果")
         raise AIError("AI 服务没有返回任何结果")
+
+    _record_usage(conn, model=model, task=task, usage=data.get("usage") or {},
+                  latency_ms=latency, ok=True)
     message = choices[0].get("message") or {}
     content = message.get("content")
     if isinstance(content, list):  # 兼容多段内容
@@ -859,6 +975,73 @@ def summarize(title: str, content: str, *, conn: sqlite3.Connection | None = Non
         conn=conn,
     )
     return result.strip().strip('"“”').split("\n")[0][:120]
+
+
+BACKFILL_LIMIT = 5   # 单次批量补摘要最多调用几次模型（每篇一次，防止请求拖太久）
+
+
+def summary_is_missing(note: dict) -> bool:
+    """这篇笔记算不算「缺摘要」。
+
+    空摘要算缺；摘要仍然等于自动摘录（make_excerpt 的结果、说明没人真正写过）
+    也算缺 —— 否则新建笔记自带的自动摘录会让这个功能永远无事可做。
+    """
+    from ..markdown_render import make_excerpt
+
+    current = str(note.get("summary") or "").strip()
+    if not current:
+        return True
+    return current == make_excerpt(str(note.get("content") or ""))
+
+
+def backfill_summaries(
+    conn: sqlite3.Connection,
+    *,
+    note_ids: list[int] | None = None,
+    limit: int = BACKFILL_LIMIT,
+) -> dict:
+    """给缺摘要的笔记生成摘要。
+
+    note_ids 给定时只在这几篇里找（列表页批量操作就走这条）；
+    为 None 表示全库找。每篇一次模型调用，单次最多 limit 篇，剩下的靠 remaining 让调用方
+    提示用户「可再点一次」——一次跑太多必然把请求拖到超时。
+    """
+    from .. import repo
+
+    if not is_enabled():
+        return {"done": 0, "failed": 0, "skipped": 0, "remaining": 0, "titles": [],
+                "error": "尚未配置 AI 服务"}
+
+    wanted = {int(note_id) for note_id in note_ids} if note_ids is not None else None
+    scope = [
+        note
+        for note in repo.all_notes(conn, sort="updated")
+        if (wanted is None or note["id"] in wanted) and str(note.get("content") or "").strip()
+    ]
+    candidates = [note for note in scope if summary_is_missing(note)]
+    plan = candidates[: max(1, int(limit))]
+
+    done, failed, titles = 0, 0, []
+    for note in plan:
+        try:
+            summary = summarize(note.get("title") or "", note.get("content") or "", conn=conn)
+        except AIError:
+            failed += 1
+            continue
+        if not summary:
+            failed += 1
+            continue
+        repo.update_note(conn, note["id"], summary=summary, reason="ai-backfill")
+        done += 1
+        titles.append(str(note.get("title") or f"笔记 #{note['id']}"))
+
+    return {
+        "done": done,
+        "failed": failed,
+        "skipped": len(scope) - len(candidates),
+        "remaining": max(0, len(candidates) - len(plan)),
+        "titles": titles,
+    }
 
 
 def suggest_tags(

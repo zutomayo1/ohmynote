@@ -6,6 +6,7 @@ import io
 import json
 import os
 import re
+import datetime
 import sqlite3
 import zipfile
 from pathlib import Path
@@ -17,7 +18,7 @@ from fastapi.responses import RedirectResponse, Response
 from .. import repo, search as search_mod
 from ..config import settings
 from ..deps import EditParam, MAX_SQLITE_INT, PageParam, TemplateId, csrf_protect, db_conn, require_login
-from ..services import ai, ai_search, media
+from ..services import ai, ai_search, media, note_templates, stats_heatmap
 from ..services import export as export_service
 from ..templating import render
 from ..utils import now, total_pages, url_with_query
@@ -47,9 +48,12 @@ def tags_page(
     if tag:
         notes, total = repo.list_notes(conn, tag=tag, page=page, per_page=per_page)
     else:
-        for item in tags[:12]:
-            group_notes, _count = repo.list_notes(conn, tag=item["name"], per_page=5)
-            groups.append({"tag": item, "notes": group_notes})
+        # 批量一次查完（窗口函数按标签分区），替代逐标签的 N+1 查询
+        grouped = repo.notes_grouped_by_tags(conn, [item["name"] for item in tags[:12]], per_page=5)
+        groups = [
+            {"tag": item, "notes": grouped.get(item["name"], [])}
+            for item in tags[:12]
+        ]
 
     return render(
         request,
@@ -208,6 +212,29 @@ def search_page(
 # ---------------------------------------------------------------------------
 # 笔记模板
 # ---------------------------------------------------------------------------
+
+
+@router.get("/todos")
+def todos_page(
+    request: Request,
+    conn: sqlite3.Connection = Depends(db_conn),
+    done: str = "",
+):
+    """跨笔记待办聚合：所有笔记里的任务清单，勾选直接回写原笔记。"""
+    include_done = done == "1"
+    groups = repo.collect_tasks(conn, include_done=include_done)
+    open_total = sum(group["open_count"] for group in groups)
+    done_total = sum(group["done_count"] for group in groups)
+    return render(
+        request,
+        "todos.html",
+        groups=groups,
+        open_total=open_total,
+        done_total=done_total,
+        include_done=include_done,
+    )
+
+
 @router.get("/templates")
 def templates_page(
     request: Request,
@@ -220,6 +247,8 @@ def templates_page(
         "templates.html",
         templates=repo.list_templates(conn),
         editing=editing,
+        default_template_id=note_templates.default_template_id(conn),
+        variable_docs=note_templates.VARIABLE_DOCS,
     )
 
 
@@ -261,6 +290,27 @@ def template_save(
     repo.save_template(conn, template_id=tid, name=name, description=description, content=content)
     return RedirectResponse(
         url_with_query("/templates", msg="模板已保存" if tid else "模板已创建"), status_code=303
+    )
+
+
+@router.post("/templates/default")
+def set_default_template(
+    request: Request,
+    conn: sqlite3.Connection = Depends(db_conn),
+    # 注意不能用 EditParam（那是 Query 参数类型），表单里要用 Form 字符串
+    template_id: str = Form(""),
+):
+    """设置/取消默认模板（取消时 template_id 传 0 或留空）。"""
+    text = (template_id or "").strip()
+    if text in ("", "0"):
+        repo.save_meta_map(conn, {"default": ""}, prefix="template.")
+        return RedirectResponse(url_with_query("/templates", msg="已取消默认模板"), status_code=303)
+    ok, tid = _parse_template_id(text)
+    if not ok or tid is None:
+        return RedirectResponse(url_with_query("/templates", msg="模板 id 不合法", kind="warn"), status_code=303)
+    repo.save_meta_map(conn, {"default": str(tid)}, prefix="template.")
+    return RedirectResponse(
+        url_with_query("/templates", msg="已设为默认模板，新建笔记会自动套用"), status_code=303
     )
 
 
@@ -430,6 +480,7 @@ def stats_page(request: Request, conn: sqlite3.Connection = Depends(db_conn)):
     tags = repo.list_tags(conn, limit=30)
     months = repo.archive_months(conn, public_only=False)
     recent, _total = repo.list_notes(conn, per_page=8, sort="created")
+    heatmap = stats_heatmap.build_heatmap(repo.daily_note_counts(conn))
     return render(
         request,
         "stats.html",
@@ -437,4 +488,5 @@ def stats_page(request: Request, conn: sqlite3.Connection = Depends(db_conn)):
         tags=tags,
         months=months,
         recent=recent,
+        heatmap=heatmap,
     )

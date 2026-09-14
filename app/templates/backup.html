@@ -51,12 +51,12 @@
     <form class="backup-form" method="post" action="/backup/import" enctype="multipart/form-data">
       <input type="hidden" name="_csrf" value="{{ csrf }}">
       <div class="backup-drop" data-backup-drop>
-        <input class="backup-drop__input" id="backup-file" type="file" name="file"
+        <input class="backup-drop__input" id="backup-file" type="file" name="file" multiple
                accept=".zip,.json,.md,.markdown,.txt,application/zip,application/json,text/markdown,text/plain">
         <label class="backup-drop__label" for="backup-file">
           <span class="backup-drop__icon">{{ icon('upload', 26) }}</span>
           <span class="backup-drop__main">拖拽文件到这里，或<u>点击选择</u></span>
-          <span class="backup-drop__hint">支持 .zip / .json / .md（单篇 Markdown 也行）</span>
+          <span class="backup-drop__hint">支持 .zip / .json / .md，可以一次选多个 Markdown</span>
         </label>
       </div>
       <label class="checkbox backup-form__dry">

@@ -379,7 +379,7 @@ def _embed_once(texts: list[str], conf: dict, model: str) -> list[list[float]]:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=conf.get("timeout") or 45) as response:
+        with ai._urlopen(request, conf.get("timeout") or 45) as response:
             raw = response.read().decode("utf-8", errors="replace")
     except urllib.error.HTTPError as exc:
         detail = ""

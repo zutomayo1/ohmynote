@@ -64,73 +64,6 @@
   </p>
 {% endif %}
 
-{# ===== 站点信息：页面保存的值优先于 .env，保存后立即生效 ===== #}
-{% set site_form_values = site_form if site_form is defined and site_form else site %}
-<form class="settings-form" method="post" action="/settings/site">
-  <input type="hidden" name="_csrf" value="{{ csrf }}">
-  <details class="settings-block settings-block--primary" open>
-    <summary class="settings-block__summary">
-      <span class="settings-block__chevron" aria-hidden="true">▸</span>
-      <span class="settings-block__title">站点信息</span>
-      <span class="settings-block__note">{{ site.site_title }} · 每页 {{ site.per_page }} 条 · 回收站 {{ site.trash_days }} 天</span>
-      <span class="settings-block__state">
-        {% set overrides = site.sources.values() | select('eq', 'db') | list | length %}
-        {% if overrides %}<span class="badge badge--public">本页已改 {{ overrides }} 项</span>{% else %}<span class="badge">跟随 .env</span>{% endif %}
-      </span>
-    </summary>
-    <div class="settings-block__body">
-      <p class="micro">保存后立即生效（不用重启）；本页保存的值优先于 <code>.env</code>，想回到 <code>.env</code> 点下面的「恢复 .env 默认值」。</p>
-      <div class="field-grid">
-        <label class="field field--wide">
-          <span class="field__label">站点名 {{ src_of(site.sources.get('site_title')) }}</span>
-          <input class="input" type="text" name="site_title" value="{{ site_form_values.get('site_title', '') }}" maxlength="60" required>
-          <span class="micro">最多 60 个字，显示在浏览器标题、页头与页脚</span>
-        </label>
-
-        <label class="field">
-          <span class="field__label">副标题 {{ src_of(site.sources.get('site_subtitle')) }}</span>
-          <input class="input" type="text" name="site_subtitle" value="{{ site_form_values.get('site_subtitle', '') }}">
-        </label>
-
-        <label class="field">
-          <span class="field__label">作者 {{ src_of(site.sources.get('author')) }}</span>
-          <input class="input" type="text" name="author" value="{{ site_form_values.get('author', '') }}">
-          <span class="micro">显示在页脚署名处</span>
-        </label>
-
-        <label class="field field--wide">
-          <span class="field__label">站点描述 {{ src_of(site.sources.get('site_description')) }}</span>
-          <textarea class="textarea" name="site_description" rows="2">{{ site_form_values.get('site_description', '') }}</textarea>
-          <span class="micro">用于首页与文章页的 <code>meta description</code></span>
-        </label>
-
-        <label class="field field--wide">
-          <span class="field__label">对外地址 {{ src_of(site.sources.get('base_url')) }}</span>
-          <input class="input" type="text" name="base_url" value="{{ site_form_values.get('base_url', '') }}" placeholder="例如 https://notes.example.com" spellcheck="false">
-          <span class="micro">影响 RSS / sitemap / 分享链接里的完整网址</span>
-        </label>
-
-        <label class="field">
-          <span class="field__label">每页条数 {{ src_of(site.sources.get('per_page')) }}</span>
-          <input class="input" type="number" name="per_page" value="{{ site_form_values.get('per_page', 12) }}" min="5" max="200" step="1" required>
-          <span class="micro">列表每页显示几篇（5~200）</span>
-        </label>
-
-        <label class="field">
-          <span class="field__label">回收站保留天数 {{ src_of(site.sources.get('trash_days')) }}</span>
-          <input class="input" type="number" name="trash_days" value="{{ site_form_values.get('trash_days', 30) }}" min="0" max="3650" step="1" required>
-          <span class="micro">0~3650 天，超期自动清理；0 表示尽快清理</span>
-        </label>
-      </div>
-    </div>
-    <div class="settings-form__actions">
-      <button class="btn btn--primary" type="submit">保存站点信息</button>
-      <button class="btn btn--ghost btn--danger" type="submit" name="reset" value="1"
-              data-confirm="清除本页保存的站点信息，恢复 .env / 默认值？（不会删除笔记）">恢复 .env 默认值</button>
-    </div>
-  </details>
-</form>
-
 <form class="settings-form" id="ai-settings-form" method="post" action="/settings/ai"
       data-models-url="/api/ai/models"
       data-probe-url="/api/ai/probe"
@@ -161,27 +94,41 @@
         </p>
       {% endif %}
 
-      <!-- 一键预设：data-* 里带好 base_url / model / embed_model，前端只负责往表单里填 -->
+      <!-- 一键预设：data-* 里带好 base_url / model / embed_model，前端只负责往表单里填。
+           featured 的（免费/常用）平铺展示，其余收进「更多服务商」折叠块，避免预设越加越臃肿 -->
+      {% macro preset_card(p) -%}
+        <div class="ai-preset-card{{ ' is-active' if p.base_url == ai.base_url else '' }}">
+          <button class="ai-preset" type="button"
+                  data-base-url="{{ p.base_url }}"
+                  data-model="{{ p.model }}"
+                  data-embed-model="{{ p.embed_model }}"
+                  aria-label="使用 {{ p.name }} 预设">
+            <span class="ai-preset__name">{{ p.name }}{% if p.get('tag') %} <span class="badge badge--saved">{{ p.tag }}</span>{% endif %}</span>
+            <span class="ai-preset__note">{{ p.note }}</span>
+          </button>
+          {% if p.key_url %}
+            <a class="ai-preset__key" href="{{ p.key_url }}" target="_blank" rel="noopener noreferrer">去 {{ p.name }} 拿 Key ↗</a>
+          {% else %}
+            <span class="ai-preset__key ai-preset__key--none">本地服务，不用 Key</span>
+          {% endif %}
+        </div>
+      {%- endmacro %}
+
+      {% set extra_providers = ai.providers | rejectattr('featured') | list %}
+      {% set extra_names = extra_providers | map(attribute='name') | join(' / ') %}
+
       <h3 class="section-title">一键预设（点一下自动填）</h3>
-      <div class="ai-presets" role="group" aria-label="服务商预设">
-        {% for p in ai.providers %}
-          <div class="ai-preset-card{{ ' is-active' if p.base_url == ai.base_url else '' }}">
-            <button class="ai-preset" type="button"
-                    data-base-url="{{ p.base_url }}"
-                    data-model="{{ p.model }}"
-                    data-embed-model="{{ p.embed_model }}"
-                    aria-label="使用 {{ p.name }} 预设">
-              <span class="ai-preset__name">{{ p.name }}</span>
-              <span class="ai-preset__note">{{ p.note }}</span>
-            </button>
-            {% if p.key_url %}
-              <a class="ai-preset__key" href="{{ p.key_url }}" target="_blank" rel="noopener noreferrer">去 {{ p.name }} 拿 Key ↗</a>
-            {% else %}
-              <span class="ai-preset__key ai-preset__key--none">本地服务，不用 Key</span>
-            {% endif %}
-          </div>
-        {% endfor %}
+      <div class="ai-presets" role="group" aria-label="常用服务商预设">
+        {% for p in ai.providers if p.get('featured') %}{{ preset_card(p) }}{% endfor %}
       </div>
+      {% if extra_providers %}
+        <details class="ai-presets-more">
+          <summary class="ai-presets-more__summary">更多服务商（{{ extra_names }}）</summary>
+          <div class="ai-presets">
+            {% for p in extra_providers %}{{ preset_card(p) }}{% endfor %}
+          </div>
+        </details>
+      {% endif %}
       <p class="micro">预设只会填进下面的输入框、<strong>不会自动保存</strong>；确认无误后点「保存配置」才会生效。想手动抄地址和模型名，展开下面的「常见服务商怎么填」。</p>
 
       <div class="field-grid">
@@ -405,6 +352,449 @@
   </details>
 </form>
 
+{# ===== 用量统计（收起）：本月数字 + 拆解 + 柱状图 + 重置 ===== #}
+<details class="settings-block">
+  <summary class="settings-block__summary">
+    <span class="settings-block__chevron" aria-hidden="true">▸</span>
+    <span class="settings-block__title">用量统计</span>
+    <span class="settings-block__note">
+      {%- if usage.month_calls -%}
+        本月 {{ usage.month_calls | number }} 次 · {% if usage.month_tokens >= 10000 %}{{ (usage.month_tokens / 10000) | round(1) }} 万 token{% else %}{{ usage.month_tokens | number }} token{% endif %}
+      {%- else -%}
+        本月还没有调用
+      {%- endif -%}
+    </span>
+  </summary>
+  <div class="settings-block__body">
+    {# ---------- 概览：今日 / 本周 / 本月 / 累计 ---------- #}
+    <div class="ai-usage-cards">
+      <div class="ai-usage-card">
+        <div class="ai-usage-card__label">今日</div>
+        <div class="ai-usage-card__value">{{ usage.today.calls | number }}</div>
+        <div class="ai-usage-card__sub">{{ usage.today.tokens | number }} token</div>
+      </div>
+      <div class="ai-usage-card">
+        <div class="ai-usage-card__label">本周（周一起）</div>
+        <div class="ai-usage-card__value">{{ usage.week.calls | number }}</div>
+        <div class="ai-usage-card__sub">{{ usage.week.tokens | number }} token</div>
+      </div>
+      <div class="ai-usage-card">
+        <div class="ai-usage-card__label">本月</div>
+        <div class="ai-usage-card__value">{{ usage.month.calls | number }}</div>
+        <div class="ai-usage-card__sub">
+          输入 {{ usage.month.prompt | number }} / 输出 {{ usage.month.completion | number }}
+        </div>
+      </div>
+      <div class="ai-usage-card">
+        <div class="ai-usage-card__label">累计{% if usage.since %}<span class="muted">（自 {{ usage.since }}）</span>{% endif %}</div>
+        <div class="ai-usage-card__value">{{ usage.all.calls | number }}</div>
+        <div class="ai-usage-card__sub">{{ usage.all.tokens | number }} token</div>
+      </div>
+    </div>
+
+    {% if usage.tokens_delta_pct is not none or usage.calls_delta_pct is not none %}
+      <p class="micro">
+        本月 vs 上月：
+        {% if usage.tokens_delta_pct is not none %}
+          token {% if usage.tokens_delta_pct >= 0 %}↑{% else %}↓{% endif %}{{ usage.tokens_delta_pct | abs }}%
+        {% endif %}
+        {% if usage.calls_delta_pct is not none %}
+          · 调用次数 {% if usage.calls_delta_pct >= 0 %}↑{% else %}↓{% endif %}{{ usage.calls_delta_pct | abs }}%
+        {% endif %}
+        <span class="muted">（上月 {{ usage.prev_month.calls | number }} 次 · {{ usage.prev_month.tokens | number }} token）</span>
+      </p>
+    {% endif %}
+
+    {% if not usage.all_calls %}
+      <p class="muted">还没有任何调用记录。配置好 AI 之后，摘要 / 打标签 / 问笔记 / 笔记助手的每次调用都会记在这里。</p>
+    {% endif %}
+
+    {% if usage.last_call %}
+      <p class="micro">
+        最近一次：<code>{{ usage.last_call.model or '（未记录模型）' }}</code> ·
+        {{ task_labels.get(usage.last_call.task, usage.last_call.task or '其它') }} ·
+        {{ usage.last_call.created_at | rel }}
+        {%- if not usage.last_call.ok %} <span class="ai-usage-state is-fail">失败</span>{% endif %}
+      </p>
+    {% endif %}
+
+    {# ---------- 质量：耗时 / 失败率 / 单次规模 ---------- #}
+    <h3 class="section-title">本月质量</h3>
+    <div class="ai-usage-metrics">
+      <div class="ai-usage-metric">
+        <span class="ai-usage-metric__value">{{ usage.quality.success_rate }}%</span>
+        <span class="ai-usage-metric__label">成功率{% if usage.quality.failed %}（失败 {{ usage.quality.failed }} 次）{% endif %}</span>
+      </div>
+      <div class="ai-usage-metric">
+        <span class="ai-usage-metric__value">
+          {%- if usage.quality.avg_latency_ms %}{{ (usage.quality.avg_latency_ms / 1000) | round(1) }}s{% else %}—{% endif -%}
+        </span>
+        <span class="ai-usage-metric__label">平均耗时{% if usage.quality.max_latency_ms %}（最慢 {{ (usage.quality.max_latency_ms / 1000) | round(1) }}s）{% endif %}</span>
+      </div>
+      <div class="ai-usage-metric">
+        <span class="ai-usage-metric__value">{{ usage.quality.avg_tokens | number }}</span>
+        <span class="ai-usage-metric__label">平均每次 token{% if usage.quality.max_tokens %}（最大 {{ usage.quality.max_tokens | number }}）{% endif %}</span>
+      </div>
+    </div>
+    {% if not usage.quality.avg_latency_ms %}
+      <p class="micro muted">耗时是从这次升级之后才开始记的，之前的调用没有这一项。</p>
+    {% endif %}
+
+    {# ---------- 最近 20 次调用：最直接的「明细」 ---------- #}
+    {% if usage.recent %}
+      <h3 class="section-title">最近 20 次调用</h3>
+      <div class="prose">
+        <table class="ai-usage-table">
+          <thead><tr><th>时间</th><th>任务</th><th>模型</th><th>输入</th><th>输出</th><th>耗时</th><th></th></tr></thead>
+          <tbody>
+            {% for item in usage.recent %}
+              <tr{% if not item.ok %} class="is-fail"{% endif %}>
+                <td>{{ item.created_at[5:16].replace('T', ' ') }}</td>
+                <td>{{ task_labels.get(item.task, item.task or '其它') }}</td>
+                <td><code>{{ item.model or '—' }}</code></td>
+                <td>{{ item.prompt_tokens | number }}</td>
+                <td>{{ item.completion_tokens | number }}</td>
+                <td>{% if item.latency_ms %}{{ (item.latency_ms / 1000) | round(1) }}s{% else %}—{% endif %}</td>
+                <td>{% if not item.ok %}<span class="ai-usage-state is-fail" title="{{ item.error }}">失败</span>{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+
+    {% if usage.recent_failures %}
+      <h3 class="section-title">最近的失败</h3>
+      <ul class="ai-usage-fails">
+        {% for item in usage.recent_failures %}
+          <li>
+            <span class="ai-usage-state is-fail">失败</span>
+            {{ task_labels.get(item.task, item.task or '其它') }} ·
+            <span class="muted">{{ item.created_at[5:16].replace('T', ' ') }}</span>
+            <br><span class="muted">{{ item.error }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
+    {# ---------- 按模型 / 模型×任务 ---------- #}
+    {% if usage.by_model %}
+      <h3 class="section-title">按模型拆分（本月）</h3>
+      <div class="ai-usage-models">
+        {# 分母兜底：该模型本月 0 token 时不能除零（共享库里出现过 0 token 记录） #}
+        {% set max_model_tokens = (usage.by_model[0].tokens or 1) if usage.by_model else 1 %}
+        {% for item in usage.by_model %}
+        <div class="ai-usage-model" style="--i: {{ loop.index0 }}"
+             data-tip-title="{{ item.model }}"
+             data-tip-calls="{{ item.calls }}" data-tip-tokens="{{ item.tokens }}"
+             data-tip-prompt="{{ item.prompt }}" data-tip-completion="{{ item.completion }}"
+             data-tip-failed="{{ item.failed }}" data-tip-latency="{{ item.avg_latency }}">
+          <div class="ai-usage-model__head">
+            <code>{{ item.model }}</code>
+            <span class="muted">
+              {{ item.calls | number }} 次 · {{ item.tokens | number }} token（输入 {{ item.prompt | number }} / 输出 {{ item.completion | number }}）
+              · 占本月 {{ (item.tokens / (usage.month_tokens or 1) * 100) | round(1) }}%
+            </span>
+          </div>
+          <div class="ai-usage-model__bar" aria-hidden="true">
+            <span style="width: {{ (item.tokens / max_model_tokens * 100) | round(1) }}%"></span>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {% if usage.by_model_task %}
+      <h3 class="section-title">模型 × 任务（本月）</h3>
+      <div class="prose">
+        <table class="ai-usage-table">
+          <thead><tr><th>模型</th><th>任务</th><th>调用</th><th>token</th></tr></thead>
+          <tbody>
+            {% for item in usage.by_model_task %}
+              <tr>
+                <td><code>{{ item.model }}</code></td>
+                <td>{{ task_labels.get(item.task, item.task or '其它') }}</td>
+                <td>{{ item.calls | number }}</td>
+                <td>{{ item.tokens | number }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+
+    {% if usage.by_task %}
+      <h3 class="section-title">按任务拆分</h3>
+      <div class="prose">
+        <table class="ai-usage-table">
+          <thead><tr><th>任务</th><th>调用次数</th><th>token</th></tr></thead>
+          <tbody>
+            {% for item in usage.by_task %}
+              <tr>
+                <td>{{ task_labels.get(item.task, item.task) }}</td>
+                <td>{{ item.calls | number }}</td>
+                <td>{{ item.tokens | number }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+
+    {# ---------- 时间规律：习惯几点用、哪天用得多 ---------- #}
+    {% if usage.by_hour %}
+      {% set max_hour = (usage.by_hour | map(attribute='tokens') | max) or 1 %}
+      <h3 class="section-title">时间规律（近 30 天，按小时 / 星期）</h3>
+      <div class="ai-usage-hours" role="img" tabindex="0" data-tip-nav
+           aria-label="近 30 天按小时分布，用左右方向键可逐时段查看">
+        {% for item in usage.by_hour %}
+          <div class="ai-usage-hours__col{{ ' is-empty' if not item.calls else '' }}" style="--i: {{ loop.index0 }}"
+               data-tip-title="{{ item.hour }}:00 – {{ item.hour }}:59"
+               data-tip-calls="{{ item.calls }}" data-tip-tokens="{{ item.tokens }}"
+               data-tip-prompt="{{ item.prompt }}" data-tip-completion="{{ item.completion }}"
+               data-tip-failed="{{ item.failed }}" data-tip-latency="{{ item.avg_latency }}"
+               title="{{ item.hour }} 点：{{ item.calls }} 次 · {{ item.tokens | number }} token">
+            <span class="ai-usage-hours__bar" style="height: {{ ((item.tokens / max_hour) * 100) | round(1) }}%"></span>
+          </div>
+        {% endfor %}
+      </div>
+      <div class="ai-usage-hours__axis">
+        <span>0 点</span><span>6 点</span><span>12 点</span><span>18 点</span><span>23 点</span>
+      </div>
+      {% set max_day = (usage.by_weekday | map(attribute='tokens') | max) or 1 %}
+      <div class="ai-usage-week">
+        {% for item in usage.by_weekday %}
+          <div class="ai-usage-week__item" style="--i: {{ loop.index0 }}"
+               data-tip-title="{{ item.label }}（近 30 天）"
+               data-tip-calls="{{ item.calls }}" data-tip-tokens="{{ item.tokens }}"
+               data-tip-prompt="{{ item.prompt }}" data-tip-completion="{{ item.completion }}"
+               data-tip-failed="{{ item.failed }}" data-tip-latency="{{ item.avg_latency }}">
+            <span class="ai-usage-week__label">{{ item.label }}</span>
+            <span class="ai-usage-week__bar" style="width: {{ ((item.tokens / max_day) * 100) | round(1) }}%"></span>
+            <span class="ai-usage-week__value">{{ item.calls | number }} 次</span>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {# ---------- 近 6 个月趋势 ---------- #}
+    {% if usage.by_month %}
+      {% set max_month = (usage.by_month | map(attribute='tokens') | max) or 1 %}
+      <h3 class="section-title">近 6 个月</h3>
+      <div class="ai-usage-week">
+        {% for item in usage.by_month %}
+          <div class="ai-usage-week__item" style="--i: {{ loop.index0 }}"
+               data-tip-title="{{ item.month }}"
+               data-tip-calls="{{ item.calls }}" data-tip-tokens="{{ item.tokens }}"
+               data-tip-prompt="{{ item.prompt }}" data-tip-completion="{{ item.completion }}"
+               data-tip-failed="{{ item.failed }}" data-tip-latency="{{ item.avg_latency }}">
+            <span class="ai-usage-week__label">{{ item.month }}</span>
+            <span class="ai-usage-week__bar" style="width: {{ ((item.tokens / max_month) * 100) | round(1) }}%"></span>
+            <span class="ai-usage-week__value">{{ item.tokens | number }} token / {{ item.calls | number }} 次</span>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {# ---------- 近 30 天柱状图 ---------- #}
+    <h3 class="section-title">最近 30 天（按天）</h3>
+    <div class="ai-usage-legend">
+      <span><i class="ai-usage-legend__swatch ai-usage-legend__swatch--prompt"></i>输入 token</span>
+      <span><i class="ai-usage-legend__swatch ai-usage-legend__swatch--completion"></i>输出 token</span>
+      <span class="ai-usage-legend__hint">柱高按 token 计 · 悬停或方向键看当天明细</span>
+    </div>
+    <div class="ai-chart" role="img" tabindex="0" data-tip-nav
+         aria-label="最近 30 天每日 token 用量堆叠柱状图，用左右方向键可逐日查看">
+      {% for bar in usage_chart %}
+        <div class="ai-chart__col{{ ' is-empty' if bar.empty else '' }}" style="--i: {{ loop.index0 }}"
+             data-tip-title="{{ bar.label }} {{ bar.weekday }}"
+             data-tip-calls="{{ bar.calls }}" data-tip-tokens="{{ bar.tokens }}"
+             data-tip-prompt="{{ bar.prompt }}" data-tip-completion="{{ bar.completion }}"
+             data-tip-failed="{{ bar.failed }}" data-tip-latency="{{ bar.avg_latency }}"
+             title="{{ bar.day }}：{{ bar.calls }} 次调用 · 共 {{ bar.tokens | number }} token（输入 {{ bar.prompt | number }} / 输出 {{ bar.completion | number }}）">
+          <span class="ai-chart__value{{ '' if bar.is_peak else ' is-dim' }}">{{ bar.tokens | number if not bar.empty else '' }}</span>
+          <span class="ai-chart__bar{{ ' is-empty' if bar.empty else '' }}" style="height: {{ bar.percent }}%">
+            {% if not bar.empty %}
+              <span class="ai-chart__seg ai-chart__seg--prompt" style="height: {{ bar.prompt_pct }}%"></span>
+              <span class="ai-chart__seg ai-chart__seg--completion" style="height: {{ 100 - bar.prompt_pct }}%"></span>
+            {% endif %}
+          </span>
+        </div>
+      {% endfor %}
+    </div>
+    <div class="ai-chart__axis">
+      {% for bar in usage_chart %}{% if loop.index0 % 5 == 0 %}<span>{{ bar.label }}</span>{% endif %}{% endfor %}
+      <span>今天</span>
+    </div>
+
+    {# ---------- 近 14 天明细 ---------- #}
+    <h3 class="section-title">近 14 天明细</h3>
+    <div class="prose">
+      <table class="ai-usage-table">
+        <thead><tr><th>日期</th><th>调用</th><th>输入</th><th>输出</th><th>合计</th></tr></thead>
+        <tbody>
+          {% for bar in usage_chart | reverse %}
+            {% if not bar.empty %}
+              <tr>
+                <td>{{ bar.day }}</td>
+                <td>{{ bar.calls | number }}</td>
+                <td>{{ bar.prompt | number }}</td>
+                <td>{{ bar.completion | number }}</td>
+                <td><strong>{{ bar.tokens | number }}</strong></td>
+              </tr>
+            {% endif %}
+          {% endfor %}
+          {% if not usage.by_day %}<tr><td colspan="5" class="muted">最近 30 天没有调用记录</td></tr>{% endif %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="ai-usage-actions">
+      <a class="btn btn--ghost btn--sm" href="/settings/ai/usage.csv">导出 CSV 明细</a>
+      <form method="post" action="/settings/ai/usage/reset"
+            data-confirm="确定重置用量统计？只清空调用记录，不影响 AI 配置。">
+        <input type="hidden" name="_csrf" value="{{ csrf }}">
+        <button class="btn btn--ghost btn--danger btn--sm" type="submit">重置用量统计</button>
+      </form>
+    </div>
+  </div>
+</details>
+
+{# ===== 夜间整理（收起）：每晚自动分类/归档的状态 ===== #}
+<details class="settings-block">
+  <summary class="settings-block__summary">
+    <span class="settings-block__chevron" aria-hidden="true">▸</span>
+    <span class="settings-block__title">夜间整理</span>
+    <span class="settings-block__note">
+      {%- if not tidy.enabled -%}
+        已关闭
+      {%- elif not tidy.ai_ready -%}
+        等待配置 AI
+      {%- elif tidy.last_result -%}
+        {%- if tidy.last_run -%}上次：{{ tidy.last_run[:16].replace('T', ' ') }} 整理 {{ tidy.last_result.categorized + tidy.last_result.archived }} 篇
+        {%- else -%}整理 {{ tidy.last_result.categorized + tidy.last_result.archived }} 篇
+        {%- endif -%}
+      {%- else -%}
+        已开启，还没跑过
+      {%- endif -%}
+    </span>
+  </summary>
+  <div class="settings-block__body">
+    {%- if not tidy.enabled -%}
+      <p class="muted">夜间整理已关闭：项目根目录 <code>.env</code> 里 <code>INKNOTE_TIDY=0</code> 把它关着。把它改成 <code>1</code>（或删掉这一行）再重启服务即可开启；开启后每天自动给未分类笔记补分类、把「收件箱」标签换成「已归档」。</p>
+    {%- elif not tidy.ai_ready -%}
+      <p class="muted">夜间整理已开启，但还没配置 AI（去上面的「AI 服务」区块填好地址和模型名后才会真正执行）。配置好之后，每天会自动给未分类笔记补分类、把「收件箱」标签换成「已归档」。</p>
+    {%- elif tidy.last_result -%}
+      <p class="meta">
+        <span class="meta__item">分类 {{ tidy.last_result.categorized }} 篇</span>
+        <span class="meta__item">归档 {{ tidy.last_result.archived }} 篇</span>
+        <span class="meta__item">时间 {{ tidy.last_result.at[:16].replace('T', ' ') if tidy.last_result.at else '（未记录）' }}</span>
+      </p>
+    {%- else -%}
+      <p class="muted">还没跑过。配置好 AI 之后，每晚会自动执行一次：给未分类笔记补分类、把「收件箱」标签换成「已归档」。如果当天没有可处理的笔记，则会跳过。</p>
+    {%- endif -%}
+  </div>
+</details>
+
+{# ===== 常见服务商怎么填（收起）：地址 / 模型速查表 ===== #}
+<details class="settings-block">
+  <summary class="settings-block__summary">
+    <span class="settings-block__chevron" aria-hidden="true">▸</span>
+    <span class="settings-block__title">常见服务商怎么填</span>
+    <span class="settings-block__note">{{ ai.providers | length }} 家常用服务商的地址与模型速查</span>
+  </summary>
+  <div class="settings-block__body">
+    <p class="muted">上面的预设是「点一下自动填」；这张表方便你手动抄地址和模型名。</p>
+    <div class="settings-ref prose">
+      <table>
+        <thead><tr><th>服务商</th><th>Base URL</th><th>通用模型</th><th>向量模型</th><th>密钥</th></tr></thead>
+        <tbody>
+          {% for p in ai.providers %}
+            <tr>
+              <td>{{ p.name }}</td>
+              <td><code>{{ p.base_url }}</code></td>
+              <td><code>{{ p.model }}</code></td>
+              <td>{% if p.embed_model %}<code>{{ p.embed_model }}</code>{% else %}<span class="muted">不支持向量</span>{% endif %}</td>
+              <td>{% if p.key_url %}<a href="{{ p.key_url }}" target="_blank" rel="noopener noreferrer">获取 Key ↗</a>{% else %}<span class="muted">本地不用 Key</span>{% endif %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</details>
+
+
+
+<h3 class="section-title settings-group">站点与账号</h3>
+
+{# ===== 站点信息：页面保存的值优先于 .env，保存后立即生效 ===== #}
+{% set site_form_values = site_form if site_form is defined and site_form else site %}
+<form class="settings-form" method="post" action="/settings/site">
+  <input type="hidden" name="_csrf" value="{{ csrf }}">
+  <details class="settings-block">
+    <summary class="settings-block__summary">
+      <span class="settings-block__chevron" aria-hidden="true">▸</span>
+      <span class="settings-block__title">站点信息</span>
+      <span class="settings-block__note">{{ site.site_title }} · 每页 {{ site.per_page }} 条 · 回收站 {{ site.trash_days }} 天</span>
+      <span class="settings-block__state">
+        {% set overrides = site.sources.values() | select('eq', 'db') | list | length %}
+        {% if overrides %}<span class="badge badge--public">本页已改 {{ overrides }} 项</span>{% else %}<span class="badge">跟随 .env</span>{% endif %}
+      </span>
+    </summary>
+    <div class="settings-block__body">
+      <p class="micro">保存后立即生效（不用重启）；本页保存的值优先于 <code>.env</code>，想回到 <code>.env</code> 点下面的「恢复 .env 默认值」。</p>
+      <div class="field-grid">
+        <label class="field field--wide">
+          <span class="field__label">站点名 {{ src_of(site.sources.get('site_title')) }}</span>
+          <input class="input" type="text" name="site_title" value="{{ site_form_values.get('site_title', '') }}" maxlength="60" required>
+          <span class="micro">最多 60 个字，显示在浏览器标题、页头与页脚</span>
+        </label>
+
+        <label class="field">
+          <span class="field__label">副标题 {{ src_of(site.sources.get('site_subtitle')) }}</span>
+          <input class="input" type="text" name="site_subtitle" value="{{ site_form_values.get('site_subtitle', '') }}">
+        </label>
+
+        <label class="field">
+          <span class="field__label">作者 {{ src_of(site.sources.get('author')) }}</span>
+          <input class="input" type="text" name="author" value="{{ site_form_values.get('author', '') }}">
+          <span class="micro">显示在页脚署名处</span>
+        </label>
+
+        <label class="field field--wide">
+          <span class="field__label">站点描述 {{ src_of(site.sources.get('site_description')) }}</span>
+          <textarea class="textarea" name="site_description" rows="2">{{ site_form_values.get('site_description', '') }}</textarea>
+          <span class="micro">用于首页与文章页的 <code>meta description</code></span>
+        </label>
+
+        <label class="field field--wide">
+          <span class="field__label">对外地址 {{ src_of(site.sources.get('base_url')) }}</span>
+          <input class="input" type="text" name="base_url" value="{{ site_form_values.get('base_url', '') }}" placeholder="例如 https://notes.example.com" spellcheck="false">
+          <span class="micro">影响 RSS / sitemap / 分享链接里的完整网址</span>
+        </label>
+
+        <label class="field">
+          <span class="field__label">每页条数 {{ src_of(site.sources.get('per_page')) }}</span>
+          <input class="input" type="number" name="per_page" value="{{ site_form_values.get('per_page', 12) }}" min="5" max="200" step="1" required>
+          <span class="micro">列表每页显示几篇（5~200）</span>
+        </label>
+
+        <label class="field">
+          <span class="field__label">回收站保留天数 {{ src_of(site.sources.get('trash_days')) }}</span>
+          <input class="input" type="number" name="trash_days" value="{{ site_form_values.get('trash_days', 30) }}" min="0" max="3650" step="1" required>
+          <span class="micro">0~3650 天，超期自动清理；0 表示尽快清理</span>
+        </label>
+      </div>
+    </div>
+    <div class="settings-form__actions">
+      <button class="btn btn--primary" type="submit">保存站点信息</button>
+      <button class="btn btn--ghost btn--danger" type="submit" name="reset" value="1"
+              data-confirm="清除本页保存的站点信息，恢复 .env / 默认值？（不会删除笔记）">恢复 .env 默认值</button>
+    </div>
+  </details>
+</form>
+
 {# ===== 账号：改登录密码（会话 cookie 与口令无关，改完不踢下线） ===== #}
 <form class="settings-form" method="post" action="/settings/password">
   <input type="hidden" name="_csrf" value="{{ csrf }}">
@@ -454,102 +844,9 @@
   </details>
 </form>
 
-{# ===== 用量统计（收起）：本月数字 + 拆解 + 柱状图 + 重置 ===== #}
-<details class="settings-block">
-  <summary class="settings-block__summary">
-    <span class="settings-block__chevron" aria-hidden="true">▸</span>
-    <span class="settings-block__title">用量统计</span>
-    <span class="settings-block__note">
-      {%- if usage.month_calls -%}
-        本月 {{ usage.month_calls | number }} 次 · {% if usage.month_tokens >= 10000 %}{{ (usage.month_tokens / 10000) | round(1) }} 万 token{% else %}{{ usage.month_tokens | number }} token{% endif %}
-      {%- else -%}
-        本月还没有调用
-      {%- endif -%}
-    </span>
-  </summary>
-  <div class="settings-block__body">
-    {% if usage.month_calls %}
-      <p class="ai-usage-total">
-        本月 <strong>{{ usage.month_calls | number }}</strong> 次调用 ·
-        <strong>{{ usage.month_tokens | number }}</strong> token
-        <span class="muted">（输入 {{ usage.month_prompt | number }} / 输出 {{ usage.month_completion | number }}）</span>
-      </p>
-    {% else %}
-      <p class="muted">本月还没有调用记录。配置好 AI 之后，摘要 / 打标签 / 问笔记的每次调用都会记在这里。</p>
-    {% endif %}
 
-    {% if usage.last_call %}
-      <p class="micro">
-        最近一次：<code>{{ usage.last_call.model or '（未记录模型）' }}</code> ·
-        {{ task_labels.get(usage.last_call.task, usage.last_call.task or '其它') }} ·
-        {{ usage.last_call.created_at | rel }}
-      </p>
-    {% endif %}
 
-    {% if usage.by_task %}
-      <h3 class="section-title">按任务拆分</h3>
-      <div class="prose">
-        <table class="ai-usage-table">
-          <thead><tr><th>任务</th><th>调用次数</th><th>token</th></tr></thead>
-          <tbody>
-            {% for item in usage.by_task %}
-              <tr>
-                <td>{{ task_labels.get(item.task, item.task) }}</td>
-                <td>{{ item.calls | number }}</td>
-                <td>{{ item.tokens | number }}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    {% endif %}
-
-    <h3 class="section-title">最近 30 天（按天）</h3>
-    <div class="ai-chart" role="img" aria-label="最近 30 天每日调用次数柱状图">
-      {% for bar in usage_chart %}
-        <div class="ai-chart__col">
-          <div class="ai-chart__bar{{ ' is-empty' if bar.empty else '' }}" style="height: {{ bar.percent }}%"
-               title="{{ bar.day }}：{{ bar.calls }} 次调用 · {{ bar.tokens }} token"></div>
-        </div>
-      {% endfor %}
-    </div>
-    <div class="ai-chart__axis"><span>{{ usage_chart[0].label }}</span><span>今天 {{ usage_chart[-1].label }}</span></div>
-
-    <form class="ai-usage-reset" method="post" action="/settings/ai/usage/reset"
-          data-confirm="确定重置用量统计？只清空调用记录，不影响 AI 配置。">
-      <input type="hidden" name="_csrf" value="{{ csrf }}">
-      <button class="btn btn--ghost btn--danger btn--sm" type="submit">重置用量统计</button>
-    </form>
-  </div>
-</details>
-
-{# ===== 常见服务商怎么填（收起）：地址 / 模型速查表 ===== #}
-<details class="settings-block">
-  <summary class="settings-block__summary">
-    <span class="settings-block__chevron" aria-hidden="true">▸</span>
-    <span class="settings-block__title">常见服务商怎么填</span>
-    <span class="settings-block__note">{{ ai.providers | length }} 家常用服务商的地址与模型速查</span>
-  </summary>
-  <div class="settings-block__body">
-    <p class="muted">上面的预设是「点一下自动填」；这张表方便你手动抄地址和模型名。</p>
-    <div class="settings-ref prose">
-      <table>
-        <thead><tr><th>服务商</th><th>Base URL</th><th>通用模型</th><th>向量模型</th><th>密钥</th></tr></thead>
-        <tbody>
-          {% for p in ai.providers %}
-            <tr>
-              <td>{{ p.name }}</td>
-              <td><code>{{ p.base_url }}</code></td>
-              <td><code>{{ p.model }}</code></td>
-              <td>{% if p.embed_model %}<code>{{ p.embed_model }}</code>{% else %}<span class="muted">不支持向量</span>{% endif %}</td>
-              <td>{% if p.key_url %}<a href="{{ p.key_url }}" target="_blank" rel="noopener noreferrer">获取 Key ↗</a>{% else %}<span class="muted">本地不用 Key</span>{% endif %}</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-</details>
+<h3 class="section-title settings-group">参考</h3>
 
 {# ===== 其它选项（收起）：仍在 .env 里改 ===== #}
 <details class="settings-block">
@@ -598,4 +895,5 @@
 
 {% block scripts %}
 <script src="/static/js/settings.js?v={{ asset_v }}" defer></script>
+<script src="/static/js/chart-tip.js?v={{ asset_v }}" defer></script>
 {% endblock %}

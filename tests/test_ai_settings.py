@@ -108,12 +108,16 @@ def test_settings_page_renders_presets_and_sections(auth_client):
     page = auth_client.get("/settings")
     assert page.status_code == 200
 
-    # 四个一键预设 + 拿 key 链接
-    for name in ("DeepSeek", "OpenAI", "通义千问", "本地 Ollama"):
+    # 预设：免费/常用的三个平铺，其余收进「更多服务商」折叠块
+    for name in ("硅基流动", "智谱 GLM", "本地 Ollama", "DeepSeek", "OpenAI", "通义千问"):
         assert name in page.text
     assert 'data-base-url="https://api.deepseek.com/v1"' in page.text
     assert 'data-model="deepseek-chat"' in page.text
     assert "去 DeepSeek 拿 Key" in page.text
+    assert 'data-embed-model="BAAI/bge-m3"' in page.text  # 硅基流动免费向量
+    assert "更多服务商（DeepSeek / OpenAI / 通义千问）" in page.text
+    assert 'class="ai-presets-more"' in page.text
+    assert page.text.count('badge badge--saved') >= 3  # 免费 / 对话免费 / 离线免费
 
     # 模型选择：自绘下拉面板（不再用 <datalist>，那控件点一下不弹、只做前缀匹配）
     assert 'data-model-combo' in page.text
@@ -333,6 +337,19 @@ def test_models_api_success(auth_client, fake_ai):
     payload = res.json()
     assert payload["ok"] is True
     assert payload["models"] == ["other-model", "test-model"]
+    # 响应带免费模型标记（fake_ai 是本机地址，无已知免费名单 -> 空列表）
+    assert payload["free"] == []
+
+
+def test_free_models_for_known_providers():
+    """已知服务商的免费模型快照：硅基流动向量、智谱 Flash 系列。"""
+    from app.services import ai
+
+    assert "BAAI/bge-m3" in ai.free_models_for("https://api.siliconflow.cn/v1")
+    assert "glm-4.7-flash" in ai.free_models_for("https://open.bigmodel.cn/api/paas/v4")
+    assert "glm-4.7-flash" in ai.free_models_for("https://api.z.ai/api/paas/v4/")
+    assert ai.free_models_for("https://api.example.com/v1") == []
+    assert ai.free_models_for("") == []
 
 
 def test_models_api_failure_cannot_connect(auth_client):
@@ -388,6 +405,11 @@ def test_usage_summary_page_and_reset(auth_client, csrf, fake_ai):
     assert "摘要" in page.text
     assert "ai-chart__bar" in page.text
     assert "最近 30 天" in page.text
+    # 详情：概览四卡 / 质量 / 明细 / 交叉 / 时间规律 / 月度趋势 / 导出
+    for needle in ("今日", "本周", "本月", "累计", "本月质量", "平均耗时",
+                   "最近 20 次调用", "模型 × 任务", "时间规律", "近 6 个月",
+                   "导出 CSV 明细"):
+        assert needle in page.text, f"用量统计里应该有「{needle}」"
 
     # 重置按钮：清空后页面回到「还没有调用记录」
     reset = auth_client.post(
@@ -396,7 +418,7 @@ def test_usage_summary_page_and_reset(auth_client, csrf, fake_ai):
     assert reset.status_code == 303
     with db_mod.db() as conn:
         assert ai_usage.summary(conn)["month_calls"] == 0
-    assert "还没有调用记录" in auth_client.get("/settings").text
+    assert "还没有任何调用记录" in auth_client.get("/settings").text
 
 
 def test_usage_reset_requires_csrf(auth_client):

@@ -278,8 +278,12 @@ def test_chat_falls_back_to_general_model(conn, fake_ai):
     assert _PromptAIHandler.requests[1]["model"] == "general-model"
 
     stats = ai_usage.summary(conn)
-    assert stats["month_calls"] == 1
+    # 失败的那次也记账（这正是「失败率」「最慢的一次」这些指标的数据来源），所以是 2 条
+    assert stats["month_calls"] == 2
     assert stats["last_call"]["model"] == "general-model"
+    assert stats["quality"]["failed"] == 1
+    assert stats["quality"]["success_rate"] == 50.0
+    assert stats["quality"]["avg_latency_ms"] > 0
 
 
 def test_chat_raises_when_both_models_fail(conn, fake_ai):

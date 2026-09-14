@@ -1368,3 +1368,76 @@
   if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', boot); }
   else { boot(); }
 })();
+
+
+/* ===== 专注写作模式：一键隐去导航/工具栏/发布设置，正文居中放大 ===== */
+(function initFocusMode() {
+  var KEY = 'inknote.editor.focus';
+  var toggle = document.getElementById('editor-focus-toggle');
+  if (!toggle) { return; }
+
+  function apply(on) {
+    document.body.classList.toggle('editor-focus', on);
+    toggle.setAttribute('aria-pressed', on ? 'true' : 'false');
+    try { window.localStorage.setItem(KEY, on ? '1' : '0'); } catch (err) { /* 无痕模式忽略 */ }
+  }
+
+  toggle.addEventListener('click', function () {
+    apply(!document.body.classList.contains('editor-focus'));
+  });
+
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape' && document.body.classList.contains('editor-focus')) {
+      // Esc 优先退出专注，不打断其它快捷键逻辑
+      if (document.activeElement === document.getElementById('note-content')) { event.stopPropagation(); }
+      apply(false);
+    }
+  });
+
+  try { if (window.localStorage.getItem(KEY) === '1') { apply(true); } } catch (err) { /* 忽略 */ }
+})();
+
+
+/* ===== 分栏拖拽：拖动把手调整左右比例，双击恢复，localStorage 记忆 ===== */
+(function initSplitDrag() {
+  var split = document.getElementById('editor-split');
+  var handle = document.getElementById('editor-divider');
+  if (!split || !handle) { return; }
+  var KEY = 'inknote.editor.split';
+  var MIN = 0.2, MAX = 0.8;
+
+  function applyPct(pct) {
+    pct = Math.min(MAX, Math.max(MIN, pct));
+    split.style.setProperty('--split', (pct / (1 - pct)).toFixed(4) + 'fr');
+    try { window.localStorage.setItem(KEY, String(pct)); } catch (err) { /* 忽略 */ }
+  }
+
+  try {
+    var saved = parseFloat(window.localStorage.getItem(KEY));
+    if (saved > MIN && saved < MAX) { applyPct(saved); }
+  } catch (err) { /* 忽略 */ }
+
+  handle.addEventListener('pointerdown', function (event) {
+    if (split.getAttribute('data-layout') !== 'split') { return; }
+    event.preventDefault();
+    handle.setPointerCapture(event.pointerId);
+    document.body.classList.add('split-dragging');
+    var rect = split.getBoundingClientRect();
+
+    function onMove(ev) {
+      applyPct((ev.clientX - rect.left) / rect.width);
+    }
+    function onUp() {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      document.body.classList.remove('split-dragging');
+    }
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  });
+
+  handle.addEventListener('dblclick', function () {
+    split.style.removeProperty('--split');
+    try { window.localStorage.removeItem(KEY); } catch (err) { /* 忽略 */ }
+  });
+})();

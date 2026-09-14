@@ -34,6 +34,7 @@ PAGES = [
     "/notes", "/notes/1", "/notes/2", "/notes/1/edit", "/notes/1/versions", "/notes/1/versions/1",
     "/notes/new", "/tags", "/tags?tag=审计", "/search?q=审计", "/templates", "/ask", "/stats",
     "/trash", "/blog", "/blog/archive", "/blog/tags", "/about", "/login", "/notes/9999",
+    "/settings", "/todos",
 ]
 
 

@@ -177,6 +177,15 @@ def _f_highlight(value: str, tokens: list[str] | None = None) -> str:
     return highlight(value or "", tokens or [])
 
 
+def _f_tag_color(name: str) -> int:
+    """标签名 → 0..7 的稳定色组编号（md5，跨进程稳定）。"""
+    import hashlib
+
+    digest = hashlib.md5((name or "").encode("utf-8")).hexdigest()
+    return int(digest[:8], 16) % 8
+
+
+
 templates.env.filters.update(
     {
         "rel": _f_rel,
@@ -190,6 +199,7 @@ templates.env.filters.update(
         "purge_countdown": purge_countdown,
         "purge_in": purge_countdown,
         "month_label": month_label,
+        "tag_color": _f_tag_color,
         "highlight": _f_highlight,
         "image_count": _f_image_count,
         "summary_repeats": _f_summary_repeats,

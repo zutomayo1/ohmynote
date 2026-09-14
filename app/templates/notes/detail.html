@@ -40,6 +40,14 @@
   </div>
   <div class="page-actions">
     <a class="btn btn--primary" href="{{ note.url }}/edit">{{ icon('edit', 16) }} 编辑</a>
+    <a class="btn btn--ghost" href="/notes/{{ note.id }}/export.html">{{ icon('download', 16) }} 导出网页</a>
+    <button class="btn btn--ghost" type="button" data-copy-note="md">{{ icon('copy', 16) }} 复制 MD</button>
+    <button class="btn btn--ghost" type="button" data-copy-note="plain">{{ icon('copy', 16) }} 复制文本</button>
+    <form method="post" action="/notes/{{ note.id }}/archive">
+      <input type="hidden" name="_csrf" value="{{ csrf }}">
+      <input type="hidden" name="next" value="{{ note.url }}">
+      <button class="btn btn--ghost" type="submit">{{ icon('archive', 16) }} {{ '取消归档' if note.is_archived else '归档' }}</button>
+    </form>
     <a class="btn btn--ghost" href="/ask?note={{ note.id }}">{{ icon('sparkles', 16) }} 问这篇</a>
     <form method="post" action="{{ note.url }}/flag">
       <input type="hidden" name="_csrf" value="{{ csrf }}">
@@ -79,7 +87,7 @@
 </div>
 
 <div class="post-layout">
-  <article class="post-body prose" id="post-body">
+  <article class="post-body prose" id="post-body" data-task-note="{{ note.id }}">
     {% if not note.content.strip() %}
       <p class="muted">这篇笔记还是空的，<a href="{{ note.url }}/edit">去写点什么</a>。</p>
     {% else %}
@@ -153,4 +161,9 @@
     {% else %}<span class="post-nav__item is-empty"></span>{% endif %}
   </nav>
 {% endif %}
+{% endblock %}
+
+{% block scripts %}
+  <script type="application/json" id="note-copy-data">{{ {"md": note.content or "", "plain": rendered.plain or ""} | tojson }}</script>
+  {% include '_enrich.html' %}
 {% endblock %}

@@ -57,10 +57,12 @@ def blog_index(
 @router.get("/blog/archive")
 def blog_archive(request: Request, conn: sqlite3.Connection = Depends(db_conn)):
     months = repo.archive_months(conn)
-    groups: list[dict] = []
-    for item in months:
-        notes, _total = repo.list_notes(conn, month=item["key"], public_only=True, per_page=100)
-        groups.append({"month": item, "notes": notes})
+    # 批量一次查完（窗口函数按月份分区），替代逐月的 N+1 查询
+    grouped = repo.notes_grouped_by_months(conn, [item["key"] for item in months], per_page=100)
+    groups = [
+        {"month": item, "notes": grouped.get(item["key"], [])}
+        for item in months
+    ]
     return render(
         request,
         "blog/archive.html",

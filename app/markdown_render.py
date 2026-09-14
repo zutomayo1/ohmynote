@@ -86,11 +86,91 @@ class Rendered:
     word_count: int = 0
     reading_minutes: int = 0
     wikilinks: list[WikiRef] = field(default_factory=list)
+    # 页面里是否出现公式 / mermaid 图，模板据此决定要不要加载渲染脚本
+    has_math: bool = False
+    has_mermaid: bool = False
+
+
+_MERMAID_TOKEN_RE = re.compile(r"\{\{mm:(\d+)\}\}")
 
 
 # ---------------------------------------------------------------------------
 # 代码块保护：只在「非代码」片段上做替换
 # ---------------------------------------------------------------------------
+# 任务清单标记：列表项开头的 `- [ ]` / `1. [x]`（代码块内不算）
+_TASK_MARK_RE = re.compile(r"^(\s*(?:[-*+]|\d+[.)])\s+\[)([ xX])(\])", re.M)
+
+
+def _mark_task_checkboxes(html: str) -> str:
+    """任务清单复选框：去掉 disabled、按出现顺序编号（data-task-index，0 起）。
+
+    disabled 的表单控件会吞掉所有鼠标事件，点击根本不派发，所以这里
+    必须放开、由前端 JS 接管点击（详情页回写、其它页面 preventDefault）。
+    JS 挂掉时复选框可以被原生点动但不会保存（刷新还原），无害降级。
+    """
+    counter = [0]
+
+    def repl(m: re.Match) -> str:
+        counter[0] += 1
+        return f'<input type="checkbox" data-task-index="{counter[0] - 1}"'
+
+    # 勾选与未勾选的都要接管（checked 的写法是 disabled checked/>）
+    return re.sub(r'<input type="checkbox" disabled(?=[ /])', repl, html)
+
+
+def extract_tasks(content: str) -> list[dict]:
+    """抽取正文里的任务清单项（代码块外），index 与 toggle_task_item 完全同口径。
+
+    返回 [{"index": 0 起的序号, "done": bool, "text": 任务文字}]。
+    """
+    state = {"index": -1}
+    items: list[dict] = []
+
+    def process(chunk: str) -> str:
+        for line in chunk.split("\n"):
+            match = _TASK_MARK_RE.match(line)
+            if not match:
+                continue
+            state["index"] += 1
+            items.append(
+                {
+                    "index": state["index"],
+                    "done": match.group(2) in ("x", "X"),
+                    "text": line[match.end():].strip(),
+                }
+            )
+        return chunk
+
+    map_outside_code(content, process)
+    return items
+
+
+def toggle_task_item(content: str, index: int) -> tuple[str, bool] | None:
+    """把正文里第 index 个（0 起）任务标记切换勾选态。
+
+    只处理代码块外的标记（与渲染器计数口径一致）；越界返回 None。
+    返回 (新正文, 切换后的勾选态)。
+    """
+    state = {"seen": -1, "checked": None}
+
+    def process(chunk: str) -> str:
+        def repl(m: re.Match) -> str:
+            state["seen"] += 1
+            if state["seen"] != index:
+                return m.group(0)
+            mark = m.group(2)
+            new_mark = " " if mark in ("x", "X") else "x"
+            state["checked"] = new_mark == "x"
+            return m.group(1) + new_mark + m.group(3)
+
+        return _TASK_MARK_RE.sub(repl, chunk)
+
+    new_content = map_outside_code(content, process)
+    if state["checked"] is None:
+        return None
+    return new_content, state["checked"]
+
+
 def map_outside_code(text: str, fn: Callable[[str], str]) -> str:
     """对文本里 **不在** 围栏代码块与行内代码中的片段调用 fn。"""
     if not text:
@@ -270,6 +350,59 @@ def make_excerpt(source: str, length: int = 110) -> str:
 
 
 # ---------------------------------------------------------------------------
+# mermaid 图：```mermaid 围栏先抽出来，渲染完再放回成安全 div
+# ---------------------------------------------------------------------------
+_MERMAID_FENCE_RE = re.compile(r"^\s{0,3}(`{3,}|~{3,})\s*mermaid\s*$")
+
+
+def _extract_mermaid_blocks(source: str) -> tuple[str, list[str]]:
+    """把 ```` ```mermaid ```` 围栏抽出来换成 ``{{mm:N}}`` 占位符。
+
+    必须在 escape_raw_html 之前做：占位符不含 ``<``，后面的转义碰不到它；
+    抽出来的代码不经过 Markdown，原样留给前端 Mermaid 渲染。
+    """
+    if "mermaid" not in (source or ""):
+        return source or "", []
+    lines = source.split("\n")
+    out: list[str] = []
+    blocks: list[str] = []
+    fence: str | None = None
+    current: list[str] = []
+    for line in lines:
+        match = _FENCE_RE.match(line)
+        if fence is None and match and _MERMAID_FENCE_RE.match(line):
+            fence = match.group(1)[0] * 3
+            current = []
+            out.append(f"{{{{mm:{len(blocks)}}}}}")
+            blocks.append("")
+            continue
+        if fence is not None:
+            if match and match.group(1)[0] * 3 == fence and not match.group(2).strip():
+                blocks[-1] = "\n".join(current)
+                fence = None
+                continue
+            current.append(line)
+            continue
+        out.append(line)
+    return "\n".join(out), blocks
+
+
+def _restore_mermaid(rendered: str, blocks: list[str]) -> str:
+    """把占位符换回 ``<div class="mermaid">``（代码已转义；空块直接丢弃）。"""
+
+    def swap(match: re.Match[str]) -> str:
+        index = int(match.group(1) or match.group(2))
+        code = blocks[index] if 0 <= index < len(blocks) else ""
+        if not code.strip():
+            return ""
+        return f'<div class="mermaid">{html.escape(code)}</div>'
+
+    # 先吃掉独占一段的 <p>{{mm:N}}</p>（常见情形），再兜底裸占位符
+    rendered = re.sub(r"<p>\s*\{\{mm:(\d+)\}\}\s*</p>", swap, rendered)
+    return _MERMAID_TOKEN_RE.sub(swap, rendered)
+
+
+# ---------------------------------------------------------------------------
 # 双链
 # ---------------------------------------------------------------------------
 def extract_wikilinks(source: str) -> list[WikiRef]:
@@ -442,6 +575,21 @@ def render(
     url_builder = url_builder or (lambda ref: f"/notes/{ref.note_id}" if ref.note_id else "#")
     body = _strip_leading_title(source or "", title)
 
+    # 0) mermaid 围栏先抽走（占位符不吃转义、不吃 Markdown 语法）
+    body, mermaid_blocks = _extract_mermaid_blocks(body)
+    has_mermaid = any(block.strip() for block in mermaid_blocks)
+
+    # 0.5) 探测公式：$$…$$、\[…\]、\(…\)（代码块里的不算）
+    _math_hits: list[bool] = []
+
+    def _probe_math(chunk: str) -> str:
+        if "$$" in chunk or "\\[" in chunk or "\\(" in chunk:
+            _math_hits.append(True)
+        return chunk
+
+    map_outside_code(body, _probe_math)
+    has_math = bool(_math_hits)
+
     # 1) 禁用裸 HTML + 把 `#标签` 这类写法从「标题」里救出来
     body = map_outside_code(body, lambda chunk: normalise_headings(escape_raw_html(chunk)))
     # 2) 双链 -> 占位符（避免被 Markdown 的链接语法吃掉）
@@ -462,7 +610,11 @@ def render(
 
     # 4) 收尾处理
     rendered = _neutralise_dangerous_tags(rendered)
+    if has_mermaid:
+        # 放在危险标签清洗之后：我们自己构造的 div 是唯一允许出现的原始节点
+        rendered = _restore_mermaid(rendered, mermaid_blocks)
     rendered = _sanitize_urls(rendered)
+    rendered = _mark_task_checkboxes(rendered)
     rendered = _externalize_links(rendered)
     rendered = _lazy_images(rendered)
     rendered = _wrap_tables(rendered)
@@ -479,6 +631,8 @@ def render(
         word_count=stats.words,
         reading_minutes=stats.minutes,
         wikilinks=refs,
+        has_math=has_math,
+        has_mermaid=has_mermaid,
     )
 
 

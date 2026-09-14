@@ -11,7 +11,7 @@ import sqlite3
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import RedirectResponse, Response
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 
 from .. import repo, search as search_mod
 from ..config import settings
@@ -25,7 +25,11 @@ from ..deps import (
     db_conn,
     require_login,
 )
-from ..services import ai_related
+from starlette.concurrency import run_in_threadpool
+
+from ..services import ai, ai_related, note_templates
+from ..markdown_render import toggle_task_item
+from ..services import note_export
 from ..services import content as content_service
 from ..services import export as export_service
 from ..templating import render
@@ -55,6 +59,10 @@ BATCH_ACTIONS = (
     "star",
     "unstar",
     "trash",
+    "archive",
+    "unarchive",
+    "set_category",
+    "backfill_summary",
 )
 
 # 「选中当前筛选出的全部 N 篇」时，单次最多处理的篇数（防止一次改掉整个库）。
@@ -150,8 +158,10 @@ def dashboard(
     fav: str = "",
     sort: str = "updated",
     page: PageParam = 1,
+    archived: str = "",
 ):
     per_page = settings.per_page
+    only_archived = archived == "1"
     notes, total = repo.list_notes(
         conn,
         q=q,
@@ -162,6 +172,7 @@ def dashboard(
         sort=sort,
         page=page,
         per_page=per_page,
+        archived=True if only_archived else False,
     )
     tokens = search_mod.tokenize(q)
     # 批量「选中全部筛选结果」：有真正的筛选条件时才允许直接执行，否则要显式确认
@@ -174,9 +185,16 @@ def dashboard(
         {key: value for key, value in request.query_params.items() if key not in ("msg", "kind")},
     )
     version_counts = _version_counts(conn, [note["id"] for note in notes])
+    onthisday = (
+        repo.find_this_day_in_past(conn)
+        if not only_archived and not q.strip()
+        else []
+    )
     return render(
         request,
         "notes/list.html",
+        onthisday=onthisday,
+        only_archived=only_archived,
         notes=notes,
         total=total,
         page=max(1, page),
@@ -199,6 +217,28 @@ def dashboard(
     )
 
 
+@router.get("/notes/today")
+def today_note(request: Request, conn: sqlite3.Connection = Depends(db_conn)):
+    """每日笔记快捷入口：今天的笔记存在就打开，不存在就从「每日笔记」模板建一篇。
+
+    必须注册在 /notes/{note_id} 之前（同 /notes/new 的路由顺序讲究）。
+    """
+    import datetime as dt
+
+    title = dt.date.today().strftime("%Y-%m-%d")
+    for note in repo.find_notes_by_title(conn, title, limit=5):
+        if str(note.get("title")) == title:
+            return RedirectResponse(f"/notes/{note['id']}/edit", status_code=303)
+
+    tpl = next(
+        (t for t in repo.list_templates(conn) if t["name"] == note_templates.DAILY_NAME),
+        None,
+    )
+    content = note_templates.render_variables(tpl["content"]) if tpl else ""
+    note = repo.create_note(conn, title=title, content=content, status="draft")
+    return RedirectResponse(f"/notes/{note['id']}/edit", status_code=303)
+
+
 @router.get("/notes/new")
 def new_note(
     request: Request,
@@ -207,6 +247,15 @@ def new_note(
     title: str = "",
 ):
     tpl = repo.get_template(conn, template) if template else None
+    # 没指定模板时，若设置了「默认模板」（/templates 页可设）就自动套用
+    if tpl is None and not template:
+        default_id = note_templates.default_template_id(conn)
+        tpl = repo.get_template(conn, default_id) if default_id else None
+    if tpl:
+        # 模板变量（{{date}} 等）在套用那一刻渲染
+        tpl = {**tpl,
+               "name": note_templates.render_variables(tpl["name"]),
+               "content": note_templates.render_variables(tpl["content"])}
     note = {
         "id": None,
         "title": title,
@@ -239,6 +288,73 @@ def new_note(
         known_tags=[item["name"] for item in repo.list_tags(conn, limit=60)],
         categories=repo.list_categories(conn),
     )
+
+
+@router.post("/notes/{note_id}/task-toggle")
+def task_toggle(
+    request: Request,
+    note_id: int,
+    conn: sqlite3.Connection = Depends(db_conn),
+    index: int = Form(-1),
+):
+    """点击阅读视图里的任务复选框，把第 index 个任务标记的勾选态写回正文。
+
+    走 repo.update_note（reason="task-toggle"），版本历史自动兜底。
+    """
+    if index < 0:
+        return JSONResponse({"ok": False, "error": "参数不合法"}, status_code=400)
+    note = repo.get_note(conn, note_id)
+    if note is None:
+        raise HTTPException(status_code=404, detail="笔记不存在")
+    result = toggle_task_item(str(note.get("content") or ""), index)
+    if result is None:
+        return JSONResponse({"ok": False, "error": "任务序号超出范围"}, status_code=400)
+    new_content, checked = result
+    repo.update_note(conn, note_id, content=new_content, reason="task-toggle")
+    return JSONResponse({"ok": True, "checked": checked})
+
+
+@router.get("/notes/{note_id}/export.html")
+def export_note_html(
+    request: Request,
+    note_id: int,
+    conn: sqlite3.Connection = Depends(db_conn),
+):
+    """导出单文件精美 HTML（自包含样式，亮暗跟随系统）。"""
+    note = repo.get_note(conn, note_id)
+    if note is None:
+        raise HTTPException(status_code=404, detail="笔记不存在")
+    rendered = content_service.render_note(conn, note)
+    body = note_export.build_export_html(note, rendered.html)
+    from urllib.parse import quote
+
+    name = str(note.get("title") or f"note-{note_id}").strip() or f"note-{note_id}"
+    filename = quote(f"{name}.html")
+    return Response(
+        content=body,
+        media_type="text/html; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
+    )
+
+
+@router.post("/notes/{note_id}/save-as-template")
+def save_note_as_template(
+    request: Request,
+    note_id: int,
+    conn: sqlite3.Connection = Depends(db_conn),
+    title: str = Form(""),
+    content: str = Form(""),
+):
+    """把当前笔记的内容一键存成模板（编辑器「存为模板」按钮）。"""
+    note = repo.get_note(conn, note_id)
+    if note is None:
+        raise HTTPException(status_code=404, detail="笔记不存在")
+    name = (title or str(note.get("title") or "")).strip() or "未命名模板"
+    template_id = repo.save_template(
+        conn, name=name, description="来自笔记《%s》" % note.get("title"),
+        content=str(content or note.get("content") or ""),
+    )
+    return RedirectResponse(url_with_query("/templates", msg="已存为模板「%s」" % name), status_code=303)
 
 
 @router.post("/notes")
@@ -289,7 +405,8 @@ async def batch_notes(
     request: Request,
     conn: sqlite3.Connection = Depends(db_conn),
 ):
-    """一次处理多篇笔记：打/删标签、公开/取消、置顶/取消、星标/取消、移入回收站。
+    """一次处理多篇笔记：打/删标签、公开/取消、置顶/取消、星标/取消、归档/取消归档、
+    设为分类（action_category）、补摘要（backfill_summary）、移入回收站。
 
     表单字段：note_ids（可重复）、action、可选 action_tag、next。
     还支持 all=1 + 当前筛选参数（q / tag / category / status / fav / sort），意思是
@@ -305,6 +422,7 @@ async def batch_notes(
     if raw_action_tag is None:
         raw_action_tag = form.get("tag") or ""
     tag_name = str(raw_action_tag).strip().lstrip("#").strip()
+    category_name = str(form.get("action_category") or "").strip()[:80]
     target = safe_next(str(form.get("next") or ""), "/notes")
     note_ids = [str(value) for value in form.getlist("note_ids")]
 
@@ -355,6 +473,31 @@ async def batch_notes(
         )
 
     ids, skipped = _parse_note_ids(note_ids)
+
+    # 「补摘要」是唯一要调模型的动作：每篇一次，单次上限 BACKFILL_LIMIT，剩下的提示再点一次。
+    # 必须丢线程池 —— batch_notes 是 async，同步的 urllib 模型调用会把事件循环一起卡住，
+    # 博客访客的请求也会被拖住（和 agent 循环是同一类问题）。
+    if action == "backfill_summary":
+        if not ai.is_enabled():
+            return RedirectResponse(
+                url_with_query(target, msg="还没配置 AI 服务，无法补摘要", kind="warn"),
+                status_code=303,
+            )
+        result = await run_in_threadpool(
+            ai.backfill_summaries, conn, note_ids=ids, limit=ai.BACKFILL_LIMIT
+        )
+        parts = [f"已补 {result['done']} 篇摘要"]
+        if result["skipped"]:
+            parts.append(f"{result['skipped']} 篇本来就有摘要")
+        if result["failed"]:
+            parts.append(f"{result['failed']} 篇失败")
+        if result["remaining"]:
+            parts.append(f"还剩 {result['remaining']} 篇，可以再点一次")
+        return RedirectResponse(
+            url_with_query(target, msg="，".join(parts), kind="warn" if result["failed"] else "ok"),
+            status_code=303,
+        )
+
     done = 0
     for note_id in ids:
         note = repo.get_note(conn, note_id)  # 不存在 / 已在回收站 -> None -> 跳过
@@ -381,6 +524,12 @@ async def batch_notes(
             repo.set_flags(conn, note_id, is_starred=True)
         elif action == "unstar":
             repo.set_flags(conn, note_id, is_starred=False)
+        elif action == "archive":
+            repo.set_archived(conn, note_id, True)
+        elif action == "unarchive":
+            repo.set_archived(conn, note_id, False)
+        elif action == "set_category":
+            repo.update_note(conn, note_id, category=category_name, reason="batch-category")
         elif action == "trash":
             if not repo.soft_delete(conn, note_id):
                 skipped += 1
@@ -536,6 +685,24 @@ def toggle_flag(
     labels = {"public": "公开状态", "pin": "置顶", "star": "星标"}
     return RedirectResponse(
         url_with_query(safe_next(next, f"/notes/{note_id}"), msg=f"{labels[flag]}已更新"),
+        status_code=303,
+    )
+
+
+@router.post("/notes/{note_id}/archive")
+def toggle_archive(
+    request: Request,
+    note_id: NoteId,
+    conn: sqlite3.Connection = Depends(db_conn),
+    next: str = Form(""),
+):
+    """归档 / 取消归档（温和中间态：不进默认列表，可搜索、可恢复）。"""
+    note = _note_or_404(conn, note_id)
+    desired = not bool(note.get("is_archived"))
+    repo.set_archived(conn, note_id, desired)
+    msg = "已归档，可在「已归档」筛选里找到" if desired else "已取消归档"
+    return RedirectResponse(
+        url_with_query(safe_next(next, f"/notes/{note_id}"), msg=msg),
         status_code=303,
     )
 

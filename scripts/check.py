@@ -97,10 +97,31 @@ def check_css() -> Result:
     return result
 
 
+def _pytest_parallel_args(quick: bool) -> list[str]:
+    """并行跑测试的参数；没装 pytest-xdist 就退回串行（不报错）。
+
+    ``--dist loadfile`` 是必须的：同一个文件里的用例要落在同一个 worker，
+    否则文件内共享的 session 库 / 登录态会被拆到不同进程，出现假红。
+    快速模式只有三个文件，起 worker 的启动开销比省下的还多，保持串行。
+    """
+    if quick:
+        return []
+    try:
+        import xdist  # noqa: F401
+    except ImportError:
+        return []
+    workers = min(8, os.cpu_count() or 1)
+    return [f"-n{workers}", "--dist", "loadfile"]
+
+
 def check_tests(quick: bool) -> Result:
     result = Result("测试" + ("（快速）" if quick else ""))
     targets = QUICK_TESTS if quick else ["tests"]
-    code, output = _run([sys.executable, "-m", "pytest", *targets, "-q", "-p", "no:cacheprovider"], timeout=1800)
+    cmd = [
+        sys.executable, "-m", "pytest", *targets, "-q", "-p", "no:cacheprovider",
+        *_pytest_parallel_args(quick),
+    ]
+    code, output = _run(cmd, timeout=1800)
     result.ok = code == 0
     summary = [line for line in output.splitlines() if "passed" in line or "failed" in line or "error" in line.lower()]
     failures = [line for line in output.splitlines() if line.startswith(("FAILED", "ERROR"))]

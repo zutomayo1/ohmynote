@@ -7,17 +7,26 @@
 from __future__ import annotations
 
 import hmac
+import json
 import sqlite3
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import (
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+    Response,
+    StreamingResponse,
+)
 
 from .. import repo
 from ..deps import csrf_protect, db_conn, require_login, require_login_api
-from ..services import account, ai, ai_usage, site_settings
+from starlette.concurrency import run_in_threadpool
+
+from ..services import account, agent, ai, ai_usage, site_settings, tidy
 from ..templating import render
-from ..utils import now, url_with_query
+from ..utils import now, now_iso, url_with_query
 
 # 设置页：表单提交，需要登录 + CSRF
 settings_router = APIRouter(dependencies=[Depends(require_login), Depends(csrf_protect)])
@@ -47,9 +56,16 @@ router = settings_router  # 兼容旧写法
 TASK_LABELS = {
     "summary": "摘要",
     "tags": "打标签",
-    "answer": "问答",
+    "answer": "问笔记",
+    "ask": "问笔记（流式）",
+    "agent": "笔记助手",
+    "title": "起标题",
+    "category": "定分类",
     "embed": "向量",
 }
+
+
+_WEEKDAYS = ("周一", "周二", "周三", "周四", "周五", "周六", "周日")
 
 
 def _usage_chart(by_day: list[dict], *, days: int = 30) -> list[dict]:
@@ -57,24 +73,43 @@ def _usage_chart(by_day: list[dict], *, days: int = 30) -> list[dict]:
 
     纯 CSS 画柱子用：模板只读 percent 写进 style="height: N%"，
     empty 的那天给个 is-empty 类，视觉上留一条浅浅的基线。
+
+    顺带把 failed / avg_latency / 星期几带上 —— 悬浮提示要给出页面上没有的信息
+    （哪天失败过、当天平均多慢），只重复柱高的话这个提示就没有意义。
     """
     rows = {str(item.get("day") or ""): item for item in by_day}
-    peak = max([int(item.get("calls") or 0) for item in by_day] or [0])
+    peak = max([int(item.get("tokens") or 0) for item in by_day] or [0])
+    peak_day = next((str(item.get("day")) for item in by_day
+                     if int(item.get("tokens") or 0) == peak and peak), "")
     today = now().date()
     series: list[dict] = []
     for offset in range(days - 1, -1, -1):
-        day = (today - timedelta(days=offset)).isoformat()
+        date = today - timedelta(days=offset)
+        day = date.isoformat()
         item = rows.get(day) or {}
         calls = int(item.get("calls") or 0)
         tokens = int(item.get("tokens") or 0)
-        percent = int(round(calls * 100 / peak)) if peak else 0
+        prompt = int(item.get("prompt") or 0)
+        completion = int(item.get("completion") or 0)
+        # 柱高按 token 计（比次数更能反映真实用量）；内部按输入/输出比例堆叠
+        percent = int(round(tokens * 100 / peak)) if peak else 0
+        prompt_share = int(round(prompt * 100 / tokens)) if tokens else 0
         series.append(
             {
                 "day": day,
                 "label": day[5:],  # MM-DD
+                "weekday": _WEEKDAYS[date.weekday()],
                 "calls": calls,
                 "tokens": tokens,
+                "prompt": prompt,
+                "completion": completion,
+                "failed": int(item.get("failed") or 0),
+                "avg_latency": int(item.get("avg_latency") or 0),
                 "percent": max(percent, 6) if calls else 0,
+                "prompt_pct": max(prompt_share, 0) if calls else 0,
+                # 只给峰值那根常驻数值标注：30 天里相近的数字挤在一起反而看不清，
+                # 其余靠悬停/键盘看（提示里有完整数字）
+                "is_peak": bool(peak) and day == peak_day,
                 "empty": calls == 0,
             }
         )
@@ -95,6 +130,7 @@ def _settings_context(request: Request, conn: sqlite3.Connection, **extra) -> HT
         "prompts": ai.describe_prompts(),
         "site": site_settings.describe(),
         "account": account.describe(),
+        "tidy": tidy.describe(conn),
     }
     context.update(extra)
     return render(request, "settings.html", **context)
@@ -333,6 +369,35 @@ def save_ai_prompts(
     )
 
 
+@settings_router.get("/settings/ai/usage.csv")
+def usage_csv(conn: sqlite3.Connection = Depends(db_conn)):
+    """把原始调用明细导成 CSV —— 页面上看得再细也不如自己拿 Excel 透视。"""
+    import csv as csv_mod
+    import io
+
+    rows = conn.execute(
+        "SELECT created_at, model, task, prompt_tokens, completion_tokens, total_tokens,"
+        " latency_ms, ok, error FROM ai_usage ORDER BY id DESC LIMIT 50000"
+    ).fetchall()
+    buffer = io.StringIO()
+    writer = csv_mod.writer(buffer)
+    writer.writerow(["时间", "模型", "任务", "输入token", "输出token", "合计token",
+                     "耗时ms", "状态", "错误"])
+    for row in rows:
+        writer.writerow([
+            row["created_at"], row["model"], TASK_LABELS.get(row["task"], row["task"]),
+            row["prompt_tokens"], row["completion_tokens"], row["total_tokens"],
+            row["latency_ms"], "成功" if row["ok"] else "失败", row["error"],
+        ])
+    stamp = now_iso()[:10].replace("-", "")
+    return Response(
+        # BOM：Excel 打开 UTF-8 CSV 不乱码
+        content="\ufeff" + buffer.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="inknote-usage-{stamp}.csv"'},
+    )
+
+
 @settings_router.post("/settings/ai/usage/reset")
 def reset_ai_usage(request: Request, conn: sqlite3.Connection = Depends(db_conn)):
     """清空 AI 用量统计（设置页的「重置用量统计」按钮）。"""
@@ -412,12 +477,71 @@ def ai_models(base_url: str = "", use_saved: int = 1):
         models = ai.list_models(config={**ai.current(), "base_url": base})
     except ai.AIError as exc:
         return _json({"ok": False, "models": [], "error": str(exc)}, 400)
-    return _json({"ok": True, "models": models})
+    return _json({"ok": True, "models": models, "free": ai.free_models_for(base)})
 
 
 # ---------------------------------------------------------------------------
 # AI
 # ---------------------------------------------------------------------------
+@ai_api_router.post("/agent/run")
+async def agent_run(request: Request, conn: sqlite3.Connection = Depends(db_conn)):
+    """自然语言操作笔记的 agent 循环入口。"""
+    payload = await read_json(request)
+    task = str(payload.get("task") or "").strip()
+    if not task:
+        return _json({"ok": False, "error": "任务不能为空"}, 400)
+    if len(task) > 2000:
+        return _json({"ok": False, "error": "任务太长了（上限 2000 字）"}, 400)
+    # agent 循环可能跑几分钟（最多 agent.MAX_STEPS 步、每步一次模型调用），必须丢进线程池，
+    # 否则同步阻塞事件循环——博客访客的请求也会被一起卡住
+    read_only = bool(payload.get("read_only"))
+    history = payload.get("history")
+    result = await run_in_threadpool(agent.run_agent, conn, task, read_only=read_only, history=history)
+    status = 200 if result.get("ok") else 502
+    return _json(result, status)
+
+
+@ai_api_router.get("/agent/runs")
+def agent_runs_list(conn: sqlite3.Connection = Depends(db_conn)):
+    """agent 执行历史（审计用，新→旧）。"""
+    return _json({"ok": True, "runs": agent.list_runs(conn)})
+
+
+@ai_api_router.post("/agent/runs/clear")
+async def agent_runs_clear(conn: sqlite3.Connection = Depends(db_conn)):
+    agent.clear_runs(conn)
+    return _json({"ok": True})
+
+
+@ai_api_router.post("/agent/stream")
+async def agent_stream(request: Request, conn: sqlite3.Connection = Depends(db_conn)):
+    """agent 循环的流式版本：每完成一步就推一条 SSE 事件。
+
+    事件格式（JSON per data: 行）：
+      {"type": "step", "tool": ..., "params": {...}, "summary": ...}
+      {"type": "final", "ok": true, "answer": ..., "steps": [...]}（收尾，含完整步骤）
+      {"type": "error", "error": ...}（未配置 AI 等前置失败）
+    """
+    payload = await read_json(request)
+    task = str(payload.get("task") or "").strip()
+    if not task:
+        return _json({"ok": False, "error": "任务不能为空"}, 400)
+    if len(task) > 2000:
+        return _json({"ok": False, "error": "任务太长了（上限 2000 字）"}, 400)
+    read_only = bool(payload.get("read_only"))
+    history = payload.get("history")
+
+    def gen():
+        try:
+            for event in agent.iter_agent_events(conn, task, read_only=read_only, history=history):
+                yield "data: " + json.dumps(event, ensure_ascii=False) + "\n\n"
+        except Exception as exc:  # 流断了也要给前端一个明确错误
+            logger.warning("agent 流式执行异常", exc_info=True)
+            yield "data: " + json.dumps({"type": "error", "error": str(exc)}, ensure_ascii=False) + "\n\n"
+
+    return StreamingResponse(gen(), media_type="text/event-stream")
+
+
 @ai_api_router.post("/ai/summarize")
 async def ai_summarize(request: Request, conn: sqlite3.Connection = Depends(db_conn)):
     payload = await read_json(request)

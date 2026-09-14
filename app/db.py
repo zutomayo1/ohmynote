@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS templates (
 
 # 新版本若给已有表加字段，写在这里即可（启动时自动 ALTER TABLE）
 MIGRATIONS: dict[str, dict[str, str]] = {
-    "notes": {},
+    "notes": {"is_archived": "INTEGER NOT NULL DEFAULT 0"},
     "note_versions": {},
     "templates": {},
 }

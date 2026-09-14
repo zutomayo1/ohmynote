@@ -174,23 +174,34 @@ def backup_delete(name: str):
 async def backup_import(
     request: Request,
     conn: sqlite3.Connection = Depends(db_conn),
-    file: UploadFile = File(...),
+    # 允许一次选多个文件（multiple）：字段名仍是 file，单个文件的老调用方不受影响
+    files: list[UploadFile] = File(..., alias="file"),
     dry_run: str = Form(""),
 ):
     del request
     preview = as_bool(dry_run)
-    filename = file.filename or "上传的文件"
-    raw = await file.read()
 
-    if len(raw) > settings.max_upload_bytes:
-        result = importer.result_with_error(
-            filename,
-            f"文件太大（{len(raw)} 字节），上限 {settings.max_upload_bytes} 字节",
-            source=_source_for(filename),
-            dry_run=preview,
-        )
-    else:
-        result = importer.sniff_and_import(conn, filename, raw, dry_run=preview)
+    merged: dict | None = None
+    for upload in files:
+        filename = upload.filename or "上传的文件"
+        raw = await upload.read()
+        if len(raw) > settings.max_upload_bytes:
+            result = importer.result_with_error(
+                filename,
+                f"文件太大（{len(raw)} 字节），上限 {settings.max_upload_bytes} 字节",
+                source=_source_for(filename),
+                dry_run=preview,
+            )
+        else:
+            result = importer.sniff_and_import(conn, filename, raw, dry_run=preview)
+        if merged is None:
+            merged = result
+            continue
+        for key in ("created", "updated", "skipped", "notes", "media_total",
+                    "media_added", "media_skipped", "media_renamed"):
+            merged[key] = int(merged.get(key, 0)) + int(result.get(key, 0))
+        merged["errors"] = list(merged.get("errors") or []) + list(result.get("errors") or [])
+    result = merged or importer.result_with_error("", "没有收到文件", dry_run=preview)
 
     _remember(result)
     return RedirectResponse(

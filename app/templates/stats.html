@@ -23,6 +23,19 @@
   <div class="stat"><div class="stat__value">{{ stats.today_updated }}<small>篇</small></div><div class="stat__label">今日更新</div></div>
 </section>
 
+<section class="card heatmap-card">
+  <h2 class="card__title">写作热力</h2>
+  <p class="micro">过去一年，每天写了几篇。</p>
+  <div class="heatmap" role="img" aria-label="近一年写作热力图">
+  {% for week in heatmap %}<div class="heatmap__week">{% for cell in week %}{% if cell %}<span class="hm-cell hm-l{{ cell.level }}" title="{{ cell.date }} · {{ cell.count }} 篇"></span>{% else %}<span class="hm-cell hm-blank"></span>{% endif %}{% endfor %}</div>{% endfor %}
+  </div>
+  <div class="heatmap__legend" aria-hidden="true">
+    <span>少</span>
+    <span class="hm-cell hm-l0"></span><span class="hm-cell hm-l1"></span><span class="hm-cell hm-l2"></span><span class="hm-cell hm-l3"></span><span class="hm-cell hm-l4"></span>
+    <span>多</span>
+  </div>
+</section>
+
 <div class="stats-grid">
   <section class="card">
     <h2 class="card__title">最近写下的</h2>

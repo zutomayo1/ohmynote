@@ -106,6 +106,12 @@ class Settings:
         self.host = _env("INKNOTE_HOST", "127.0.0.1")
         self.port = _env_int("INKNOTE_PORT", 8000)
         self.debug = _env_bool("INKNOTE_DEBUG", False)
+        # 夜间整理 agent 开关（默认开）：每天自动给未分类笔记补分类、把「收件箱」标签换「已归档」；
+        # 设 INKNOTE_TIDY=0 可彻底关掉，不留任何自动改动。
+        self.tidy_enabled = _env_bool("INKNOTE_TIDY", True)
+        # 接口文档（/docs、/redoc、/openapi.json）默认关闭：这是私人笔记应用，
+        # 没必要向匿名访客暴露 API 结构；要调试时设 INKNOTE_DOCS=1 再开。
+        self.docs_enabled = _env_bool("INKNOTE_DOCS", False)
 
         # --- AI（可选） ---
         # 这些是「配置文件」这一路的配置；设置页保存的值会覆盖它们（见 services/ai.py）

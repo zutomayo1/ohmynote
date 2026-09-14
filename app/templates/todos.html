@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% from '_macros.html' import icon, empty_state with context %}
+{% block page %}todos{% endblock %}
+{% block title %}今日待办 · {{ settings.site_title }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">今日待办</h1>
+    <p class="page-sub">
+      把全部笔记里的任务清单聚在一起：
+      <strong>{{ open_total }}</strong> 项待办{% if done_total %} · 已完成 {{ done_total }} 项{% endif %}
+    </p>
+  </div>
+  <div class="page-actions">
+    {% if include_done %}
+      <a class="btn btn--ghost" href="/todos">只看未完成</a>
+    {% else %}
+      <a class="btn btn--ghost" href="/todos?done=1">显示已完成</a>
+    {% endif %}
+  </div>
+</div>
+
+{% if groups %}
+  <div class="todo-groups" id="todo-groups">
+    {% for group in groups %}
+    <section class="todo-group card" data-todo-group data-note="{{ group.note_id }}">
+      <header class="todo-group__head">
+        <a class="todo-group__title" href="{{ group.url }}">{{ group.title }}</a>
+        <span class="todo-group__count">
+          <span data-open-count>{{ group.open_count }}</span> / {{ group.total }} 项待办
+        </span>
+      </header>
+      <ul class="todo-list">
+        {% for task in group.tasks %}
+        <li class="todo-item{{ ' is-done' if task.done }}">
+          <label class="todo-item__label">
+            <input type="checkbox" class="todo-item__box" data-task-note="{{ group.note_id }}"
+                   data-task-index="{{ task.index }}"{{ ' checked' if task.done }}>
+            <span class="todo-item__text">{{ task.text or '（空任务）' }}</span>
+          </label>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endfor %}
+  </div>
+{% else %}
+  {{ empty_state('没有待办事项', '在笔记里写「- [ ] 任务」就会出现在这里；写完勾掉，原笔记同步更新。', 'book', '/notes', '回到笔记') }}
+{% endif %}
+{% endblock %}

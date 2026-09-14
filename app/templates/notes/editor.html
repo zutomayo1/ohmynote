@@ -31,6 +31,8 @@
       <button class="editor__tab" type="button" role="tab" data-mode="split">分栏</button>
       <button class="editor__tab" type="button" role="tab" data-mode="preview">预览</button>
     </div>
+      <button class="editor__tab editor__focus-toggle" type="button" id="editor-focus-toggle"
+              title="专注模式（Esc 退出）" aria-pressed="false">专注</button>
     <span class="save-state" id="autosave-state" data-state="{{ 'idle' if is_new else 'saved' }}">
       {{ '尚未保存' if is_new else '已保存' }}
     </span>
@@ -40,6 +42,7 @@
     {# 隐藏 checkbox 放最前：后面的 .md-tool__rest / .md-tool__more 才能用兄弟选择器选中 #}
     <input type="checkbox" id="md-more-toggle" class="sr-only md-more__checkbox">
     <span class="md-tool__group">
+      <button class="md-tool" type="button" id="md-table-btn" title="插入表格（可视化）">▦</button>
       <button class="md-tool" type="button" data-md="bold" title="加粗（Ctrl+B）"><b>B</b></button>
       <button class="md-tool" type="button" data-md="italic" title="斜体（Ctrl+I）"><i>I</i></button>
     </span>
@@ -116,6 +119,8 @@
       <textarea class="editor__textarea" id="note-content" name="content" spellcheck="false"
                 placeholder="开始写 Markdown…&#10;&#10;## 小标题&#10;&#10;用 [[另一篇笔记]] 建立双链，用 #标签 归类。&#10;```python&#10;print('hello')&#10;```">{{ note.content }}</textarea>
     </div>
+    <div class="editor__divider" id="editor-divider" role="separator" aria-orientation="vertical"
+         aria-label="拖动调整分栏比例" title="拖动调整分栏，双击恢复默认"></div>
     <div class="editor__pane editor__pane--preview">
       <div class="editor__preview prose" id="preview" aria-live="polite"></div>
     </div>
@@ -209,6 +214,11 @@
       <button class="btn btn--ghost btn--sm" type="button" id="ai-category">
         {{ icon('inbox', 15) }} AI 推荐分类
       </button>
+      {% if note.id %}
+      <button class="btn btn--ghost btn--sm" type="submit" formaction="/notes/{{ note.id }}/save-as-template">
+        {{ icon('copy', 15) }} 存为模板
+      </button>
+      {% endif %}
       <span class="ai-hint" id="ai-hint">
         {%- if not ai_enabled -%}未配置 AI 服务（可选，见 .env.example）{%- endif -%}
       </span>
@@ -242,6 +252,26 @@
     {% endif %}
   </div>
 </form>
+
+<dialog class="table-dialog" id="table-dialog">
+  <div class="table-dialog__head">
+    <h2 class="table-dialog__title">插入表格</h2>
+    <button class="table-dialog__close" type="button" id="table-cancel" aria-label="关闭">&times;</button>
+  </div>
+  <div class="table-dialog__row">
+    <label class="field"><span class="field__label">行</span>
+      <input class="input input--sm" type="number" id="table-rows" value="3" min="1" max="12"></label>
+    <label class="field"><span class="field__label">列</span>
+      <input class="input input--sm" type="number" id="table-cols" value="3" min="1" max="8"></label>
+    <button class="btn btn--ghost btn--sm" type="button" id="table-resize">重建网格</button>
+  </div>
+  <div class="table-dialog__grid" id="table-grid"></div>
+  <p class="micro">第一行是表头；留空的单元格会插入占位空格，插入后也可以直接在正文里改。</p>
+  <div class="table-dialog__actions">
+    <button class="btn btn--primary" type="button" id="table-insert">插入表格</button>
+  </div>
+</dialog>
+
 
 <datalist id="tag-options">
   {% for name in known_tags %}<option value="{{ name }}"></option>{% endfor %}

@@ -345,3 +345,36 @@ def test_json_export_roundtrips_into_fresh_db(tmp_path, auth_client, csrf):
         with db_mod.db() as outer:
             for note in repo.find_notes_by_title(outer, title):
                 repo.purge(outer, note["id"])
+
+
+def test_backup_import_accepts_multiple_markdown_files(auth_client, csrf):
+    """一次选多个 .md：全部导入，计数合并，字段名仍是 file（老调用方不受影响）。"""
+    files = [
+        ("file", ("多文件甲.md", "---\ntitle: 多文件甲\n---\n\n甲的内容".encode("utf-8"), "text/markdown")),
+        ("file", ("多文件乙.md", "---\ntitle: 多文件乙\n---\n\n乙的内容".encode("utf-8"), "text/markdown")),
+        ("file", ("多文件丙.md", "没有 front matter，用 H1 兜底\n\n丙".encode("utf-8"), "text/markdown")),
+    ]
+    response = auth_client.post(
+        "/backup/import",
+        data={"_csrf": csrf},
+        files=files,
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    from urllib.parse import unquote_plus
+    assert "新建 3 篇" in unquote_plus(response.headers["location"])
+
+    page = auth_client.get("/backup")
+    assert "最近一次导入" in page.text
+    # 三篇都进了库（front matter 标题、文件名兜底）
+    all_titles = [item["title"] for item in _all_titles(auth_client)]
+    for title in ("多文件甲", "多文件乙", "多文件丙"):
+        assert any(title in t for t in all_titles), title
+
+
+def _all_titles(auth_client):
+    """从导出 JSON 里拿全部标题，避免依赖列表页分页。"""
+    import json
+    data = json.loads(auth_client.get("/export/json").text)
+    notes = data["notes"] if isinstance(data, dict) else data
+    return [{"title": n.get("title", "")} for n in notes]

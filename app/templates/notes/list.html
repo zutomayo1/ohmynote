@@ -13,10 +13,16 @@
       {%- if stats.drafts %} · 草稿 {{ stats.drafts | number }} 篇{% endif %}
       {%- if stats.public_count %} · 已公开 {{ stats.public_count | number }} 篇{% endif %}
       {%- if stats.trash %} · 回收站 {{ stats.trash }} 篇{% endif %}
+      {%- if only_archived %} · 正在查看已归档{% endif %}
     </p>
   </div>
   <div class="page-actions">
-    <a class="btn btn--ghost" href="/export/zip" title="把全部笔记导出为 Markdown 压缩包">{{ icon('download', 16) }} 导出</a>
+    {% if only_archived %}
+    <a class="btn btn--ghost" href="/notes">{{ icon('inbox', 16) }} 返回全部笔记</a>
+    {% else %}
+    <a class="btn btn--ghost" href="/notes?archived=1" title="查看已归档的笔记">{{ icon('archive', 16) }} 已归档</a>
+    {% endif %}
+        <a class="btn btn--ghost" href="/export/zip" title="把全部笔记导出为 Markdown 压缩包">{{ icon('download', 16) }} 导出</a>
     <a class="btn btn--primary" href="/notes/new">{{ icon('plus', 16) }} 新建笔记</a>
   </div>
 </div>
@@ -39,6 +45,19 @@
     <div class="stat__label">标签数</div>
   </div>
 </section>
+
+{% if onthisday %}
+<section class="onthisday" aria-label="那年今日">
+  <span class="onthisday__icon">📅</span>
+  <div class="onthisday__body">
+    <strong>那年今日</strong>
+    {% for note in onthisday %}
+      <a href="{{ note.url }}">{{ note.title }}</a>{% if not loop.last %}、{% endif %}
+    {% endfor %}
+    写于 {{ onthisday[0].created_at[:4] }} 年前的今天
+  </div>
+</section>
+{% endif %}
 
 <form class="toolbar" method="get" action="/notes" role="search">
   <div class="toolbar__row">
@@ -141,12 +160,20 @@
         <option value="unpin">取消置顶</option>
         <option value="star">加星标</option>
         <option value="unstar">取消星标</option>
+        <option value="archive">归档</option>
+        <option value="unarchive">取消归档</option>
+        <option value="set_category">设为分类</option>
+        <option value="backfill_summary">补摘要</option>
         <option value="trash">移入回收站</option>
       </select>
     </label>
     <label class="field batch-bar__field batch-bar__tag" data-batch-tag>
       <span class="sr-only">标签名</span>
       <input class="input" type="text" name="action_tag" placeholder="标签名，如 python" data-batch-tag-input>
+    </label>
+    <label class="field batch-bar__field batch-bar__tag is-hidden" data-batch-category>
+      <span class="sr-only">分类名</span>
+      <input class="input" type="text" name="action_category" placeholder="分类名，如 技术" data-batch-category-input>
     </label>
     <button class="btn btn--primary btn--sm" type="submit">执行</button>
   </form>
@@ -158,7 +185,9 @@
   </div>
   {{ pagination(request, page, pages) }}
 {% else %}
-  {% if q or tag or status or category or fav %}
+  {% if only_archived %}
+    {{ empty_state('还没有归档的笔记', '在笔记详情页点「归档」，它就会离开默认列表、安静地待在这里。', 'book', '/notes', '返回全部笔记') }}
+  {% elif q or tag or status or category or fav %}
     {{ empty_state('没有匹配的笔记', '换个关键词或清空筛选条件再试一次。', 'search', '/notes', '查看全部笔记') }}
   {% else %}
     {{ empty_state('还没有笔记', '写第一篇文章吧，支持 Markdown、双链、标签与全文搜索。', 'book', '/notes/new', '写第一篇笔记') }}
