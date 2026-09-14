@@ -455,7 +455,7 @@
                 <td>{{ item.prompt_tokens | number }}</td>
                 <td>{{ item.completion_tokens | number }}</td>
                 <td>{% if item.latency_ms %}{{ (item.latency_ms / 1000) | round(1) }}s{% else %}—{% endif %}</td>
-                <td>{% if not item.ok %}<span class="ai-usage-state is-fail" title="{{ item.error }}">失败</span>{% endif %}</td>
+                <td>{% if not item.ok %}<span class="ai-usage-state is-fail" title="{{ item.error }}" data-tip-title="失败原因" data-tip-note="{{ item.error }}">失败</span>{% endif %}</td>
               </tr>
             {% endfor %}
           </tbody>
@@ -895,5 +895,4 @@
 
 {% block scripts %}
 <script src="/static/js/settings.js?v={{ asset_v }}" defer></script>
-<script src="/static/js/chart-tip.js?v={{ asset_v }}" defer></script>
 {% endblock %}

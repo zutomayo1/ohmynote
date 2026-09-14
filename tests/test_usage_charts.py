@@ -224,3 +224,38 @@ def test_chart_tip_css_covers_referenced_colors():
         assert name in css, f"{name} 缺样式"
     # 与柱子的两段共用同一套色（都是 brand 的混色）
     assert ".ai-chart__seg--prompt" in css and ".ai-chart__seg--completion" in css
+
+
+# ---------------------------------------------------------------------------
+# 悬浮面板统一（chart-tip 全站化）
+# ---------------------------------------------------------------------------
+def test_chart_tip_is_loaded_once_globally():
+    """chart-tip.js 挂在 base.html 全站加载；任何模板都不许再局部引第二份
+    （两份脚本会各建一个浮层，悬停时出双份提示）。"""
+    from pathlib import Path
+
+    templates = Path(__file__).resolve().parent.parent / "app/templates"
+    hits = []
+    for path in templates.rglob("*.html"):
+        content = path.read_text(encoding="utf-8")
+        n = content.count("static/js/chart-tip.js")
+        if n:
+            hits.append((path.name, n))
+    assert hits == [("base.html", 1)], hits
+
+
+def test_heatmap_cells_carry_tip_attrs(auth_client):
+    """/stats 的热力图格子要带 data-tip（title 同时保留作无 JS 兜底）。"""
+    page = auth_client.get("/stats")
+    assert page.status_code == 200
+    assert 'data-tip-title="' in page.text
+    assert "data-tip-lines=" in page.text
+    assert 'title="' in page.text            # 无 JS 兜底仍在
+
+
+def test_usage_failure_badge_carry_tip_note(auth_client):
+    """设置页明细表的「失败」标记走自绘浮层（错误原因进备注块）。"""
+    page = auth_client.get("/settings")
+    assert page.status_code == 200
+    assert 'data-tip-title="失败原因"' in page.text
+    assert 'data-tip-note="' in page.text

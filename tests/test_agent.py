@@ -612,3 +612,18 @@ def test_agent_usage_is_attributed_to_agent(db_conn, monkeypatch):
     monkeypatch.setattr(ai, "chat", fake_chat)
     agent_mod.run_agent(db_conn, "随便做点什么")
     assert seen.get("task") == "agent"
+
+
+def test_agent_page_header_has_no_ask_button(auth_client):
+    """/agent 右上角的「问笔记」按钮是冗余入口（导航里已有），删掉后不该回来。"""
+    page = auth_client.get("/agent")
+    assert page.status_code == 200
+    head = page.text.split("</h1>", 1)[1].split("agent-layout", 1)[0]
+    assert "问笔记" not in head, "页头不应再有问笔记按钮"
+
+
+def test_agent_history_section_is_collapsible(auth_client):
+    """本轮会话区块要能收起（details + summary + 计数徽标）。"""
+    page = auth_client.get("/agent")
+    assert '<details class="agent-history" id="agent-history" hidden>' in page.text
+    assert "agent-history-count" in page.text

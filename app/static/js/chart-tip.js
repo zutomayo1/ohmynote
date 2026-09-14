@@ -1,12 +1,17 @@
 /**
- * 图表悬浮提示：把浏览器原生的 title 小黑条换成站内自绘的浮层。
+ * 站内悬浮提示（全站组件）：把浏览器原生的 title 小黑条换成自绘浮层。
  *
  * 为什么不用 title：它由浏览器绘制（系统字体 / 位置固定 / 延迟约 1 秒 / 无法做排版），
  * 和站点配色对不上，也没法显示「输入输出占比」这类结构化信息。而且 title 在移动端
  * 基本不触发（长按才有反应），键盘用户更是完全看不到。
  *
- * 数据从元素上的 data-tip-* 属性读，所以模板仍然可以只渲染一份数据。
- * 原生 title 属性保留着 —— 没有 JS 的环境照旧能看到基础信息，这是渐进增强。
+ * 数据从元素上的 data-tip-* 属性读，所以模板仍然可以只渲染一份数据：
+ *   data-tip-title      标题（必填）
+ *   data-tip-calls/tokens/prompt/completion/failed/latency
+ *                       用量图表的结构化行（缺口按需显示，0 值不显示）
+ *   data-tip-lines      JSON：[["标签","值"], …] —— 通用键值行（历史任务、热力图等）
+ *   data-tip-note       备注块（多行文本，pre-wrap：步骤链、错误原因这类长内容）
+ * SSR 渲染的元素原生 title 保留 —— 没有 JS 的环境照旧能看到基础信息，这是渐进增强。
  *
  * 键盘：带 data-tip-nav 的容器 tabindex=0，方向键在柱子之间移动并显示提示。
  * 悬浮提示自身 pointer-events: none，不会挡住鼠标。
@@ -27,6 +32,7 @@
   var headEl = null;
   var rowsEl = null;
   var splitEl = null;
+  var noteEl = null;
   var anchor = null;
   var pinned = false;   // 键盘选中的那根柱子（键盘导航时提示不随鼠标移开而消失）
 
@@ -61,6 +67,9 @@
     tip.appendChild(headEl);
     tip.appendChild(rowsEl);
     tip.appendChild(splitEl);
+    noteEl = document.createElement('div');
+    noteEl.className = 'chart-tip__note';
+    tip.appendChild(noteEl);
     document.body.appendChild(tip);
   }
 
@@ -83,6 +92,13 @@
   function readInfo(el) {
     var data = el.dataset || {};
     if (!data.tipTitle) { return null; }
+    var lines = null;
+    if (data.tipLines) {
+      try {
+        var parsed = JSON.parse(data.tipLines);
+        if (parsed instanceof Array && parsed.length) { lines = parsed; }
+      } catch (err) { /* 坏数据就当没有 */ }
+    }
     return {
       title: data.tipTitle,
       calls: toNumber(data.tipCalls),
@@ -90,7 +106,9 @@
       prompt: toNumber(data.tipPrompt),
       completion: toNumber(data.tipCompletion),
       failed: toNumber(data.tipFailed),
-      latency: toNumber(data.tipLatency)
+      latency: toNumber(data.tipLatency),
+      lines: lines,
+      note: data.tipNote || ''
     };
   }
 
@@ -108,6 +126,11 @@
     var latency = seconds(info.latency);
     if (latency) { addRow('平均耗时', latency, { warn: false }); }
 
+    // 通用键值行（历史任务 / 热力图这类非用量场景）
+    (info.lines || []).forEach(function (pair) {
+      if (pair && pair.length >= 2) { addRow(String(pair[0]), String(pair[1]), {}); }
+    });
+
     if (info.tokens) {
       // 输入 / 输出 占比条：和柱子里那两段同色，一眼对应上
       var promptPct = Math.min(100, Math.round(info.prompt * 100 / info.tokens));
@@ -123,7 +146,12 @@
       splitEl.style.display = 'none';
     }
 
-    if (!info.calls && !info.tokens) {
+    // 备注块（步骤链 / 错误原因这类长内容）
+    noteEl.textContent = info.note || '';
+    noteEl.hidden = !info.note;
+
+    var usageEmpty = !info.calls && !info.tokens;
+    if (usageEmpty && !(info.lines || []).length && !info.note) {
       var blank = document.createElement('div');
       blank.className = 'chart-tip__empty';
       blank.textContent = '这段时间没有调用';
@@ -153,6 +181,7 @@
   function show(el, keep) {
     var info = readInfo(el);
     if (!info) { return; }
+    if (!tip) { build(); }   // 动态渲染的元素（如助手的历史任务）出现时才建浮层
     render(info);
     anchor = el;
     pinned = !!keep;
@@ -242,8 +271,8 @@
   }
 
   function init() {
-    if (!document.querySelector('[data-tip-title]')) { return; }
-    build();
+    // 全站组件：监听常驻，浮层在第一次 show() 时才构建 ——
+    // 像「历史任务」这种 JS 动态渲染的条目，DOMContentLoaded 时还不存在
     document.addEventListener('pointerover', onPointerOver, true);
     document.addEventListener('pointerout', onPointerOut, true);
     window.addEventListener('scroll', reposition, true);

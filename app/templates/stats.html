@@ -30,7 +30,7 @@
     {% if heatmap_written < 10 %}<span class="muted">刚开始写——坚持几天，这里的格子会越来越深。</span>{% endif %}
   </p>
   <div class="heatmap" role="img" aria-label="近一年写作热力图">
-  {% for week in heatmap %}<div class="heatmap__week">{% for cell in week %}{% if cell %}<span class="hm-cell hm-l{{ cell.level }}" title="{{ cell.date }} · {{ cell.count }} 篇"></span>{% else %}<span class="hm-cell hm-blank"></span>{% endif %}{% endfor %}</div>{% endfor %}
+  {% for week in heatmap %}<div class="heatmap__week">{% for cell in week %}{% if cell %}<span class="hm-cell hm-l{{ cell.level }}" title="{{ cell.date }} · {{ cell.count }} 篇" data-tip-title="{{ cell.date }}" data-tip-lines='[["写作", "{{ cell.count }} 篇"]]'></span>{% else %}<span class="hm-cell hm-blank"></span>{% endif %}{% endfor %}</div>{% endfor %}
   </div>
   <div class="heatmap__legend" aria-hidden="true">
     <span>少</span>

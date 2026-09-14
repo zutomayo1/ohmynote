@@ -4783,8 +4783,7 @@ body { transition: background-color .12s ease, color .12s ease; }
 }
 
 /* ===== 补丁：助手会话记忆（2026-09-13） ===== */
-.agent-history { margin-bottom: 22px; }
-.agent-history__head { display: flex; align-items: center; justify-content: space-between; }
+.agent-history { margin-bottom: 0; }
 .agent-history__list { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
 .agent-history__item {
   padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm);
@@ -4803,7 +4802,7 @@ body { transition: background-color .12s ease, color .12s ease; }
 
 /* 历史任务：默认折叠（details），展开后一行一条 —— 完整步骤链在 title 里悬停可看。
    原来 8 条记录整条工具链平铺占半屏，是这页「乱」的最大来源 */
-.agent-runs { margin-bottom: 22px; }
+.agent-runs { margin-bottom: 0; }
 
 .agent-runs__summary {
   display: flex; align-items: center; gap: 10px; cursor: pointer;
@@ -5914,6 +5913,14 @@ body.split-dragging .editor__textarea { pointer-events: none; }
 .chart-tip__seg--completion { background: var(--brand); }
 
 .chart-tip__empty { color: var(--ink-3); }
+
+/* 备注块：步骤链 / 错误原因这类多行长文本 */
+.chart-tip__note {
+  margin-top: 8px; padding-top: 7px; border-top: 1px dashed var(--line);
+  color: var(--ink-2); font-size: 12px; line-height: 1.6;
+  white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.chart-tip__note:empty { display: none; }
 
 /* ---------- 进场动画（只在允许动效时启用） ---------- */
 

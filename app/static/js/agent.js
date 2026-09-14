@@ -33,6 +33,8 @@
     function renderHistory() {
       if (!historySection || !historyList) { return; }
       historySection.hidden = !history.length;
+      var count = document.getElementById('agent-history-count');
+      if (count) { count.textContent = history.length ? String(history.length) : ''; }
       historyList.textContent = '';
       history.forEach(function (turn) {
         var li = document.createElement('li');
@@ -50,15 +52,19 @@
     }
 
     function pushHistory(taskText, answerText) {
+      var wasEmpty = !history.length;
       history.push({ task: taskText, answer: answerText });
       if (history.length > 5) { history = history.slice(-5); }
       try { window.localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); }
       catch (err) { /* 无痕模式就算了 */ }
       renderHistory();
+      // 第一轮进来时自动展开一次，让用户知道这东西在记；之后由用户自己收放
+      if (wasEmpty) { historySection.open = true; }
     }
 
     if (historyClear) {
-      historyClear.addEventListener('click', function () {
+      historyClear.addEventListener('click', function (e) {
+        e.preventDefault(); e.stopPropagation();  // 在 summary 里，别把折叠面板一起点了
         history = [];
         window.localStorage.removeItem(HISTORY_KEY);
         renderHistory();
@@ -80,11 +86,17 @@
       runs.forEach(function (run) {
         var li = document.createElement('li');
         li.className = 'agent-runs__item' + (run.ok ? '' : ' agent-runs__item--fail');
-        // 完整步骤链放进 title（悬停可看），行内只留单行摘要 —— 原来整条工具链
-        // 平铺在页面上，8 条记录就占了半屏
-        var stepBits = (run.steps || []).map(function (s) { return s.summary || s.tool; }).join(' → ');
-        li.title = (run.ok ? '成功' : '失败：' + (run.error || '未知')) +
-                   (stepBits ? '\n步骤：' + stepBits : '');
+        // 详情走全站自绘悬浮面板（chart-tip.js）；列表本身是 JS 渲染的，
+        // 没有「无 JS 兜底」一说，所以不留原生 title（会和浮层叠出双份）
+        var stepBits = (run.steps || []).map(function (s) { return s.summary || s.tool; })
+          .join('\n');
+        li.setAttribute('data-tip-title',
+          (run.read_only ? '[只读] ' : '') + run.task);
+        li.setAttribute('data-tip-lines', JSON.stringify([
+          ['时间', String(run.at || '').slice(0, 16).replace('T', ' ')],
+          ['结果', run.ok ? '成功' : '失败：' + (run.error || '未知')]
+        ]));
+        if (stepBits) { li.setAttribute('data-tip-note', '步骤：\n' + stepBits); }
         var at = document.createElement('time');
         at.className = 'agent-runs__at';
         at.textContent = String(run.at || '').slice(5, 16).replace('T', ' ');
