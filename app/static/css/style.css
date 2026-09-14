@@ -4759,13 +4759,17 @@ body { transition: background-color .12s ease, color .12s ease; }
   white-space: pre-wrap; line-height: 1.7; }
 .agent-answer--error { border-left-color: var(--danger); }
 
-.agent-examples__list { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+/* 紧凑芯片流：原来每个示例独占一整行，7 个示例 400px 高、右侧一半全空 */
+.agent-examples { margin-bottom: 22px; }
+.agent-examples__list {
+  margin: 0; padding: 0; list-style: none;
+  display: flex; flex-wrap: wrap; gap: 8px; }
 .agent-example {
-  width: 100%; text-align: left; padding: 9px 12px;
-  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  border: 1px solid var(--line); border-radius: var(--radius-pill);
   background: var(--surface); color: var(--ink-2); cursor: pointer;
-  font-size: 13.5px; }
-.agent-example:hover { border-color: var(--line-strong); color: var(--ink); }
+  font-size: 13px; transition: border-color .12s ease, color .12s ease; }
+.agent-example:hover { border-color: var(--brand); color: var(--brand); }
 
 /* ===== 补丁：agent 执行进度（2026-09-13） ===== */
 .agent-steps__pending {
@@ -4799,16 +4803,48 @@ body { transition: background-color .12s ease, color .12s ease; }
   font-size: 12.5px; text-decoration: none; }
 .agent-notes__chip:hover { border-color: var(--brand); color: var(--brand); }
 
+/* 历史任务：默认折叠（details），展开后一行一条 —— 完整步骤链在 title 里悬停可看。
+   原来 8 条记录整条工具链平铺占半屏，是这页「乱」的最大来源 */
 .agent-runs { margin-bottom: 22px; }
-.agent-runs__list { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+
+.agent-runs__summary {
+  display: flex; align-items: center; gap: 10px; cursor: pointer;
+  list-style: none; padding: 4px 0; }
+.agent-runs__summary::-webkit-details-marker { display: none; }
+.agent-runs__summary::marker { content: ""; }
+.agent-runs__summary .section-title { margin: 0; }
+.agent-runs__summary:hover .section-title { color: var(--brand); }
+
+/* 折叠状态提示条数；展开后照旧显示总数 */
+.agent-runs__count {
+  min-width: 20px; padding: 0 7px; border-radius: var(--radius-pill);
+  background: var(--surface-2); color: var(--ink-3);
+  font-family: var(--font-sans); font-size: 12px; line-height: 18px;
+  text-align: center; font-variant-numeric: tabular-nums; }
+.agent-runs__count:empty { display: none; }
+
+.agent-runs__summary .btn { margin-left: auto; }
+
+.agent-runs__list { margin: 10px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+
 .agent-runs__item {
-  padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm);
-  background: var(--surface); }
-.agent-runs__item--fail { border-color: var(--danger); }
-.agent-runs__head { font-size: 13.5px; color: var(--ink); }
-.agent-runs__sub {
-  margin-top: 3px; font-size: 12.5px; color: var(--ink-3);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  display: flex; align-items: baseline; gap: 10px; min-width: 0;
+  padding: 6px 10px; border-radius: var(--radius-sm);
+  transition: background-color .12s ease; }
+.agent-runs__item:hover { background: var(--bg-soft); }
+.agent-runs__item--fail .agent-runs__head { color: var(--danger); }
+
+.agent-runs__at {
+  flex: none; color: var(--ink-3);
+  font-family: var(--font-sans); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+.agent-runs__head {
+  flex: 1 1 auto; min-width: 0; overflow: hidden;
+  font-size: 13.5px; color: var(--ink);
+  white-space: nowrap; text-overflow: ellipsis; }
+
+.agent-runs__mark { flex: none; font-size: 12.5px; color: var(--accent); }
+.agent-runs__item--fail .agent-runs__mark { color: var(--danger); }
 
 /* ===== 补丁：模板变量与默认模板（2026-09-13） ===== */
 .template-card__default { display: inline; }
@@ -6011,3 +6047,29 @@ body.split-dragging .editor__textarea { pointer-events: none; }
   gap: 18px; align-items: start; margin-top: 26px; }
 
 .post-after .rail-block { margin: 0; }
+
+/* ===== 补丁：笔记助手界面整理（2026-09-14） ===== */
+
+/* 步骤行：原来 agent-steps__tool 是没有任何样式的裸 span（死类），
+   和参数 code 挤在一起分不出主次 */
+.agent-steps__tool {
+  display: block; margin-bottom: 3px;
+  font-family: var(--font-sans); font-size: 13.5px; font-weight: 600;
+  color: var(--ink); }
+
+/* 问笔记流式期间的「打字中」指示（原来 is-typing 也是死类，从不生效） */
+.ask-bubble.is-typing { min-height: 52px; }
+
+.ask-bubble.is-typing .ask-bubble__role::after {
+  content: "···"; display: inline-block; margin-left: 8px;
+  color: var(--accent); letter-spacing: 2px;
+  animation: ask-typing 1.2s ease-in-out infinite; }
+
+@keyframes ask-typing {
+  0%, 100% { opacity: .25; }
+  50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ask-bubble.is-typing .ask-bubble__role::after { animation: none; }
+}

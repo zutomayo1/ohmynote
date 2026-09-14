@@ -74,20 +74,29 @@
     function renderRuns(runs) {
       if (!runsSection || !runsList) { return; }
       runsSection.hidden = !runs.length;
+      var count = document.getElementById('agent-runs-count');
+      if (count) { count.textContent = runs.length ? String(runs.length) : ''; }
       runsList.textContent = '';
       runs.forEach(function (run) {
         var li = document.createElement('li');
         li.className = 'agent-runs__item' + (run.ok ? '' : ' agent-runs__item--fail');
-        var head = document.createElement('div');
-        head.className = 'agent-runs__head';
-        var at = String(run.at || '').slice(0, 16).replace('T', ' ');
-        head.textContent = (at || '时间未知') + ' · ' + (run.read_only ? '[只读] ' : '') + run.task;
-        var sub = document.createElement('div');
-        sub.className = 'agent-runs__sub';
+        // 完整步骤链放进 title（悬停可看），行内只留单行摘要 —— 原来整条工具链
+        // 平铺在页面上，8 条记录就占了半屏
         var stepBits = (run.steps || []).map(function (s) { return s.summary || s.tool; }).join(' → ');
-        sub.textContent = (run.ok ? '✓ ' : '✗ ') + (stepBits || run.error || '无步骤');
-        li.appendChild(head);
-        li.appendChild(sub);
+        li.title = (run.ok ? '成功' : '失败：' + (run.error || '未知')) +
+                   (stepBits ? '\n步骤：' + stepBits : '');
+        var at = document.createElement('time');
+        at.className = 'agent-runs__at';
+        at.textContent = String(run.at || '').slice(5, 16).replace('T', ' ');
+        var task = document.createElement('span');
+        task.className = 'agent-runs__head';
+        task.textContent = (run.read_only ? '[只读] ' : '') + run.task;
+        var mark = document.createElement('span');
+        mark.className = 'agent-runs__mark';
+        mark.textContent = run.ok ? '✓' : '✗';
+        li.appendChild(at);
+        li.appendChild(task);
+        li.appendChild(mark);
         runsList.appendChild(li);
       });
     }
@@ -101,7 +110,8 @@
     loadRuns();
 
     if (runsClear) {
-      runsClear.addEventListener('click', function () {
+      runsClear.addEventListener('click', function (e) {
+        e.preventDefault(); e.stopPropagation();  // 在 summary 里，别把折叠面板一起点了
         var csrfMeta = document.querySelector('meta[name="csrf-token"]');
         fetch('/api/agent/runs/clear', {
           method: 'POST',

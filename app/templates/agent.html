@@ -37,6 +37,19 @@
     </div>
   </form>
 
+  <section class="agent-examples">
+    <h2 class="section-title">可以这样指挥它</h2>
+    <ul class="agent-examples__list">
+      <li><button type="button" class="agent-example" data-task="搜一下标题或正文里提到 Docker 的笔记，把它们都加上「部署」标签">给提到 Docker 的笔记加「部署」标签</button></li>
+      <li><button type="button" class="agent-example" data-task="帮我总结《空白笔记》，总结好之后续写在这篇笔记的正文后面">总结一篇并写回笔记</button></li>
+      <li><button type="button" class="agent-example" data-task="把最近七天内更新过的笔记按分类整理一下，列成清单给我看">这周都写了什么</button></li>
+      <li><button type="button" class="agent-example" data-task="列出所有标签，把那些只用过一次、而且只有一两个字的标签从笔记上删掉">清理没用过几次的标签</button></li>
+      <li><button type="button" class="agent-example" data-task="把最近三篇笔记的标题和摘要列给我看看">看看最近写了什么</button></li>
+      <li><button type="button" class="agent-example" data-task="新建一篇《读书清单》，正文列出我想读的三本书，打上「阅读」标签">新建一篇读书清单</button></li>
+      <li><button type="button" class="agent-example" data-task="找到《部署清单》这篇笔记，把它公开到博客，slug 用 deploy-checklist">把部署清单发布到博客</button></li>
+    </ul>
+  </section>
+
   <section class="agent-history" id="agent-history" hidden>
     <div class="agent-history__head">
       <h2 class="section-title">本轮会话</h2>
@@ -53,27 +66,16 @@
     <div class="agent-notes" id="agent-notes" hidden></div>
   </section>
 
-  <section class="agent-runs" id="agent-runs" hidden>
-    <div class="agent-history__head">
-      <h2 class="section-title">历史任务</h2>
+  <details class="agent-runs" id="agent-runs" hidden>
+    <summary class="agent-runs__summary">
+      <span class="section-title">历史任务</span>
+      <span class="agent-runs__count" id="agent-runs-count"></span>
       <button class="btn btn--ghost btn--sm" type="button" id="agent-runs-clear">清空记录</button>
-    </div>
+    </summary>
     <ul class="agent-runs__list" id="agent-runs-list"></ul>
-    <p class="micro">最近 {{ 20 }} 次执行都记在这里（审计用），换浏览器也不会丢。</p>
-  </section>
+    <p class="micro">最近 20 次执行都记在这里（审计用），换浏览器也不会丢；鼠标悬停可看完整步骤。</p>
+  </details>
 
-  <section class="agent-examples">
-    <h2 class="section-title">可以这样指挥它</h2>
-    <ul class="agent-examples__list">
-      <li><button type="button" class="agent-example" data-task="搜一下标题或正文里提到 Docker 的笔记，把它们都加上「部署」标签">给提到 Docker 的笔记加「部署」标签</button></li>
-      <li><button type="button" class="agent-example" data-task="帮我总结《空白笔记》，总结好之后续写在这篇笔记的正文后面">总结一篇并写回笔记</button></li>
-      <li><button type="button" class="agent-example" data-task="把最近七天内更新过的笔记按分类整理一下，列成清单给我看">这周都写了什么</button></li>
-      <li><button type="button" class="agent-example" data-task="列出所有标签，把那些只用过一次、而且只有一两个字的标签从笔记上删掉">清理没用过几次的标签</button></li>
-      <li><button type="button" class="agent-example" data-task="把最近三篇笔记的标题和摘要列给我看看">看看最近写了什么</button></li>
-      <li><button type="button" class="agent-example" data-task="新建一篇《读书清单》，正文列出我想读的三本书，打上「阅读」标签">新建一篇读书清单</button></li>
-      <li><button type="button" class="agent-example" data-task="找到《部署清单》这篇笔记，把它公开到博客，slug 用 deploy-checklist">把部署清单发布到博客</button></li>
-    </ul>
-  </section>
 </div>
 {% endblock %}
 

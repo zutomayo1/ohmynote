@@ -17,10 +17,9 @@ CSS = (ROOT / "app/static/css/style.css").read_text(encoding="utf-8")
 # 已知的「死类」：JS 建了，但样式表里没有对应规则。
 # 不在这里动样式是因为那会改到别的页面（问笔记 / 笔记助手）的观感，
 # 等确认后再补样式或删类名。**这个列表只许变短，不许加长。**
-KNOWN_UNSTYLED = {
-    "agent-steps__tool",  # agent.js 的步骤标题行，现在是无样式的裸 span
-    "is-typing",          # ask.js 流式期间挂在气泡上，样式表里没有规则 → 实际不生效
-}
+# 曾在这里的两个遗留死类已补上样式（2026-09-14）：agent-steps__tool、is-typing。
+# 白名单保持为空 —— 再扫出没样式的动态类直接报错。
+KNOWN_UNSTYLED: set[str] = set()
 
 
 def _classes_created_by(js_path: Path) -> set[str]:

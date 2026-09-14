@@ -34,6 +34,9 @@ ALLOWED_DUPLICATES = {
     # 视觉上目前是对的，但同类「一半来自旧规则」正是导航下划线出问题的方式。
     # 要清理得先看一眼待办清单的对勾，所以先留在这里、只记录不改。
     ".task-list-indicator::after": "待核查：两段画的是不同的对勾，叠加后恰好正确",
+    # 第二处是 prefers-reduced-motion: reduce 里的 animation: none ——
+    # 故意的减弱动效覆盖（与 .select-combo__chevron 同一模式）
+    ".ask-bubble.is-typing .ask-bubble__role::after": "减弱动效覆盖：reduce 下关掉打字动画",
 }
 
 
