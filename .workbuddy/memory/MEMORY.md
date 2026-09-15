@@ -2,11 +2,11 @@
 
 ## 跑测试 / 验收
 - bash PATH 坏：先 `export PATH="/usr/bin:/bin:$PATH"`；PowerShell 拿不到 stdout，优先 bash。
-- 全量：`./.venv/Scripts/python.exe -m pytest tests -q -n 8 --dist loadfile --junitxml=.scratch/junit.xml`（约 20s；loadfile 不能省；沙箱吞退出码，权威解析 junitxml；临时目录别指项目内）。
+- 全量：`./.venv/Scripts/python.exe -m pytest tests -q -n 8 --dist loadfile --junitxml=.scratch/junit.xml`（loadfile 不能省；沙箱吞退出码，权威解析 junitxml；临时目录别指项目内）。
 - 三件套：全量测试 + `scripts/audit_css.py` + `scripts/check.py --quick`。
 
-## 版本管理（.git 丢过两次：09-14 / 09-15）
-- 提交后保持工作区干净（`.scratch/`、`data/`、`.venv/` 已 gitignore）；无远端。
+## 版本管理（.git 丢过两次）
+- 提交后保持工作区干净（`.scratch/`、`data/`、`.venv/` 已 gitignore）。
 - 每轮提交后 `git bundle create C:/repo/inknote-<日期>.bundle --all`；批量操作前 `git log -1` 确认。
 - 恢复：`git init -b main` → `git fetch <bundle> "+refs/heads/main:refs/remotes/recover/main"` → `git reset --mixed refs/remotes/recover/main`；工作区不丢。已配每日自动备份。
 - 多 agent 并行：按文件所有权分波（样式走 `.scratch/css-patch-*.css`，agent 不碰 style.css），主 agent 合并 + 接线；e2e 端口一人一个；合并脚本别用长 assert 链（中断会静默跳过后半段）。
@@ -18,7 +18,7 @@
 
 ## 测试写法（共享 session 库）
 - 会话级 fixture 不能依赖函数级（`auth_client`/`csrf` 是函数作用域）。
-- 禁止断言全局聚合：专属前缀命名 + 前后增量，或按主键定位（别用 `groups[0]`）。
+- 禁止断言全局聚合：专属前缀 + 前后增量，或按主键定位。
 - 模板分母兜底 `or 1`（ZeroDivisionError 曾连红十几个用例）。
 
 ## AI 用量记账
