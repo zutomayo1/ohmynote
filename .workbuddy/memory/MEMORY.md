@@ -1,4 +1,4 @@
-# 墨痕 InkNote · 项目约定（精简；详见 memory/YYYY-MM-DD.md）
+# 墨痕 InkNote · 项目约定（详见 memory/YYYY-MM-DD.md）
 
 ## 跑测试 / 验收
 - bash PATH 坏：先 `export PATH="/usr/bin:/bin:$PATH"`；PowerShell 拿不到 stdout，优先 bash。
@@ -16,7 +16,7 @@
 
 ## 测试写法（共享 session 库）
 - 会话级 fixture 不能依赖函数级（`auth_client`/`csrf` 是函数作用域）。
-- 禁止断言全局聚合：专属前缀 + 前后增量，或按主键定位。
+- 禁止断言全局聚合：专属前缀+前后增量，或按主键定位。
 - 模板分母兜底 `or 1`（ZeroDivisionError 曾连红十几个用例）。
 
 ## AI 用量记账
@@ -25,7 +25,7 @@
 ## 前端守卫与惯例
 - 双守卫：audit_css.py（模板）+ test_js_class_guard.py（JS 类名，白名单只许变短）。
 - CSS 按轮次追加：加规则前先 grep 同选择器（优先级坑）；删补丁节用双锚点，绝不能 `src[:start]`（曾连带删 63 行）；动画填充用 `backwards` 不用 `both`。
-- `.is-empty` 带 pointer-events:none，加到可交互元素会静默失效。图标按钮必须 title + aria-label；新页面必须有导航入口；动作区控件同高（36/30/44）。
+- `.is-empty` 带 pointer-events:none，加到可交互元素会静默失效。图标按钮必须 title + aria-label；新页面必须有导航入口。
 - 接口冻结在 `docs/roundN-*.md`；类名/id 以 `docs/frontend-contract.md` 为准。
 
 ## 自绘下拉（select.js）
@@ -46,7 +46,7 @@
 ## 图形/布局类改动 + e2e
 - 零依赖 ⇒ 借算法不引库。Louvain 类局部移动算法：候选必须含「原状态」且严格更优才移动，否则对称图震荡不收敛（挂死）；指针拖拽别用 setPointerCapture（click 会跑到 `<svg>`）；力布局拖完要短时「钉住」节点，**钉住在所有力里都要豁免——碰撞也会推走（输入设备压过物理模拟）**。
 - 导出/截图：先内联 getComputedStyle（样式表带不走），且**先取目标节点再内联**（内联会删 class）；导出整图摘掉视图 transform、按 getBBox 裁边、铺背景色；e2e 用 expect_download 校验真文件头。
-- e2e：只统计本测试造的记录，期望值**从 payload 算**（写死数字会被用户新数据打红）；读数前「等模拟停稳」；观感/主题用 getComputedStyle 量化，别靠截图判断。
+- e2e：只统计本测试造的记录，期望值**从 payload 算**（写死数字会被用户新数据打红）；读数前「等模拟停稳」；观感/主题用 getComputedStyle 量化。**测试与运行时都不得依赖 `.scratch/`（可清理目录）**。
 
 ## 界面问题排查
 - 真实数据复现：复制 `data/inknote.db` 到临时目录 + `INKNOTE_DATA_DIR`；改过密码用 `make_session()` 造 cookie。
