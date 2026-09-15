@@ -32,14 +32,6 @@
             </header>
             <p class="template-card__desc">{{ item.description or '（没有说明）' }}</p>
             <pre class="template-card__preview">{{ item.content | truncate_cn(160) }}</pre>
-            <details class="template-card__fold">
-              <summary class="template-card__fold-summary">
-                <span class="template-card__fold-label">查看全文</span>
-                <span class="template-card__fold-label template-card__fold-label--close">收起全文</span>
-                <span class="template-card__fold-chevron" aria-hidden="true">{{ icon('down', 13) }}</span>
-              </summary>
-              <pre class="template-card__full">{{ item.content }}</pre>
-            </details>
             <div class="template-card__actions">
               <a class="btn btn--sm" href="/notes/new?template={{ item.id }}">用这个模板</a>
               <button class="btn btn--ghost btn--sm tpl-copy" type="button"

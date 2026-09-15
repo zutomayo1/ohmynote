@@ -6447,69 +6447,6 @@ html.theme-anim .theme-toggle svg { animation: theme-moon-flip .45s cubic-bezier
   .template-card { animation: none; }
 }
 
-/* ===== 补丁：模板卡片全文折叠（2026-09-14 深夜五，已合并） ===== */
-
-.template-card__fold { margin-top: 8px; }
-
-.template-card__fold-summary {
-  display: inline-flex; align-items: center; gap: 5px;
-  cursor: pointer; list-style: none; user-select: none;
-  color: var(--ink-3); font-family: var(--font-sans); font-size: 12px; font-weight: 600;
-  transition: color .15s ease;
-}
-
-.template-card__fold-summary:hover { color: var(--brand); }
-.template-card__fold-summary::-webkit-details-marker { display: none; }
-.template-card__fold-summary::marker { content: ''; }
-
-/* 开/合文案互换 */
-.template-card__fold-label--close { display: none; }
-.template-card__fold[open] .template-card__fold-label { display: none; }
-.template-card__fold[open] .template-card__fold-label--close { display: inline; }
-
-.template-card__fold-chevron { transition: transform .2s ease; }
-.template-card__fold[open] .template-card__fold-chevron { transform: rotate(180deg); }
-
-/* 全文展开：同款 ::details-content 高度过渡 */
-.template-card__fold { interpolate-size: allow-keywords; }
-
-.template-card__fold::details-content {
-  display: block; block-size: 0; overflow-y: clip;
-  transition: block-size .24s cubic-bezier(.3, .8, .3, 1), content-visibility .24s allow-discrete;
-}
-
-.template-card__fold[open]::details-content { block-size: auto; }
-
-.template-card__full {
-  margin: 8px 0 0; padding: 10px 12px; max-height: 260px; overflow-y: auto;
-  border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg-soft);
-  font-family: var(--font-mono); font-size: 12px; line-height: 1.6; color: var(--ink-2);
-  white-space: pre-wrap; overflow-wrap: anywhere;
-}
-
-/* ===== 补丁：agent 危险操作确认卡片（2026-09-15，已合并） ===== */
-
-.agent-confirm {
-  margin: 6px 0; padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--line));
-  border-left: 3px solid var(--danger);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--danger) 6%, var(--surface));
-}
-
-.agent-confirm__text {
-  margin: 0 0 8px; color: var(--ink); font-family: var(--font-sans);
-  font-size: 13.5px; line-height: 1.55;
-}
-
-.agent-confirm__text--warn { color: var(--danger); }
-
-.agent-confirm__actions { display: flex; align-items: center; gap: 8px; }
-
-.agent-confirm__ok { cursor: pointer; }
-
-.agent-confirm__no { cursor: pointer; }
-
 /* ===== 补丁：模板页「全部模板」区块折叠（2026-09-15，已合并） ===== */
 
 .template-list-fold { interpolate-size: allow-keywords; }
