@@ -6509,3 +6509,36 @@ html.theme-anim .theme-toggle svg { animation: theme-moon-flip .45s cubic-bezier
 .agent-confirm__ok { cursor: pointer; }
 
 .agent-confirm__no { cursor: pointer; }
+
+/* ===== 补丁：模板页「全部模板」区块折叠（2026-09-15，已合并） ===== */
+
+.template-list-fold { interpolate-size: allow-keywords; }
+
+.template-list-fold__summary {
+  display: flex; align-items: baseline; gap: 10px;
+  cursor: pointer; list-style: none; user-select: none;
+}
+
+.template-list-fold__summary::-webkit-details-marker { display: none; }
+.template-list-fold__summary::marker { content: ''; }
+
+.template-list-fold__count {
+  min-width: 20px; padding: 0 7px; border-radius: var(--radius-pill);
+  background: var(--surface-2); color: var(--ink-3);
+  font-family: var(--font-mono); font-size: 12px; line-height: 19px; text-align: center;
+}
+
+.template-list-fold__chevron { margin-left: auto; color: var(--ink-3); transition: transform .2s ease; }
+
+.template-list-fold[open] .template-list-fold__chevron { transform: rotate(180deg); }
+
+.template-list-fold__summary:hover .template-list-fold__label { color: var(--brand); }
+
+.template-list-fold::details-content {
+  display: block; block-size: 0; overflow-y: clip;
+  transition: block-size .26s cubic-bezier(.3, .8, .3, 1), content-visibility .26s allow-discrete;
+}
+
+.template-list-fold[open]::details-content { block-size: auto; }
+
+.template-list-fold__body { min-width: 0; }

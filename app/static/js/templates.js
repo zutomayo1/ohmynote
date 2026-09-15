@@ -108,8 +108,23 @@
     });
   }
 
+  // 「全部模板」区块折叠：记住展开/收起状态（默认展开）
+  function initListFold() {
+    var fold = document.getElementById('template-list-fold');
+    if (!fold) { return; }
+    try {
+      if (window.localStorage.getItem('inknote.tpl-list-open') === '0') { fold.open = false; }
+    } catch (error) { /* 拿不到 localStorage 就用默认展开 */ }
+    fold.addEventListener('toggle', function () {
+      try {
+        window.localStorage.setItem('inknote.tpl-list-open', fold.open ? '1' : '0');
+      } catch (error) { /* 忽略 */ }
+    });
+  }
+
   ready(function () {
     initAiGenerate();
     initCopy();
+    initListFold();
   });
 })();

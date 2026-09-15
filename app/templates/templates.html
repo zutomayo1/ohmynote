@@ -16,7 +16,13 @@
 
 <div class="template-layout">
   <section>
-    <h2 class="section-title">全部模板（{{ templates | length }}）</h2>
+    <details class="template-list-fold" id="template-list-fold" open>
+      <summary class="section-title template-list-fold__summary">
+        <span class="template-list-fold__label">全部模板</span>
+        <span class="template-list-fold__count">{{ templates | length }}</span>
+        <span class="template-list-fold__chevron" aria-hidden="true">{{ icon('down', 15) }}</span>
+      </summary>
+      <div class="template-list-fold__body">
     {% if templates %}
       <div class="template-grid">
         {% for item in templates %}
@@ -57,6 +63,8 @@
     {% else %}
       {{ empty_state('还没有模板', '在右边新建一个，比如「周报」或「读书笔记」。', 'book') }}
     {% endif %}
+      </div>
+    </details>
   </section>
 
   <aside class="template-editor">
