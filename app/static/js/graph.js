@@ -41,6 +41,10 @@
   var STOP_MS = 2500;           // 首次布局的时长上限
   var RESUME_MS = 900;          // 从记忆位置恢复时的时长（只做局部微调）
   var POS_KEY = "inknote.graph.pos.v1";
+  var PARAM_KEY = "inknote.graph.params.v1";   // 布局参数（用户在面板上调的松紧）
+  var PARAM_DEFAULTS = { repulsion: 100, spring: 100, center: 100 };   // 百分比
+  var PARAM_LIMITS = { repulsion: [40, 240], spring: [50, 220], center: [20, 300] };
+  var PARAM_KEYS = ["repulsion", "spring", "center"];
 
   /* ------------------------------------------------------------------ 工具 */
   function setClass(el, cls) { el.setAttribute("class", cls); }
@@ -60,6 +64,35 @@
       var data = raw ? JSON.parse(raw) : null;
       return data && typeof data === "object" ? data : {};
     } catch (e) { return {}; }
+  }
+
+  /* 布局参数：斥力 / 连线长度 / 向心力，都是相对基准值的百分比。
+   * 调完存 localStorage，下次进来还是你习惯的松紧。 */
+  function loadParams() {
+    var out = {};
+    PARAM_KEYS.forEach(function (k) { out[k] = PARAM_DEFAULTS[k]; });
+    try {
+      var raw = window.localStorage.getItem(PARAM_KEY);
+      if (!raw) { return out; }
+      var saved = JSON.parse(raw);
+      PARAM_KEYS.forEach(function (k) {
+        var v = Number(saved && saved[k]);
+        if (isFinite(v)) {
+          out[k] = clamp(Math.round(v), PARAM_LIMITS[k][0], PARAM_LIMITS[k][1]);
+        }
+      });
+    } catch (e) { /* 隐私模式 / 坏数据：用默认值 */ }
+    return out;
+  }
+
+  var persistTimer = null;
+  function saveParams(params) {
+    try { window.localStorage.setItem(PARAM_KEY, JSON.stringify(params)); } catch (e) { /* 忽略 */ }
+  }
+  // 拖动滑杆会连续触发，写 localStorage 做个防抖
+  function schedulePersist(params) {
+    if (persistTimer) { clearTimeout(persistTimer); }
+    persistTimer = setTimeout(function () { saveParams(params); }, 400);
   }
 
   function savePositions(sim) {
@@ -179,12 +212,19 @@
       query: "",
       selectedId: opts.focus || null,
       hoveringId: null,
+      pathMode: false,        // 路径模式：点两个节点看它们怎么连上的
+      pathStart: null,
+      pathEnd: null,
+      pathNodes: {},          // id → "start" / "end" / "mid"
+      pathEdges: {},          // "小id|大id" → true
+      pathIds: [],
       pinned: null,          // 刚拖完的节点：松弛期间钉住，别被弹簧拽回原位
       fitPending: true,
       userMovedView: false
     };
     nodes.forEach(function (n) { state.byId[n.id] = n; });
     var positions = opts.persist === false ? {} : loadPositions();
+    var params = loadParams();
     var restored = false;
 
     var view = { k: 1, tx: 0, ty: 0 };
@@ -431,6 +471,9 @@
     function colorIndexOf(n) {
       if (state.colorMode === "none" || !n.has_links) { return -1; }
       if (state.colorMode === "tag") { return typeof n.tag_color === "number" ? n.tag_color : -1; }
+      if (state.colorMode === "category") {
+        return typeof n.category_color === "number" ? n.category_color : -1;
+      }
       return typeof n.community === "number" ? n.community : -1;
     }
 
@@ -441,6 +484,11 @@
       var dim = size();
       var cx = dim.w / 2, cy = dim.h / 2;
       var i, j, a, b, p, q, dx, dy, d2, d;
+
+      // 布局参数（面板可调）：一律相对基准值的百分比
+      var repulsion = REPULSION * params.repulsion / 100;
+      var springLen = SPRING_LEN * params.spring / 100;
+      var centerK = CENTER_K * params.center / 100;
 
       // 斥力
       if (n < BH_THRESHOLD) {
@@ -453,7 +501,7 @@
             d2 = dx * dx + dy * dy;
             if (d2 < 1e-6) { dx = rand(-1, 1); dy = rand(-1, 1); d2 = 1; }
             d = Math.sqrt(d2);
-            var f = REPULSION / d2 * 0.5;
+            var f = repulsion / d2 * 0.5;
             var ux = dx / d, uy = dy / d;
             p.vx += ux * f; p.vy += uy * f;
             q.vx -= ux * f; q.vy -= uy * f;
@@ -479,7 +527,7 @@
         }
         for (i = 0; i < bodies.length; i++) {
           var force = { x: 0, y: 0 };
-          quadForce(root, bodies[i], REPULSION * 0.5, force);
+          quadForce(root, bodies[i], repulsion * 0.5, force);
           var sp = state.sim[bodies[i].id];
           sp.vx += force.x; sp.vy += force.y;
         }
@@ -493,7 +541,7 @@
         d2 = dx * dx + dy * dy;
         if (d2 < 1e-6) { return; }
         d = Math.sqrt(d2);
-        var f = SPRING_K * (d - SPRING_LEN);
+        var f = SPRING_K * (d - springLen);
         ps.vx += dx / d * f; ps.vy += dy / d * f;
         pt.vx -= dx / d * f; pt.vy -= dy / d * f;
       });
@@ -504,8 +552,8 @@
       // 居中 + 积分
       for (i = 0; i < n; i++) {
         a = list[i]; p = state.sim[a.id];
-        p.vx += (cx - p.x) * CENTER_K;
-        p.vy += (cy - p.y) * CENTER_K;
+        p.vx += (cx - p.x) * centerK;
+        p.vy += (cy - p.y) * centerK;
         if ((drag && drag.id === a.id) || state.pinned === a.id) {
           p.vx = 0; p.vy = 0; continue;
         }
@@ -551,6 +599,12 @@
       }
     }
 
+    // 正被拖 / 刚放下（钉住）的节点：碰撞时它不动，让邻居让开 ——
+    // 否则「按住的那个」会被邻居挤走，「拖了等于没拖」。
+    function heldId() {
+      return drag ? drag.id : state.pinned;
+    }
+
     function separate(idA, idB) {
       var a = state.byId[idA], b = state.byId[idB];
       var pa = state.sim[idA], pb = state.sim[idB];
@@ -561,10 +615,15 @@
       var d2 = dx * dx + dy * dy;
       if (d2 >= min * min) { return; }
       var d = Math.sqrt(d2) || 0.01;
-      var push = (min - d) / 2;
       var ux = dx / d, uy = dy / d;
-      pa.x -= ux * push; pa.y -= uy * push;
-      pb.x += ux * push; pb.y += uy * push;
+      var held = heldId();
+      var heldA = held === idA, heldB = held === idB;
+      if (heldA && heldB) { return; }
+      var pushA = (min - d) / 2, pushB = (min - d) / 2;
+      if (heldA) { pushA = 0; pushB = min - d; }
+      else if (heldB) { pushA = min - d; pushB = 0; }
+      pa.x -= ux * pushA; pa.y -= uy * pushA;
+      pb.x += ux * pushB; pb.y += uy * pushB;
     }
 
     /* ---------------- 渲染 ---------------- */
@@ -642,8 +701,10 @@
     }
 
     function applyHighlight(focusId) {
+      // 路径高亮优先：选好起终点后按路径显示、其余压暗（悬停仍会叠一层 hover）
+      var pathOn = state.pathEnd !== null && state.pathEnd !== undefined;
       var near = {};
-      if (focusId !== null && focusId !== undefined) {
+      if (!pathOn && focusId !== null && focusId !== undefined) {
         near[focusId] = true;
         var nbrs = state.adj[focusId] || {};
         for (var k in nbrs) {
@@ -654,7 +715,15 @@
         var els = state.nodeEls[n.id];
         if (!els) { return; }
         var cls = baseClass(n);
-        if (focusId === null || focusId === undefined) {
+        var mark = state.pathNodes[n.id];
+        if (pathOn) {
+          if (mark === "start") { cls += " node--path node--path-start"; }
+          else if (mark === "end") { cls += " node--path node--path-end"; }
+          else if (mark) { cls += " node--path node--path-mid"; }
+          else { cls += " node--dim"; }
+        } else if (mark) {
+          cls += " node--path node--path-start";   // 只点了起点：标出来，但先不压暗别的
+        } else if (focusId === null || focusId === undefined) {
           if (state.hoveringId === n.id) { cls += " node--hover"; }
         } else if (near[n.id]) {
           cls += n.id === focusId ? " node--selected" : " node--active";
@@ -664,6 +733,11 @@
         setClass(els.g, cls);
       });
       state.edgeEls.forEach(function (e) {
+        if (pathOn) {
+          var onPath = state.pathEdges[edgeKey(e.source, e.target)];
+          setClass(e.path, onPath ? "edge edge--path" : "edge edge--dim");
+          return;
+        }
         if (focusId === null || focusId === undefined) {
           setClass(e.path, "edge");
         } else if (String(e.source) === String(focusId) || String(e.target) === String(focusId)) {
@@ -672,6 +746,112 @@
           setClass(e.path, "edge edge--dim");
         }
       });
+    }
+
+    /* ---------------- 最短路径 ----------------
+     * 在**当前可见子图**上做 BFS（跳数最少）。无向邻接：双链在「怎么连上的」
+     * 这个问题上是有向的，但用户想知道的通常是「这两篇有没有关系」，所以按无向走。 */
+    function edgeKey(a, b) {
+      var x = Number(a), y = Number(b);
+      return x < y ? x + "|" + y : y + "|" + x;
+    }
+
+    function titleOf(id) {
+      var n = state.byId[id];
+      return n ? String(n.title || "") : "";
+    }
+
+    function bfsPath(from, to) {
+      var start = String(from), goal = String(to);
+      if (start === goal) { return [Number(from)]; }
+      var prev = {}, seen = {}, queue = [start];
+      seen[start] = true;
+      while (queue.length) {
+        var cur = queue.shift();
+        var nbrs = state.adj[cur];
+        if (!nbrs) { continue; }
+        for (var key in nbrs) {
+          if (!Object.prototype.hasOwnProperty.call(nbrs, key) || seen[key]) { continue; }
+          seen[key] = true;
+          prev[key] = cur;
+          if (key === goal) {
+            var chain = [goal], node = goal;
+            while (prev[node] !== undefined) { node = prev[node]; chain.unshift(node); }
+            return chain.map(Number);
+          }
+          queue.push(key);
+        }
+      }
+      return null;
+    }
+
+    function recomputePath() {
+      state.pathNodes = {};
+      state.pathEdges = {};
+      state.pathIds = [];
+      if (state.pathStart !== null) { state.pathNodes[state.pathStart] = "start"; }
+      if (state.pathStart === null || state.pathEnd === null) { return; }
+      state.pathNodes[state.pathEnd] = "end";
+      var chain = bfsPath(state.pathStart, state.pathEnd);
+      if (!chain) { return; }        // 不可达：只留两个端点标记，边上全压暗
+      state.pathIds = chain;
+      chain.forEach(function (id, i) {
+        state.pathNodes[id] = i === 0 ? "start" : (i === chain.length - 1 ? "end" : "mid");
+      });
+      for (var i = 0; i + 1 < chain.length; i++) {
+        state.pathEdges[edgeKey(chain[i], chain[i + 1])] = true;
+      }
+    }
+
+    function pathInfo() {
+      return {
+        mode: !!state.pathMode,
+        start: state.pathStart,
+        end: state.pathEnd,
+        startTitle: state.pathStart === null ? "" : titleOf(state.pathStart),
+        endTitle: state.pathEnd === null ? "" : titleOf(state.pathEnd),
+        ids: state.pathIds.slice(),
+        titles: state.pathIds.map(titleOf),
+        hops: state.pathIds.length > 1 ? state.pathIds.length - 1 : 0,
+        reachable: state.pathEnd === null ? null : state.pathIds.length > 0
+      };
+    }
+
+    function notifyPath() {
+      if (typeof opts.onPathChange === "function") {
+        try { opts.onPathChange(pathInfo()); } catch (e) { /* 页面回调出错不影响引擎 */ }
+      }
+    }
+
+    function pickPathNode(id) {
+      if (state.pathStart === null || state.pathEnd !== null) {
+        state.pathStart = id;      // 从头开始（或换一组）：这次点的当起点
+        state.pathEnd = null;
+      } else if (id === state.pathStart) {
+        state.pathStart = null;    // 再点一次起点：取消
+      } else {
+        state.pathEnd = id;
+      }
+      recomputePath();
+      refreshHighlight();
+      notifyPath();
+    }
+
+    function clearPath(withMode) {
+      state.pathStart = null;
+      state.pathEnd = null;
+      state.pathNodes = {};
+      state.pathEdges = {};
+      state.pathIds = [];
+      if (withMode) { state.pathMode = false; }
+      refreshHighlight();
+      notifyPath();
+    }
+
+    function setPathMode(on) {
+      state.pathMode = !!on;
+      clearPath(false);
+      return state.pathMode;
     }
 
     function refreshHighlight() {
@@ -713,6 +893,12 @@
       });
       g.addEventListener("click", function (ev) {
         if (drag && drag.moved) { ev.preventDefault(); return; }
+        if (state.pathMode) {
+          // 路径模式：点节点 = 选起终点（打开笔记要先退出路径模式）
+          ev.preventDefault();
+          pickPathNode(n.id);
+          return;
+        }
         if (opts.onOpen) { opts.onOpen(n); return; }
         window.location.href = "/notes/" + n.id;
       });
@@ -830,10 +1016,15 @@
         case "-": case "_": zoomAt(centreOfView().x, centreOfView().y, 0.8); break;
         case "0": fit(); break;
         case "Enter":
-          if (state.selectedId !== null) {
+          if (state.selectedId !== null && state.pathMode) {
+            pickPathNode(state.selectedId);   // 路径模式下回车 = 把当前高亮节点设为端点
+          } else if (state.selectedId !== null) {
             if (opts.onOpen) { opts.onOpen(state.byId[state.selectedId]); }
             else { window.location.href = "/notes/" + state.selectedId; }
           }
+          break;
+        case "Escape":
+          if (state.pathMode) { setPathMode(false); } else { handled = false; }
           break;
         default: handled = false;
       }
@@ -896,6 +1087,36 @@
         });
       }
       if (best !== null) { selectById(best, true); }
+    }
+
+    /* ---------------- 布局参数 ---------------- */
+    function setParams(next, options) {
+      var run = !(options && options.silent);
+      var changed = false;
+      PARAM_KEYS.forEach(function (k) {
+        if (!next || next[k] === undefined || next[k] === null) { return; }
+        var v = Number(next[k]);
+        if (!isFinite(v)) { return; }
+        v = clamp(Math.round(v), PARAM_LIMITS[k][0], PARAM_LIMITS[k][1]);
+        if (v !== params[k]) { params[k] = v; changed = true; }
+      });
+      if (changed) {
+        if (opts.persist !== false) { schedulePersist(params); }
+        // 中等强度跑一段：立刻能看出松紧变化，又不会把用户熟悉的布局整片揉散
+        if (run) { startSim(1200, 0.5); }
+      }
+      return getParams();
+    }
+
+    function getParams() {
+      return { repulsion: params.repulsion, spring: params.spring, center: params.center };
+    }
+
+    function resetParams(options) {
+      PARAM_KEYS.forEach(function (k) { params[k] = PARAM_DEFAULTS[k]; });
+      if (opts.persist !== false) { schedulePersist(params); }
+      if (!(options && options.silent)) { startSim(1200, 0.5); }
+      return getParams();
     }
 
     /* ---------------- 重排 / 视图 ---------------- */
@@ -970,6 +1191,13 @@
           if (idx < 0) { return; }
           push(String(idx), n.tags && n.tags[0] ? n.tags[0] : "（无标签）", idx % PALETTE);
         });
+      } else if (state.colorMode === "category") {
+        state.visible.forEach(function (n) {
+          if (!n.has_links) { return; }
+          var idx = typeof n.category_color === "number" ? n.category_color : -1;
+          if (idx < 0) { return; }
+          push(String(idx), n.category || "（未分类）", idx % PALETTE);
+        });
       } else {
         state.visible.forEach(function (n) {
           var idx = typeof n.community === "number" ? n.community : -1;
@@ -1015,6 +1243,162 @@
       }
     }
 
+    /* ---------------- 导出图片 ----------------
+     * 页面样式都在样式表里，序列化出去的 SVG 带不走 —— 所以先把**计算样式内联**
+     * 到克隆副本上（fill / stroke / font-* / opacity…），导出的图在哪儿都长一样。
+     * 导出的是「整张图」（与当前缩放平移无关），按内容 bbox 裁边并留白。 */
+    var EXPORT_KEYS = [
+      "fill", "fill-opacity", "fill-rule", "stroke", "stroke-width", "stroke-opacity",
+      "stroke-dasharray", "stroke-linecap", "stroke-linejoin", "opacity",
+      "font-family", "font-size", "font-weight", "font-style", "letter-spacing",
+      "text-anchor", "dominant-baseline", "paint-order", "shape-rendering"
+    ];
+
+    function inlineComputedStyles(srcRoot, dstRoot) {
+      var from = [srcRoot].concat(Array.prototype.slice.call(srcRoot.querySelectorAll("*")));
+      var to = [dstRoot].concat(Array.prototype.slice.call(dstRoot.querySelectorAll("*")));
+      var n = Math.min(from.length, to.length);
+      for (var i = 0; i < n; i++) {
+        var cs = window.getComputedStyle(from[i]);
+        if (!cs) { continue; }
+        for (var j = 0; j < EXPORT_KEYS.length; j++) {
+          var value = cs.getPropertyValue(EXPORT_KEYS[j]);
+          if (value) { to[i].setAttribute(EXPORT_KEYS[j], value); }
+        }
+        to[i].removeAttribute("class");
+      }
+    }
+
+    function pageBackground() {
+      var node = stage;
+      while (node && node.nodeType === 1) {
+        var bg = window.getComputedStyle(node).backgroundColor;
+        if (bg && bg !== "transparent" && bg.indexOf("rgba(0, 0, 0, 0)") !== 0) { return bg; }
+        node = node.parentNode;
+      }
+      var token = window.getComputedStyle(document.documentElement).getPropertyValue("--surface");
+      return (token || "").trim() || "#ffffff";
+    }
+
+    function exportStamp() {
+      var d = new Date();
+      function p2(x) { return (x < 10 ? "0" : "") + x; }
+      return d.getFullYear() + p2(d.getMonth() + 1) + p2(d.getDate())
+        + "-" + p2(d.getHours()) + p2(d.getMinutes());
+    }
+
+    function buildExportSVG(scale) {
+      var factor = scale || 1;
+      var pad = 28;
+      var box = null;
+      try { box = viewport.getBBox(); } catch (e) { box = null; }
+      if (!box || !isFinite(box.width) || !isFinite(box.height) || box.width <= 0 || box.height <= 0) {
+        var fallback = size();
+        box = { x: 0, y: 0, width: fallback.w, height: fallback.h };
+      }
+      var w = Math.ceil(box.width + pad * 2);
+      var h = Math.ceil(box.height + pad * 2);
+      var clone = svg.cloneNode(true);
+      // 先取到视图组再内联样式（内联会把 class 去掉，之后就找不着了）
+      var vp = clone.querySelector(".graph-viewport");
+      if (vp) { vp.removeAttribute("transform"); }
+      inlineComputedStyles(svg, clone);
+      clone.setAttribute("xmlns", SVGNS);
+      clone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+      clone.setAttribute("viewBox", (box.x - pad) + " " + (box.y - pad) + " " + w + " " + h);
+      clone.setAttribute("width", Math.round(w * factor));
+      clone.setAttribute("height", Math.round(h * factor));
+      clone.removeAttribute("style");
+      // 背景：导出的图不能是透明的（贴到白底文档里节点就看不见了）
+      var bg = document.createElementNS(SVGNS, "rect");
+      bg.setAttribute("x", String(box.x - pad));
+      bg.setAttribute("y", String(box.y - pad));
+      bg.setAttribute("width", String(w));
+      bg.setAttribute("height", String(h));
+      bg.setAttribute("fill", pageBackground());
+      clone.insertBefore(bg, clone.firstChild);
+      return {
+        markup: new XMLSerializer().serializeToString(clone),
+        width: Math.round(w * factor),
+        height: Math.round(h * factor)
+      };
+    }
+
+    function downloadURL(url, name) {
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      a.rel = "noopener";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.setTimeout(function () { try { URL.revokeObjectURL(url); } catch (e) { /* 忽略 */ } }, 8000);
+    }
+
+    function exportImage(kind) {
+      var isPng = kind === "png";
+      var info = buildExportSVG(isPng ? 2 : 1);
+      var name = (opts.exportName || "inknote-graph") + "-" + exportStamp() + (isPng ? ".png" : ".svg");
+      if (!isPng) {
+        downloadURL(URL.createObjectURL(new Blob([info.markup], { type: "image/svg+xml;charset=utf-8" })), name);
+        return Promise.resolve({ kind: "svg", name: name, width: info.width, height: info.height });
+      }
+      return new Promise(function (resolve, reject) {
+        var img = new Image();
+        img.onload = function () {
+          try {
+            var canvas = document.createElement("canvas");
+            canvas.width = info.width;
+            canvas.height = info.height;
+            var ctx = canvas.getContext("2d");
+            ctx.fillStyle = pageBackground();
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            canvas.toBlob(function (blob) {
+              if (!blob) { reject(new Error("PNG 生成失败")); return; }
+              downloadURL(URL.createObjectURL(blob), name);
+              resolve({ kind: "png", name: name, width: canvas.width, height: canvas.height });
+            }, "image/png");
+          } catch (e) { reject(e); }
+        };
+        img.onerror = function () { reject(new Error("图片渲染失败")); };
+        img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(info.markup);
+      });
+    }
+
+    /* ---------------- 在图上直接连两篇 ----------------
+     * 服务端往正文末尾追加 [[标题]] 之后，本地把这条边补进图里：
+     * 不用刷新就能看到新连线（刷新后仍以服务端数据为准，两边一致）。 */
+    function bumpDegree(n, side) {
+      if (side === "out") { n.out_degree = (n.out_degree || 0) + 1; }
+      else { n.in_degree = (n.in_degree || 0) + 1; }
+      n.degree = (n.degree || 0) + 1;
+      n.has_links = true;
+    }
+
+    function addLink(sourceId, targetId) {
+      var s = Number(sourceId), t = Number(targetId);
+      var sn = state.byId[s], tn = state.byId[t];
+      if (!sn || !tn) { return false; }
+      var exists = edges.some(function (e) {
+        return Number(e.source) === s && Number(e.target) === t;
+      });
+      if (exists) { return false; }
+      edges.push({ source: s, target: t, title: titleOf(t) });
+      bumpDegree(sn, "out");
+      bumpDegree(tn, "in");
+      computeVisible();
+      recomputePath();      // 刚建好的这条线要是正好在查的路径上，立刻点亮
+      ensureSim();
+      build();
+      render();
+      refreshHighlight();
+      renderLegend();
+      notifyPath();
+      startSim(900, 0.45);
+      return true;
+    }
+
     /* ---------------- 启动 ---------------- */
     function init() {
       computeVisible();
@@ -1051,9 +1435,20 @@
       fit: fit,
       relayout: relayout,
       setColorMode: setColorMode,
+      setParams: setParams,
+      getParams: getParams,
+      resetParams: resetParams,
       setQuery: setQuery,
       setFilter: setFilter,
       selectById: selectById,
+      setPathMode: setPathMode,
+      pickPathNode: pickPathNode,
+      clearPath: clearPath,
+      pathInfo: pathInfo,
+      addLink: addLink,
+      exportImage: exportImage,
+      _path: bfsPath,
+      _exportSVG: buildExportSVG,
       zoomAt: zoomAt,
       _edgePath: edgePath,
       _tick: tick,
@@ -1084,7 +1479,9 @@
       legendEl: document.getElementById("graph-legend"),
       emptyEl: document.getElementById("graph-empty"),
       colorMode: readSelect("graph-color", "community"),
-      onlyLinked: true
+      onlyLinked: true,
+      exportName: "inknote-graph",
+      onPathChange: function (info) { onPath(info); }
     });
     if (!view) { return; }
 
@@ -1135,6 +1532,154 @@
     bindButton("graph-zoom-out", function () { view.zoomAt(0, 0, 0.8); });
     bindButton("graph-fit", function () { view.fit(); });
     bindButton("graph-relayout", function () { view.relayout(); });
+
+    /* ---------- 路径模式：选两篇看它们怎么连上的 ---------- */
+    var pathBtn = document.getElementById("graph-path");
+    var pathResult = document.getElementById("graph-path-result");
+    var pathActions = document.getElementById("graph-path-actions");
+    var linkFwd = document.getElementById("graph-link-fwd");
+    var linkRev = document.getElementById("graph-link-rev");
+    var hintEl = document.querySelector(".graph-toolbar__hint");
+    var HINT_TEXT = hintEl ? hintEl.innerHTML : "";
+    var PATH_HINT = "路径模式：点两个节点（键盘：方向键选 + 回车）看最短路径，Esc 退出";
+
+    function cutTitle(text) {
+      var s = String(text || "");
+      return s.length > 10 ? s.slice(0, 9) + "…" : s;
+    }
+
+    function linkLabel(btn, from, to) {
+      if (!btn) { return; }
+      btn.textContent = cutTitle(from) + " → " + cutTitle(to);
+      btn.title = "在《" + from + "》的正文末尾加上指向《" + to + "》的链接（可在这篇的历史版本里撤销）";
+      btn.setAttribute("aria-label", btn.title);
+    }
+
+    function onPath(info) {
+      if (pathBtn) { pathBtn.setAttribute("aria-pressed", info.mode ? "true" : "false"); }
+      if (hintEl) { hintEl.innerHTML = info.mode ? PATH_HINT : HINT_TEXT; }
+      if (pathResult) {
+        if (!info.mode) {
+          pathResult.textContent = "";
+        } else if (info.start === null) {
+          pathResult.textContent = "路径模式：随便点一篇作为起点。";
+        } else if (info.end === null) {
+          pathResult.textContent = "起点：《" + info.startTitle + "》—— 再点一篇作为终点。";
+        } else if (!info.reachable) {
+          pathResult.textContent = "《" + info.startTitle + "》和《" + info.endTitle
+            + "》在当前视图里没有连通的路径（也许要先取消筛选）。";
+        } else {
+          pathResult.textContent = "最短路径 " + info.hops + " 步：" + info.titles.map(function (t) {
+            return "《" + t + "》";
+          }).join(" → ");
+        }
+      }
+      var both = info.mode && info.start !== null && info.end !== null;
+      if (pathActions) { pathActions.classList.toggle("is-hidden", !both); }
+      if (both) {
+        linkLabel(linkFwd, info.startTitle, info.endTitle);
+        linkLabel(linkRev, info.endTitle, info.startTitle);
+      }
+    }
+
+    var linking = false;
+    function makeLink(from, to) {
+      var api = window.InkNote;
+      if (linking || !api || !api.fetchJSON) { return; }
+      linking = true;
+      if (linkFwd) { linkFwd.disabled = true; }
+      if (linkRev) { linkRev.disabled = true; }
+      api.fetchJSON("/notes/" + from + "/link.json", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: "target_id=" + encodeURIComponent(String(to))
+      }).then(function (data) {
+        // 本地把新边补进图里：不用刷新就能看到连线
+        var added = view.addLink(from, to);
+        if (api.toast) {
+          api.toast((data && data.message) || (added ? "已建立链接" : "这两篇已经连着了"));
+        }
+      }).catch(function (err) {
+        if (api.toast) { api.toast((err && err.message) || "建立链接失败", "error"); }
+      }).then(function () {
+        linking = false;
+        if (linkFwd) { linkFwd.disabled = false; }
+        if (linkRev) { linkRev.disabled = false; }
+      });
+    }
+
+    if (pathBtn) {
+      pathBtn.addEventListener("click", function (ev) {
+        ev.preventDefault();
+        view.setPathMode(pathBtn.getAttribute("aria-pressed") !== "true");
+      });
+    }
+    if (linkFwd) {
+      linkFwd.addEventListener("click", function () {
+        var p = view.pathInfo();
+        if (p.start !== null && p.end !== null) { makeLink(p.start, p.end); }
+      });
+    }
+    if (linkRev) {
+      linkRev.addEventListener("click", function () {
+        var p = view.pathInfo();
+        if (p.start !== null && p.end !== null) { makeLink(p.end, p.start); }
+      });
+    }
+    bindButton("graph-path-clear", function () { view.clearPath(false); });
+    onPath(view.pathInfo());
+
+    /* ---------- 导出图片 ---------- */
+    var exporting = false;
+    function runExport(kind) {
+      if (exporting) { return; }
+      exporting = true;
+      Promise.resolve(view.exportImage(kind)).then(function (info) {
+        if (window.InkNote && window.InkNote.toast) {
+          window.InkNote.toast("已导出" + info.name + "（" + info.width + "×" + info.height + "）");
+        }
+      }).catch(function (err) {
+        if (window.InkNote && window.InkNote.toast) {
+          window.InkNote.toast((err && err.message) || "导出失败", "error");
+        }
+      }).then(function () { exporting = false; });
+    }
+    bindButton("graph-export-png", function () { runExport("png"); });
+    bindButton("graph-export-svg", function () { runExport("svg"); });
+
+    /* ---------- 布局参数（松紧） ---------- */
+    var PARAM_INPUTS = [
+      ["repulsion", "graph-p-repulsion"],
+      ["spring", "graph-p-spring"],
+      ["center", "graph-p-center"]
+    ];
+
+    function syncParamInputs() {
+      var now = view.getParams();
+      PARAM_INPUTS.forEach(function (pair) {
+        var input = document.getElementById(pair[1]);
+        var label = document.getElementById(pair[1] + "-v");
+        if (input) { input.value = String(now[pair[0]]); }
+        if (label) { label.textContent = now[pair[0]] + "%"; }
+      });
+    }
+
+    PARAM_INPUTS.forEach(function (pair) {
+      var input = document.getElementById(pair[1]);
+      if (!input) { return; }
+      input.addEventListener("input", function () {
+        var next = {};
+        next[pair[0]] = Number(input.value);
+        view.setParams(next);      // 边拖边生效：立刻能看出疏密变化
+        var label = document.getElementById(pair[1] + "-v");
+        if (label) { label.textContent = input.value + "%"; }
+      });
+    });
+    bindButton("graph-p-reset", function () {
+      view.resetParams();
+      syncParamInputs();
+    });
+    syncParamInputs();
   }
 
   function readSelect(id, fallback) {

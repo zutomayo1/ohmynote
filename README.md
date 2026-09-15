@@ -210,14 +210,38 @@ pbkdf2_sha256(200k) + 随机盐，`hmac.compare_digest` 比较，旧密码连错
   - **前端**：`graph.js` 是一个可复用引擎（`GraphView.create(stage, payload, opts)`），全局页与
     笔记页局部图共用。节点半径按 `sqrt(degree)` 缩放；着色分「聚类 / 标签（色组与标签药丸同源）/ 单色」；
     **互链的两条边画成反向弧线**（判定用单独的有向表——`adj` 是无向的，用它会把每条边都当互链）；
-    滚轮缩放 + 拖空白平移 + 触屏捏合（Pointer Events，`touch-action: none`）；
+    滚轮缩放 + 拖空白平移 + 触屏双指捏合/拖动（Pointer Events，`touch-action: pan-y`
+    让单指留给页面滚动——`none` 会让手机上在图上滑不动页面）；
     搜索高亮 + 未命中变淡 + Enter 居中；**布局位置存 localStorage**（按 note id 存，节点增删后仍复用），
     恢复时用低 alpha 只做局部微调，所以刷新后布局基本不变。
   - **性能**：节点数 < 200 用精确两两斥力；≥ 200 走四叉树 **Barnes–Hut**（θ=0.5，实测力值相对误差 < 10%）。
     碰撞用网格加速，并把标题真实宽度（`getBBox()`）算进碰撞半径——标签重叠是关系图最刺眼的观感问题。
   - **踩过的坑**：① 拖完节点会被弹簧拽回原位（拖了等于没拖）→ 松手后短暂「钉住」该节点再松弛；
     ② `setPointerCapture` 会让 click 派发到 `<svg>` 而不是节点，节点点击永远不触发 → 不用捕获，
-    改为把 `pointermove` 挂到 `document`；③ 笔记页要单独引 `graph.js`（它不在 base.html 里）。
+    改为把 `pointermove` 挂到 `document`；③ 笔记页要单独引 `graph.js`（它不在 base.html 里）；
+    ④ 「钉住」只挡了积分，**碰撞没挡** —— 刚放下的节点仍被邻居推走几十像素 → 碰撞里也让
+    「按住/钉住」的那个不动，只推邻居（输入设备永远压过物理模拟）。
+- **路径查找 / 图内建链 / 导出 / 布局参数**（图谱第三批）：
+  - **路径**：在**可见子图**上 BFS（无向邻接——「有没有关系」比方向更常用），
+    点两篇即高亮最短链路（起点品牌色实心 / 终点强调色 / 中间点描边，路径边加流动虚线，
+    其余压暗）；结果行给「最短路径 N 步：《A》→《B》→《C》」；不可达时直说并提示可能是筛选挡住。
+    键盘：方向键选点 + `Enter` 记端点（路径模式下 `Enter` 不再打开笔记），`Esc` 退出。
+    路径高亮在 `applyHighlight` 里**优先于**选中/悬停高亮；只选了起点时不做压暗（否则看不清拓扑选不了终点）。
+  - **图内建链**：路径两端确定后给 A→B / B→A 两个按钮 → `POST /notes/{id}/link.json`
+    （与 `link_note` 共用 `_resolve_link_target`，只把 303 换成 JSON；已连过返回
+    `ok=True, already=True`，不当作错误）。成功后前端 `view.addLink()` **本地补边**：
+    `edges.push` + 端点度数 +1 + `computeVisible` + `recomputePath` + 重建 DOM ——
+    刚建的那条线正好落在查的路径上就会立刻点亮，不用刷新。
+  - **导出图片**：`view.exportImage("png" | "svg")`。先把**计算样式内联**到克隆副本
+    （`fill / stroke / font-* / opacity…` —— 页面样式表带不走），视图组去掉 transform
+    （导出整张图、与当前缩放无关），按 `viewport.getBBox()` 裁边留白并铺一层主题背景色
+    （否则贴到白底文档里节点就看不见）；PNG 走 data URL → `Image` → canvas → `toBlob`（2× 分辨率）。
+    注意：内联会删掉 `class`，所以**先取到 `.graph-viewport` 再内联**。
+  - **布局松紧**：斥力 / 连线长度 / 向心三个百分比滑杆，`setParams()` 实时生效，
+    存 `inknote.graph.params.v1`（写入防抖 400ms，拖动时不会狂写 localStorage）；物理常量在
+    `tick()` 里按百分比缩放。
+  - **按分类着色**：`utils.tag_color` 提为全项目唯一实现（模板过滤器 + 图谱节点共用），
+    所以「分类色 / 标签色 / 标签药丸」是同一套哈希、同一套色板；没有分类的节点给 -1 不参与着色。
 - **建立联系（双链）**：`repo.search_titles()` 只匹配标题（排序：完全相等 > 前缀 > 包含，
   LIKE 通配符已转义，否则用户输入 `%` 会命中一切）+ `GET /api/note-titles` 供前端补全；
   `POST /notes/{id}/link` 在**正文末尾追加** `[[目标标题]]` —— 不直接写链接表，

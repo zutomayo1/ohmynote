@@ -207,6 +207,8 @@ def build_graph(conn: sqlite3.Connection) -> dict[str, Any]:
                 "community": belong.get(nid, -1),
                 # 第一个标签的色组（与标签药丸同一个色板）；没有标签给 -1
                 "tag_color": tag_color(note["tags"][0]) if note.get("tags") else -1,
+                # 分类的色组（同一个色板，所以「按分类着色」与标签药丸是同一套观感）
+                "category_color": tag_color(note["category"]) if note.get("category") else -1,
             }
         )
 
@@ -286,6 +288,7 @@ def ego_graph(
             "has_links": in_sub[nid] > 0 or nid == note_id,
             "community": -1,
             "tag_color": tag_color(by_id[nid]["tags"][0]) if by_id[nid].get("tags") else -1,
+            "category_color": tag_color(by_id[nid]["category"]) if by_id[nid].get("category") else -1,
             "focus": nid == note_id,
         }
         for nid in sorted(keep)

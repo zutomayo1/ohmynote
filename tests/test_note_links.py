@@ -219,3 +219,56 @@ def test_note_detail_has_link_form_and_unlink(auth_client, db_conn):
     assert f'action="/notes/{src["id"]}/unlink"' in text
     assert 'link-del__btn' in text
     assert dst["id"] > 0
+
+
+# ------------------------------------------------------- link.json（图内直接建链）
+def test_link_json_creates_link_and_reports_duplicate(auth_client, csrf, db_conn):
+    """图内建链：成功返回 JSON；重复连接不追加、也不算错误。"""
+    src = _make(db_conn, PREFIX + "JSON 源", "开头一段")
+    dst = _make(db_conn, PREFIX + "JSON 目标")
+    url = f"/notes/{src['id']}/link.json"
+    headers = {"X-CSRF-Token": csrf}
+
+    resp = auth_client.post(url, data={"target_id": str(dst["id"])}, headers=headers)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["ok"] is True and body["already"] is False
+    assert body["target_id"] == dst["id"] and body["target_title"] == PREFIX + "JSON 目标"
+
+    content = repo.get_note(db_conn, src["id"])["content"]
+    assert content.startswith("开头一段")
+    assert f"[[{PREFIX}JSON 目标]]" in content
+    assert (dst["id"], PREFIX + "JSON 目标") in _links_of(db_conn, src["id"])
+
+    again = auth_client.post(url, data={"target_id": str(dst["id"])}, headers=headers)
+    assert again.status_code == 200
+    assert again.json()["already"] is True
+    assert repo.get_note(db_conn, src["id"])["content"] == content   # 没有重复追加
+
+
+def test_link_json_bad_target_returns_400(auth_client, csrf, db_conn):
+    src = _make(db_conn, PREFIX + "JSON 坏目标")
+    url = f"/notes/{src['id']}/link.json"
+    headers = {"X-CSRF-Token": csrf}
+
+    self_link = auth_client.post(url, data={"target_id": str(src["id"])}, headers=headers)
+    assert self_link.status_code == 400 and "不能连接" in self_link.json()["error"]
+
+    missing = auth_client.post(url, data={"target_id": "99999999"}, headers=headers)
+    assert missing.status_code == 400 and "不存在" in missing.json()["error"]
+
+    blank = auth_client.post(url, data={}, headers=headers)
+    assert blank.status_code == 400 and blank.json()["error"]
+
+    assert repo.get_note(db_conn, src["id"])["content"].strip() == ""
+
+
+def test_link_json_needs_login_and_csrf(auth_client, csrf, db_conn):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    src = _make(db_conn, PREFIX + "JSON 权限")
+    anon = TestClient(app, follow_redirects=False)
+    assert anon.post(f"/notes/{src['id']}/link.json", data={"target_id": "1"}).status_code == 303
+    assert auth_client.post(f"/notes/{src['id']}/link.json", data={"target_id": "1"}).status_code == 403

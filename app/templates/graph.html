@@ -34,6 +34,7 @@
         <select class="select select--sm" id="graph-color" title="着色方式">
           <option value="community">按聚类着色</option>
           <option value="tag">按标签着色</option>
+          {% if category_count %}<option value="category">按分类着色</option>{% endif %}
           <option value="none">单色</option>
         </select>
       </label>
@@ -48,6 +49,8 @@
         <input type="checkbox" id="graph-only-linked" checked>
         <span>只看有链接的笔记</span>
       </label>
+      <button class="btn btn--ghost btn--sm" id="graph-path" type="button" aria-pressed="false"
+              title="选两篇笔记，看它们之间是怎么连上的">路径</button>
       <div class="graph-toolbar__zoom">
         <button class="btn btn--ghost btn--icon" id="graph-zoom-out" type="button"
                 title="缩小" aria-label="缩小图谱">−</button>
@@ -58,14 +61,55 @@
         <button class="btn btn--ghost btn--sm" id="graph-relayout" type="button"
                 title="重新计算布局（位置会重排）">重新布局</button>
       </div>
+      <div class="graph-toolbar__export">
+        <button class="btn btn--ghost btn--sm" id="graph-export-png" type="button"
+                title="把整张图谱存成 PNG 图片">导出 PNG</button>
+        <button class="btn btn--ghost btn--sm" id="graph-export-svg" type="button"
+                title="把整张图谱存成 SVG 矢量图（可无限放大）">导出 SVG</button>
+      </div>
     </div>
     <p class="graph-toolbar__hint micro muted">
       滚轮缩放 · 拖空白处平移 · 拖节点挪位置 · 悬停高亮邻居 ·
       方向键移动、Enter 打开、<code>+</code> <code>-</code> <code>0</code> 缩放与适应
     </p>
+
+    <details class="graph-params">
+      <summary class="graph-params__summary">布局松紧</summary>
+      <div class="graph-params__body">
+        <label class="graph-params__row">
+          <span class="graph-params__name">斥力</span>
+          <input class="graph-params__range" type="range" id="graph-p-repulsion"
+                 min="40" max="240" step="5" value="100" aria-label="斥力强度（节点之间的排斥）">
+          <span class="graph-params__value" id="graph-p-repulsion-v">100%</span>
+        </label>
+        <label class="graph-params__row">
+          <span class="graph-params__name">连线长度</span>
+          <input class="graph-params__range" type="range" id="graph-p-spring"
+                 min="50" max="220" step="5" value="100" aria-label="连线长度（相连节点的理想距离）">
+          <span class="graph-params__value" id="graph-p-spring-v">100%</span>
+        </label>
+        <label class="graph-params__row">
+          <span class="graph-params__name">向心</span>
+          <input class="graph-params__range" type="range" id="graph-p-center"
+                 min="20" max="300" step="5" value="100" aria-label="向心引力（越大越聚拢）">
+          <span class="graph-params__value" id="graph-p-center-v">100%</span>
+        </label>
+        <button class="btn btn--ghost btn--sm graph-params__reset" id="graph-p-reset" type="button">恢复默认</button>
+        <span class="micro muted graph-params__note">调完立刻生效，并记在这台浏览器上。</span>
+      </div>
+    </details>
   </div>
 
   <p class="graph-match micro" id="graph-match" role="status" aria-live="polite"></p>
+
+  <p class="graph-match micro" id="graph-path-result" role="status" aria-live="polite"></p>
+
+  <div class="graph-path-actions is-hidden" id="graph-path-actions">
+    <span class="micro muted">建立联系</span>
+    <button class="btn btn--ghost btn--sm" id="graph-link-fwd" type="button"></button>
+    <button class="btn btn--ghost btn--sm" id="graph-link-rev" type="button"></button>
+    <button class="btn btn--ghost btn--sm" id="graph-path-clear" type="button">清除路径</button>
+  </div>
 
   <div class="graph-legend" id="graph-legend" aria-label="图例"></div>
 

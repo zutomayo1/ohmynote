@@ -849,6 +849,54 @@ def link_note(
     )
 
 
+@router.post("/notes/{note_id}/link.json")
+def link_note_json(
+    note_id: NoteId,
+    conn: sqlite3.Connection = Depends(db_conn),
+    target_id: str = Form(""),
+    target_title: str = Form(""),
+):
+    """无刷新建链接口：返回 JSON，供图谱页在图上直接把两篇连起来。
+
+    与 link_note 共用同一套解析与落地逻辑（正文末尾追加 [[标题]]，走版本历史）；
+    只是不 303 跳转。已连过时不重复追加，用 ok=True + already=True 回报，
+    免得前端把它当错误弹红。
+    """
+    note = _note_or_404(conn, note_id)
+    target, error = _resolve_link_target(
+        conn, target_id=target_id, target_title=target_title, source_id=note_id
+    )
+    if target is None:
+        return JSONResponse({"ok": False, "error": error}, status_code=400)
+
+    title = target["title"]
+    content = note["content"] or ""
+    if re.search(r"\[\[\s*" + re.escape(title) + r"\s*(\|[^\[\]]*)?\]\]", content, re.IGNORECASE):
+        return JSONResponse(
+            {
+                "ok": True,
+                "already": True,
+                "source_id": note_id,
+                "target_id": target["id"],
+                "target_title": title,
+                "message": f"这篇里已经连到《{title}》了",
+            }
+        )
+
+    appended = f"[[{title}]]" if not content.strip() else content.rstrip() + f"\n\n[[{title}]]\n"
+    repo.update_note(conn, note_id, content=appended, reason="link")
+    return JSONResponse(
+        {
+            "ok": True,
+            "already": False,
+            "source_id": note_id,
+            "target_id": target["id"],
+            "target_title": title,
+            "message": f"已建立链接：这篇 →《{title}》（可在历史版本里撤销）",
+        }
+    )
+
+
 @router.post("/notes/{note_id}/unlink")
 def unlink_note(
     request: Request,

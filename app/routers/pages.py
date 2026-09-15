@@ -623,4 +623,6 @@ def graph_page(
         focus_title=focus_title,
         recent_linked=recent_linked,
         all_tags=all_tags,
+        # 「按分类着色」只在真有分类时才有意义：没有就不给这个选项
+        category_count=len({n["category"] for n in nodes if n.get("category")}),
     )

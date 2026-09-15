@@ -260,3 +260,55 @@ def test_note_detail_graph_depth_bad_values_fall_back(auth_client, db_conn):
         assert resp.status_code == 200
         # 一律退化成 1 跳（页面显示「看 2 跳」）
         assert "看 2 跳" in resp.text
+
+
+def test_build_graph_category_color(db_conn):
+    """按分类着色：同分类同色组，没分类给 -1，且与标签色组用同一套哈希。"""
+    a = repo.create_note(db_conn, title=PREFIX + "分类甲", content="", category="读书笔记")
+    b = repo.create_note(db_conn, title=PREFIX + "分类乙", content="", category="读书笔记")
+    c = repo.create_note(db_conn, title=PREFIX + "无分类", content="")
+    db_conn.commit()
+
+    graph = gs.build_graph(db_conn)
+    by_id = {n["id"]: n for n in graph["nodes"]}
+    assert by_id[a["id"]]["category_color"] == by_id[b["id"]]["category_color"]
+    assert by_id[a["id"]]["category_color"] == tag_color("读书笔记")
+    assert 0 <= by_id[a["id"]]["category_color"] < 8
+    assert by_id[c["id"]]["category_color"] == -1
+
+
+def test_ego_graph_nodes_carry_category_color(db_conn):
+    a = repo.create_note(db_conn, title=PREFIX + "局部分类甲", content="", category="随笔")
+    b = repo.create_note(
+        db_conn, title=PREFIX + "局部分类乙", content="[[{}]]".format(PREFIX + "局部分类甲"), category="随笔"
+    )
+    db_conn.commit()
+    ego = gs.ego_graph(db_conn, a["id"], depth=1)
+    assert ego is not None
+    for node in ego["nodes"]:
+        assert node["category_color"] == tag_color("随笔")
+    assert gs.ego_graph(db_conn, b["id"], depth=1)["neighbor_count"] == 1
+
+
+def test_graph_page_offers_category_coloring_when_used(auth_client, db_conn):
+    """有分类时工具栏才给「按分类着色」这个选项。"""
+    repo.create_note(db_conn, title=PREFIX + "有分类的", content="", category="技术杂谈")
+    db_conn.commit()
+    resp = auth_client.get("/graph")
+    assert resp.status_code == 200
+    assert "按分类着色" in resp.text
+    # 新增的路径 / 导出 / 布局控件都在
+    for marker in ('id="graph-path"', 'id="graph-export-png"', 'id="graph-export-svg"',
+                   'id="graph-p-repulsion"', 'id="graph-path-actions"', 'id="graph-link-fwd"'):
+        assert marker in resp.text, marker
+
+
+def test_graph_payload_nodes_carry_category(auth_client, db_conn):
+    note = repo.create_note(db_conn, title=PREFIX + "载荷分类", content="", category="写作")
+    db_conn.commit()
+    resp = auth_client.get("/graph")
+    match = re.search(r'id="graph-data"[^>]*>(.*?)</script>', resp.text, re.S)
+    data = json.loads(match.group(1).replace("<\\/", "</"))
+    node = next(n for n in data["nodes"] if n["id"] == note["id"])
+    assert node["category"] == "写作"
+    assert node["category_color"] == tag_color("写作")
