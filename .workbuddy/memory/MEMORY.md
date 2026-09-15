@@ -1,15 +1,15 @@
-# 墨痕 InkNote · 项目约定（精简；详录见 memory/YYYY-MM-DD.md）
+# 墨痕 InkNote · 项目约定（精简；详见 memory/YYYY-MM-DD.md）
 
 ## 跑测试 / 验收
 - bash PATH 坏：先 `export PATH="/usr/bin:/bin:$PATH"`；PowerShell 拿不到 stdout，优先 bash。
 - 全量：`./.venv/Scripts/python.exe -m pytest tests -q -n 8 --dist loadfile --junitxml=.scratch/junit.xml`（loadfile 不能省；沙箱吞退出码，解析 junitxml；临时目录别指项目内）。
-- 验收三件套：全量测试 + `audit_css.py` + `check.py --quick`。
+- 三件套：全量测试 + `audit_css.py` + `check.py --quick`。
 
-## 版本管理（.git 丢过两次）
+## 版本管理（.git 丢过 2 次）
 - 提交后保持工作区干净（`.scratch/`、`data/`、`.venv/` 已 gitignore）。
-- 每轮提交后 `git bundle create C:/repo/inknote-<日期>.bundle --all`；批量操作前 `git log -1` 确认。
-- 恢复：`git init -b main` → `git fetch <bundle> "+refs/heads/main:refs/remotes/recover/main"` → `git reset --mixed refs/remotes/recover/main`（工作区不丢；已配每日自动备份）。
-- 多 agent 并行：按文件所有权分波（样式走 `.scratch/css-patch-*.css`，agent 不碰 style.css），主 agent 合并接线；e2e 端口一人一个；合并脚本别用长 assert 链。
+- 每轮提交后 `git bundle create C:/repo/inknote-<日期>.bundle --all`；批量操作前 `git log -1`。
+- 恢复：`git init -b main` → `git fetch <bundle> "+refs/heads/main:refs/remotes/recover/main"` → `git reset --mixed refs/remotes/recover/main`（工作区不丢；已配每日备份）。
+- 多 agent 并行：按文件所有权分波（样式走 `.scratch/css-patch-*.css`，不碰 style.css），主 agent 合并接线；e2e 端口一人一个；合并脚本别用长 assert 链。
 
 ## 全局约定
 - 真值解析唯一入口 `utils.as_bool()`，禁止 `bool(表单串)`；后台线程总开关 `INKNOTE_WORKERS`（conftest 设 0）；表单整数 ID 先过 `deps.MAX_SQLITE_INT`（否则 OverflowError→500）。
@@ -33,17 +33,17 @@
 
 ## 悬浮提示（chart-tip.js）
 - 命中 `[data-tip-title], [title], [data-tip-stash-title]`；title 一进元素立刻摘到 stash（防原生气泡抢跑），离开还原。涟漪三处必须同步：readInfo 兜底读 stash、closestTipped 含 stash、cancelShow 还原 pending。
-- 160ms 延迟（扫过不弹、停住才弹）；面板 `width:max-content` 别加 min-width，上限 300px。
+- 160ms 延迟（扫过不弹、停住才弹）；面板 `width:max-content` 不加 min-width。
 
 ## UI/UX 惯例
 - 历史/审计区块默认折叠（details + 徽标）；summary 里的按钮 preventDefault + stopPropagation。
 - 「无 JS 才显示」：head 内联脚本挂 js 类（**CSP 要 nonce**，缺了静默失效）+ `.js .no-js-only{display:none}`。
-- Enter 发送 / Shift+Enter 换行（IME 组词不误触）；合并 keydown 时 Enter 分支会吃掉 Ctrl+Enter。
+- Enter 发送 / Shift+Enter 换行（IME 组词不误触）；合并 keydown 后 Enter 分支会吃掉 Ctrl+Enter。
 
-## 笔记助手（agent.py）
-- 每轮一个 JSON；观察结果按工具给 `observe_limit`（统一截断会废掉 read 工具）；防空转拦重复调用。
+## 笔记助手（agent）
+- 每轮一个 JSON；观察结果按工具给 `observe_limit`（统一截断会废掉 read 工具）；防空转拦重复。
 
-## 图形 / 布局类改动 + e2e（近期教训）
+## 图形/布局类改动 + e2e
 - 零依赖 ⇒ 借算法不引库。Louvain 类局部移动算法：候选必须含「原状态」且严格更优才移动，否则对称图震荡不收敛（挂死）；指针拖拽别用 setPointerCapture（click 会跑到 `<svg>`）；力布局拖完要短时「钉住」节点，**钉住在所有力里都要豁免——碰撞也会推走（输入设备压过物理模拟）**。
 - 导出/截图：先内联 getComputedStyle（样式表带不走），且**先取目标节点再内联**（内联会删 class）；导出整图摘掉视图 transform、按 getBBox 裁边、铺背景色；e2e 用 expect_download 校验真文件头。
 - e2e：只统计本测试造的记录，期望值**从 payload 算**（写死数字会被用户新数据打红）；读数前「等模拟停稳」；观感/主题用 getComputedStyle 量化，别靠截图判断。
@@ -51,4 +51,4 @@
 ## 界面问题排查
 - 真实数据复现：复制 `data/inknote.db` 到临时目录 + `INKNOTE_DATA_DIR`；改过密码用 `make_session()` 造 cookie。
 - 浮层：elementFromPoint → 沿父链找创建层叠上下文的祖先（position/z/transform）；悬停插桩 `window.__ctl` + 探针记事件与 closest。
-- **同一条消息里对同一文件发多个 Edit 会丢更新** → 同文件多处改动串行，改完 Read 复核。
+- **同一条消息里对同一文件发多个 Edit 会丢更新** → 同文件改多处要串行，改完 Read 复核。
