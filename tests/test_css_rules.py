@@ -168,3 +168,51 @@ def test_stats_page_is_reachable_from_nav():
         encoding="utf-8"
     )
     assert 'href="/stats"' in base, "顶栏导航里必须有 /stats 入口"
+
+
+def test_css_custom_properties_are_defined_before_use():
+    """style.css 里 var(--x) 引用的自定义属性必须真有定义（或有兜底值）。
+
+    教训：多 agent 并行写补丁时，补丁里用了 --text/--border/--muted/--hover
+    这类「别处的通用令牌」，本项目根本没有——有硬编码兜底的会在暗色主题下变成
+    浅色块，没兜底的（--ok）会让整条声明失效。守卫在合并前就拦住。
+    """
+    import re
+
+    css = CSS
+    defined = set(re.findall(r"(--[a-z0-9-]+)\s*:", css))
+    # 由模板内联 / JS setProperty 注入的覆盖项，允许无 var() 兜底
+    injected = {"--i", "--dot", "--split", "--cols", "--arrow-x"}
+    problems = []
+    for match in re.finditer(r"var\(\s*(--[a-z0-9-]+)\s*(,[^)]*)?\)", css):
+        name, fallback = match.group(1), match.group(2)
+        if name in defined or name in injected:
+            continue
+        if fallback and fallback.strip(" ,"):
+            continue          # 有兜底值：允许（但要确认兜底不是硬编码浅色）
+        line = css[:match.start()].count("\n") + 1
+        problems.append(f"第 {line} 行 var({name}) 无定义也无兜底")
+    assert not problems, "未定义且无兜底的 CSS 变量：" + "；".join(problems[:8])
+
+
+def test_css_fallbacks_do_not_hardcode_light_colors():
+    """**未定义**的令牌，其兜底值不得是硬编码浅色（暗色主题下会露馅）。
+
+    注意只查「令牌本身没定义」的情况——令牌有定义时兜底永远不生效，
+    #fff 这类写法无害（项目里大量存在）。
+    """
+    import re
+
+    defined = set(re.findall(r"(--[a-z0-9-]+)\s*:", CSS))
+    injected = {"--i", "--dot", "--split", "--cols", "--arrow-x"}
+    offenders = []
+    for match in re.finditer(r"var\(\s*(--[a-z0-9-]+)\s*,\s*([^)]+)\)", CSS):
+        name, fallback = match.group(1), match.group(2).strip()
+        if name in defined or name in injected:
+            continue
+        if not re.fullmatch(r"#[0-9a-fA-F]{6}", fallback):
+            continue
+        rgb = [int(fallback.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)]
+        if sum(rgb) / 3 > 200:
+            offenders.append(f"{name} → {fallback}")
+    assert not offenders, "未定义令牌的兜底是硬编码浅色（暗色主题会露馅）：" + "、".join(offenders[:8])
