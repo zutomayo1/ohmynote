@@ -6610,3 +6610,423 @@ main.site-main { animation: page-fade .22s ease backwards; }
   .btn:hover .icon--trash, .icon-btn:hover .icon--trash { animation: none; }
   .todo-item__text, .note-card.is-leaving { transition: none; }
 }
+
+/* ===== 补丁：笔记关系图谱（自绘 SVG 力导向图）（2026-09-15 多 agent 并行，已合并） ===== */
+
+/* =====================================================================
+ * 关系图谱页（graph.html）补丁样式
+ * 合并方式：把下面整段追加进 app/static/css/style.css。
+ * 仅用项目既有令牌，未写死颜色；未使用 animation-fill-mode: both/forwards。
+ * 需要的类：.graph-card / .graph-filters / .graph-filters__hint /
+ *           .graph-stage / .graph-svg / .graph-empty / .graph-fallback /
+ *           SVG 内 .node / .node__circle / .node__label / .node--isolated /
+ *           .node--active / .node--selected / .node--dim / .edge /
+ *           .edge--active / .edge--dim / .edge-arrow
+ * ===================================================================== */
+
+/* 画布容器：默认隐藏，JS 可用时再显示（避免无 JS 时露出空框） */
+.graph-stage {
+  position: relative;
+  display: none;
+  margin-top: 14px;
+  min-height: 520px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background:
+    radial-gradient(circle at 1px 1px, var(--line) 1px, transparent 0) 0 0 / 22px 22px,
+    var(--surface-2);
+  overflow: hidden;
+}
+html.js .graph-stage { display: block; }
+.graph-stage:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.graph-svg { display: block; width: 100%; height: 100%; }
+
+.graph-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-3);
+  font-size: 13.5px;
+  pointer-events: none;
+}
+
+/* 无 JS 时的 SSR 列表（html.js 下由 .no-js-only 隐藏） */
+.graph-fallback { margin-top: 14px; }
+.graph-fallback .note-lines { margin: 0; }
+
+.graph-filters__hint { margin-left: auto; }
+
+/* ---- SVG 节点 / 边 ---- */
+.graph-svg .edge {
+  stroke: var(--line-strong);
+  stroke-width: 1.5;
+  opacity: 0.7;
+}
+.graph-svg .edge--dim { opacity: 0.12; }
+.graph-svg .edge--active { stroke: var(--brand); opacity: 0.95; stroke-width: 2; }
+.graph-svg .edge-arrow { fill: var(--line-strong); }
+
+.graph-svg .node { cursor: pointer; }
+.graph-svg .node__hit { fill: transparent; pointer-events: all; }
+.graph-svg .node__circle {
+  fill: var(--brand);
+  stroke: var(--surface);
+  stroke-width: 1.5;
+  transition: fill 120ms ease, r 120ms ease;
+}
+.graph-svg .node__label {
+  fill: var(--ink-2);
+  font: 12px/1 var(--font-sans, system-ui, sans-serif);
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  pointer-events: none;
+  user-select: none;
+}
+/* 孤立节点（无任何链接）：弱化 */
+.graph-svg .node--isolated .node__circle { fill: var(--ink-3); opacity: 0.55; }
+.graph-svg .node--isolated .node__label { fill: var(--ink-3); }
+
+/* 高亮：当前节点 + 邻居 */
+.graph-svg .node--active .node__circle { fill: var(--accent); }
+.graph-svg .node--active .node__label { fill: var(--ink); }
+.graph-svg .node--dim { opacity: 0.25; }
+.graph-svg .node--selected .node__circle {
+  fill: var(--brand-dark, var(--brand));
+  stroke: var(--brand);
+  stroke-width: 3;
+}
+
+/* 入场：淡入（只动 opacity，避免覆盖 graph.js 写在 transform 属性上的定位） */
+@keyframes graph-pop { from { opacity: 0; } to { opacity: 1; } }
+.graph-svg .node { animation: graph-pop 220ms ease backwards; }
+@media (prefers-reduced-motion: reduce) {
+  .graph-svg .node { animation: none; }
+}
+
+/* ===== 补丁：标记无刷新 + 星标点亮弹跳（2026-09-15 多 agent 并行，已合并） ===== */
+
+/* ===== 墨痕 InkNote · 开关按钮无刷新补丁（合并进 app/static/css/style.css）=====
+ * 由前端 app/static/js/app.js 的 initFlagButtons() 驱动：
+ *   - 标星 / 置顶 / 公开按钮点击后就地更新（fetch JSON 端点，不再整页 303 刷新）
+ *   - 星标「点亮」瞬间给按钮加 .is-just-on，做金色弹跳；取消星标不加动画
+ * 只使用现有设计令牌，[data-theme="dark"] 自动跟随。
+ *
+ * 守卫测试要求：一次性动画必须用
+ *   animation: <name> .4s cubic-bezier(.34,1.56,.5,1);
+ *   animation-fill-mode: backwards;
+ * 严禁 both / forwards。
+ */
+
+/* 金色令牌：跟随品牌暖纸调性，避免在别处重复写死 */
+:root { --star-gold: #E0A526; }
+[data-theme="dark"] { --star-gold: #F2C14E; }
+
+/* 点亮瞬间：金色 + 弹跳（一次性动画，结束即恢复常态） */
+.icon-btn.is-just-on,
+.btn--icon.is-just-on {
+  color: var(--star-gold);
+  animation: star-pop .4s cubic-bezier(.34, 1.56, .5, 1);
+  animation-fill-mode: backwards;
+}
+
+@keyframes star-pop {
+  0%   { transform: scale(.55) rotate(-14deg); }
+  55%  { transform: scale(1.28) rotate(8deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+
+/* ===== 补丁：博客阅读进度条（2026-09-15 多 agent 并行，已合并） ===== */
+
+/* 阅读进度条补丁（合并进 app/static/css/style.css）
+ * 只在文章页由 reading-progress.js 自建 DOM 后生效。
+ * 容器贴吸顶站头 (.site-header) 下沿作 2px 细线；pointer-events:none 不挡点击、不造成抖动。
+ */
+
+.reading-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  z-index: 2;                 /* 站内：在站头背景之上、内容之下；仅 2px 不遮挡 */
+  pointer-events: none;
+  opacity: 0;
+  background: transparent;
+  transition: opacity .25s ease;
+}
+
+.reading-progress--visible { opacity: 1; }
+
+.reading-progress__bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 100%;
+  transform: scaleX(0);
+  transform-origin: left center;
+  background: var(--brand, #B5533C);
+  will-change: transform;
+  transition: transform .12s linear;   /* 平滑过渡，但仍由 scroll 节流驱动，不每帧读写布局 */
+}
+
+/* 尊重「减弱动效」：直接跳变，不做任何过渡（进度条也不闪现） */
+@media (prefers-reduced-motion: reduce) {
+  .reading-progress,
+  .reading-progress__bar { transition: none; }
+}
+
+/* ===== 补丁：首次使用分步引导（2026-09-15 多 agent 并行，已合并） ===== */
+
+/* ============================================================
+ * 墨痕 InkNote · 首次引导样式补丁（onboarding）
+ * 合并方式：整段追加到 app/static/css/style.css 末尾即可。
+ * 约定：动画 fill-mode 只用 backwards（禁止 both / forwards），
+ *       过渡短促（0.2-0.5s）、弹性曲线 cubic-bezier(.34,1.56,.5,1)，
+ *       并尊重 prefers-reduced-motion。
+ * ============================================================ */
+
+/* 目标元素高亮：用元素自身 box-shadow 挖空，不切遮罩层 */
+.onboard-spot {
+  position: relative;
+  z-index: 1001;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, .45);
+  transition: box-shadow .28s cubic-bezier(.34, 1.56, .5, 1);
+  animation: onboard-spot-in .28s cubic-bezier(.34, 1.56, .5, 1) backwards;
+}
+
+/* 引导气泡容器 */
+.onboard-pop {
+  position: fixed;
+  z-index: 1002;
+  width: 320px;
+  max-width: calc(100vw - 24px);
+  padding: 16px 16px 14px;
+  border-radius: 14px;
+  background: var(--surface, #fff);
+  color: var(--text, #1c1c1e);
+  border: 1px solid var(--border, rgba(0, 0, 0, .12));
+  box-shadow: 0 16px 40px rgba(0, 0, 0, .28);
+  font-size: 14px;
+  line-height: 1.55;
+  animation: onboard-pop-in .3s cubic-bezier(.34, 1.56, .5, 1) backwards;
+}
+
+/* 窄屏底部固定条 */
+.onboard-pop--fixed {
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  top: auto;
+  width: auto;
+  max-width: none;
+  border-radius: 14px;
+}
+
+.onboard-pop__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.onboard-pop__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.onboard-pop__close {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted, #6b7280);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.onboard-pop__close:hover { background: var(--hover, rgba(0, 0, 0, .06)); }
+
+.onboard-pop__body {
+  margin: 0 0 12px;
+}
+
+.onboard-pop__dots {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.onboard-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--border-strong, rgba(0, 0, 0, .2));
+  transition: transform .2s cubic-bezier(.34, 1.56, .5, 1), background .2s ease;
+}
+.onboard-dot--active {
+  background: var(--accent, #B5533C);
+  transform: scale(1.35);
+}
+
+.onboard-pop__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.onboard-pop__count {
+  margin-left: auto;
+  color: var(--muted, #6b7280);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.onboard-pop__btn {
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform .18s cubic-bezier(.34, 1.56, .5, 1), background .18s ease, border-color .18s ease;
+}
+.onboard-pop__btn:active { transform: scale(.96); }
+
+.onboard-pop__btn--skip {
+  background: transparent;
+  color: var(--muted, #6b7280);
+  border-color: var(--border, rgba(0, 0, 0, .12));
+}
+.onboard-pop__btn--skip:hover { background: var(--hover, rgba(0, 0, 0, .06)); }
+
+.onboard-pop__btn--prev {
+  background: transparent;
+  color: var(--text, #1c1c1e);
+  border-color: var(--border, rgba(0, 0, 0, .12));
+}
+.onboard-pop__btn--prev:hover { background: var(--hover, rgba(0, 0, 0, .06)); }
+
+.onboard-pop__btn--next {
+  background: var(--accent, #B5533C);
+  color: #fff;
+}
+.onboard-pop__btn--next:hover { filter: brightness(1.05); }
+
+/* 键盘聚焦可见环 */
+.onboard-pop__btn:focus-visible,
+.onboard-pop__close:focus-visible {
+  outline: 2px solid var(--accent, #B5533C);
+  outline-offset: 2px;
+}
+
+@keyframes onboard-pop-in {
+  from { opacity: 0; transform: translateY(8px) scale(.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes onboard-spot-in {
+  from { box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0); }
+  to   { box-shadow: 0 0 0 9999px rgba(0, 0, 0, .45); }
+}
+
+/* 尊重「减少动效」偏好：高亮 / 气泡不做过渡动画 */
+@media (prefers-reduced-motion: reduce) {
+  .onboard-spot,
+  .onboard-pop,
+  .onboard-dot {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ===== 补丁：模板拖拽排序（2026-09-15 多 agent 并行，已合并） ===== */
+
+/* 墨痕 InkNote · 模板拖拽排序补丁
+ * 合并进 app/static/css/style.css 时整体粘贴即可。
+ * 注意：只使用 transition，不写任何带 forwards / both 的 animation（守卫 test_css_rules.py）。
+ */
+
+/* 卡片相对定位，给左上角手柄让位 */
+.template-card {
+  position: relative;
+}
+
+/* 拖拽手柄：卡片左上角，半透明、悬停变深，可 Tab 聚焦 */
+.tpl-drag {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted, #9aa3ad);
+  cursor: grab;
+  opacity: 0.55;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  touch-action: none; /* 触屏不抢手势（触屏拖拽本就不支持，见报告） */
+}
+.tpl-drag:hover,
+.tpl-drag:focus-visible {
+  opacity: 1;
+  background: var(--surface-2, #f1f3f5);
+  color: var(--text, #1f2933);
+  border-color: var(--border, #e3e7ec);
+  outline: none;
+}
+.tpl-drag:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent-soft, rgba(64, 124, 226, 0.35));
+}
+.tpl-drag:active {
+  cursor: grabbing;
+}
+.tpl-drag__grip {
+  font-size: 15px;
+  line-height: 1;
+  letter-spacing: -1px;
+  pointer-events: none; /* 让 mousedown 落到按钮本身 */
+}
+
+/* 拖拽中：半透明 + 轻微缩小 + 阴影 */
+.template-card.is-dragging {
+  opacity: 0.6;
+  transform: scale(0.985);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.18);
+  cursor: grabbing;
+  transition: transform 0.18s ease, opacity 0.18s ease, box-shadow 0.18s ease;
+}
+
+/* ===== 补丁：命令面板升级（分组标题 / 空状态，2026-09-15 多 agent 并行，已合并） ===== */
+
+.palette__group-title {
+  padding: 8px 10px 4px; color: var(--ink-3);
+  font-family: var(--font-sans); font-size: 11px; font-weight: 700;
+  letter-spacing: .04em;
+}
+
+.palette__empty {
+  padding: 14px 12px; color: var(--ink-3);
+  font-family: var(--font-sans); font-size: 13px; line-height: 1.5;
+}

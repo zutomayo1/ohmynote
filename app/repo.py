@@ -11,6 +11,7 @@ from datetime import date, timedelta
 from typing import Any, Iterable, Sequence
 
 from . import search as search_mod
+from .deps import MAX_SQLITE_INT
 from .config import settings
 from .markdown_render import WikiRef, make_excerpt, text_stats
 from .utils import (
@@ -1407,6 +1408,37 @@ def save_template(
 
 def delete_template(conn: sqlite3.Connection, template_id: int) -> None:
     conn.execute("DELETE FROM templates WHERE id = ?", (template_id,))
+
+
+def reorder_templates(conn: sqlite3.Connection, ids: list[int]) -> int:
+    """按传入顺序把 ``templates.sort_order`` 写成 ``0..n-1``（同一事务）。
+
+    约定（与 :func:`pages._parse_template_id` 一致）：整数 id 先过
+    ``MAX_SQLITE_INT`` 范围校验，再绑 SQL——超范围的 id 绑参会抛
+    ``OverflowError`` 变成 500，所以这里直接跳过。
+
+    - 非整数 / 超 SQLite 整数上限的 id → 跳过（防 500）；
+    - 库里不存在的 id → UPDATE 影响 0 行，同样跳过；
+    - 返回值 = 实际更新到的行数。
+    """
+    ordered: list[int] = []
+    for raw in ids:
+        if isinstance(raw, bool):  # bool 是 int 的子类，单独排除
+            continue
+        if not isinstance(raw, int):
+            continue
+        if not 1 <= raw <= MAX_SQLITE_INT:
+            continue
+        ordered.append(raw)
+    if not ordered:
+        return 0
+    updated = 0
+    for index, tid in enumerate(ordered):
+        cursor = conn.execute(
+            "UPDATE templates SET sort_order = ? WHERE id = ?", (index, tid)
+        )
+        updated += cursor.rowcount
+    return updated
 
 
 # ---------------------------------------------------------------------------

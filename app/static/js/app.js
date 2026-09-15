@@ -185,10 +185,107 @@
   }
 
   // ===== 4. 命令面板（Ctrl/Cmd+K、/ 或 #search-open）=====
+  // 升级为「命令面板」：无输入时展示命令 + 最近打开的笔记；输入时命令（拼音/首字母模糊）
+  // 与搜索结果（/api/search）混排，分组标题「命令 / 最近 / 笔记」。
   var PALETTE = {
     root: null, input: null, results: null, openBtn: null,
-    isOpen: false, activeIndex: -1, searchTimer: 0, searchSeq: 0, docKey: null
+    isOpen: false, activeIndex: -1, searchTimer: 0, searchSeq: 0, docKey: null,
+    model: { commands: [], notes: [], notesLoading: false, noteHeader: '', query: '', noteError: '' }
   };
+
+  // 内联 SVG 图标（细线条、24 viewBox、stroke=currentColor，与站内图标一致；
+  // 命令面板由 JS 渲染，无法复用服务端的 _macros.html icon()）。复用全局 .icon 的尺寸。
+  var ICON_PATHS = {
+    plus:    '<path d="M12 5v14"/><path d="M5 12h14"/>',
+    check:   '<path d="M20 6L9 17l-5-5"/>',
+    graph:   '<circle cx="6" cy="6" r="2.4"/><circle cx="18" cy="7.5" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M8.1 7.1l2.4 9M16.2 9.3l-3.1 7.4M8 6.4l7.8.9"/>',
+    chart:   '<path d="M4 20V4"/><path d="M4 20h16"/><path d="M7.5 16v-4.5"/><path d="M12 16V8"/><path d="M16.5 16v-7"/>',
+    template:'<rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M3.5 9h17"/><path d="M9.5 21V9"/>',
+    trash:   '<path d="M4 7h16"/><path d="M9 7V5h6v2"/><path d="M7 7l1 13h8l1-13"/>',
+    moon:    '<path d="M20 14.5A8 8 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/>',
+    gear:    '<circle cx="12" cy="12" r="3"/><path d="M12 3.2v2.1M12 18.7v2.1M3.2 12h2.1M18.7 12h2.1M5.7 5.7l1.5 1.5M16.8 16.8l1.5 1.5M18.3 5.7l-1.5 1.5M7.2 16.8l-1.5 1.5"/>'
+  };
+  function iconSvg(name, size) {
+    var paths = ICON_PATHS[name] || '';
+    return '<svg class="icon icon--' + name + '" viewBox="0 0 24 24" width="' + (size || 18) + '" height="' + (size || 18) +
+      '" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      paths + '</svg>';
+  }
+
+  // 命令清单（首批）。py=全拼（去声调），abbr=拼音首字母；
+  // 匹配时把 abbr+py 拼起来做子序列模糊匹配，使「txp」能跨首字母「gxtp」与全拼「xi/tu/pu」命中「关系图谱」。
+  var PALETTE_COMMANDS = [
+    { id: 'new',       title: '新建笔记',     url: '/notes/new', icon: 'plus',    py: 'xinjianbiji',        abbr: 'xjbj' },
+    { id: 'todos',     title: '今日待办',     url: '/todos',     icon: 'check',   py: 'jinritiban',         abbr: 'jrtb' },
+    { id: 'graph',     title: '关系图谱',     url: '/graph',     icon: 'graph',   py: 'guanxitupu',         abbr: 'gxtp' },
+    { id: 'stats',     title: '写作统计',     url: '/stats',     icon: 'chart',   py: 'xiezuotongji',       abbr: 'xztj' },
+    { id: 'templates', title: '模板',         url: '/templates', icon: 'template', py: 'muban',             abbr: 'mb' },
+    { id: 'trash',     title: '回收站',       url: '/trash',     icon: 'trash',   py: 'huishouzhan',        abbr: 'hszh' },
+    { id: 'theme',     title: '切换深色模式', url: null, action: 'theme', icon: 'moon', py: 'qiehuanshensemoshi', abbr: 'qhsmsm' },
+    { id: 'settings',  title: '打开设置',     url: '/settings',  icon: 'gear',    py: 'dakaishezhi',        abbr: 'dksz' }
+  ];
+
+  // 子序列匹配：needle 的每个字符按序出现在 hay 中即命中（用于拼音首字母/全拼模糊）。
+  function isSubsequence(needle, hay) {
+    needle = String(needle); hay = String(hay);
+    if (!needle) return true;
+    var ni = 0, hi = 0;
+    while (hi < hay.length && ni < needle.length) {
+      if (hay.charAt(hi) === needle.charAt(ni)) ni += 1;
+      hi += 1;
+    }
+    return ni === needle.length;
+  }
+  function commandSearchKey(cmd) { return (cmd.abbr || '') + (cmd.py || ''); }
+  function matchCommands(query) {
+    var q = trim(query).toLowerCase();
+    if (!q) return PALETTE_COMMANDS.slice();
+    var scored = [];
+    PALETTE_COMMANDS.forEach(function (cmd) {
+      var score = -1;
+      if ((cmd.title || '').toLowerCase().indexOf(q) >= 0) score = 0;          // 中文子串最优先
+      else if ((cmd.abbr || '').indexOf(q) === 0) score = 1;                   // 拼音首字母前缀
+      else if (isSubsequence(q, commandSearchKey(cmd))) score = 2;             // 拼音首字母/全拼子序列
+      if (score >= 0) scored.push({ cmd: cmd, score: score });
+    });
+    scored.sort(function (a, b) {
+      if (a.score !== b.score) return a.score - b.score;
+      return a.cmd.title.localeCompare(b.cmd.title, 'zh');
+    });
+    return scored.map(function (s) { return s.cmd; });
+  }
+
+  // ===== 最近打开的笔记（localStorage 记忆）=====
+  var RECENT_KEY = 'inknote-recent';
+  var RECENT_MAX = 6;
+  function getRecentNotes() {
+    try {
+      var raw = localStorage.getItem(RECENT_KEY);
+      if (!raw) return [];
+      var arr = JSON.parse(raw);
+      if (!Array.isArray(arr)) return [];
+      return arr.filter(function (n) {
+        return n && typeof n.id === 'string' && n.id && typeof n.title === 'string' && n.title;
+      }).slice(0, RECENT_MAX);
+    } catch (e) { return []; }
+  }
+  function recordRecentNote(id, title) {
+    if (!id) return;
+    try {
+      var list = getRecentNotes().filter(function (n) { return n.id !== String(id); });
+      list.unshift({ id: String(id), title: title || '无标题' });
+      if (list.length > RECENT_MAX) list = list.slice(0, RECENT_MAX);
+      localStorage.setItem(RECENT_KEY, JSON.stringify(list));
+    } catch (e) { /* 隐私模式忽略 */ }
+  }
+  function initRecentNotes() {
+    var path = window.location.pathname || '';
+    var m = path.match(/^\/notes\/([^/?#]+)$/);
+    if (!m) return;
+    var titleEl = document.querySelector('.page-title') || document.querySelector('h1');
+    var title = titleEl ? titleEl.textContent : '';
+    recordRecentNote(decodeURIComponent(m[1]), title);
+  }
 
   function initPalette() {
     var root = document.getElementById('palette');
@@ -204,8 +301,18 @@
     $$('[data-palette-close]', root).forEach(function (el) {
       el.addEventListener('click', function () { closePalette(); });
     });
-    results.addEventListener('click', function (e) { // 点结果项：先关面板再正常跳转
-      if (e.target && e.target.closest && e.target.closest('.palette__item')) closePalette(false);
+    results.addEventListener('click', function (e) { // 点结果项：命令走 action，笔记记录最近 + 默认跳转
+      var item = e.target && e.target.closest ? e.target.closest('.palette__item') : null;
+      if (!item) return;
+      var action = item.getAttribute('data-action');
+      var href = item.getAttribute('href') || '';
+      if (action === 'theme') { e.preventDefault(); closePalette(); runCommandAction('theme'); return; }
+      var m = href.match(/^\/notes\/([^/?#]+)/);
+      if (m) {
+        var t = item.querySelector('.palette__item-title');
+        recordRecentNote(m[1], t ? t.textContent : '');
+      }
+      closePalette(false); // 锚点默认跳转照常（渐进增强）
     });
     document.addEventListener('keydown', onGlobalKeydown, true); // 全局快捷键常驻
   }
@@ -240,7 +347,9 @@
     input.focus();
     try { input.select(); } catch (e) { /* 忽略 */ }
     var q = trim(input.value);
-    if (q && PALETTE.results && !PALETTE.results.childNodes.length) runPaletteSearch(q);
+    PALETTE.model.query = q;
+    if (!q) renderDefault();
+    else runPaletteSearch(q);
   }
 
   function closePalette(restoreFocus) {
@@ -256,32 +365,50 @@
     if (!PALETTE.input) return;
     if (PALETTE.searchTimer) { clearTimeout(PALETTE.searchTimer); PALETTE.searchTimer = 0; }
     var q = trim(PALETTE.input.value);
+    PALETTE.model.query = q;
     if (!q) {
       PALETTE.searchSeq += 1; // 让飞行中的请求作废
-      if (PALETTE.results) PALETTE.results.textContent = '';
       PALETTE.activeIndex = -1;
+      renderDefault();
       return;
     }
-    PALETTE.searchTimer = setTimeout(function () { PALETTE.searchTimer = 0; runPaletteSearch(q); }, 200);
+    // 命令即时匹配（无需请求）；笔记走搜索接口（防抖）
+    PALETTE.model.commands = matchCommands(q);
+    PALETTE.model.notes = [];
+    PALETTE.model.noteHeader = '笔记';
+    PALETTE.model.notesLoading = true;
+    PALETTE.model.noteError = '';
+    PALETTE.searchSeq += 1;
+    renderPalette();
+    var seq = PALETTE.searchSeq;
+    PALETTE.searchTimer = setTimeout(function () {
+      PALETTE.searchTimer = 0;
+      fetchNotes(q, seq);
+    }, 200);
   }
 
-  function runPaletteSearch(q) {
+  function fetchNotes(q, seq) {
     var input = PALETTE.input, results = PALETTE.results;
     if (!input || !results) return;
     var base = input.getAttribute('data-search-url') || '/api/search';
     var url = base + (base.indexOf('?') === -1 ? '?' : '&') + 'q=' + encodeURIComponent(q) + '&limit=20';
-    var seq = (PALETTE.searchSeq += 1);
-    PALETTE.activeIndex = -1;
-    results.textContent = '搜索中…';
     fetchJSON(url).then(function (data) {
       if (seq !== PALETTE.searchSeq) return; // 旧请求丢弃
-      renderPaletteResults(data && data.items ? data.items : [], q);
+      PALETTE.model.notes = data && data.items ? data.items : [];
+      PALETTE.model.notesLoading = false;
+      PALETTE.model.noteError = '';
+      renderPalette();
     }).catch(function (err) {
       if (seq !== PALETTE.searchSeq) return;
-      results.textContent = err && err.message ? err.message : '搜索失败';
-      PALETTE.activeIndex = -1;
+      PALETTE.model.notes = [];
+      PALETTE.model.notesLoading = false;
+      PALETTE.model.noteError = err && err.message ? err.message : '搜索失败';
+      renderPalette();
     });
   }
+
+  // 旧接口名保留：无输入时由 openPalette/onPaletteInput 直接走 renderDefault。
+  function runPaletteSearch(q) { fetchNotes(q, (PALETTE.searchSeq += 1)); }
 
   // 先 escapeHtml，再只用 <mark> 标签包裹命中词
   function highlightEscaped(escapedText, rawQuery) {
@@ -297,35 +424,88 @@
     if (item && item.id !== null && item.id !== undefined) return '/notes/' + encodeURIComponent(String(item.id));
     return '#';
   }
-  function renderPaletteResults(items, query) {
+
+  function paletteGroupTitle(text) {
+    var div = document.createElement('div');
+    div.className = 'palette__group-title';
+    div.textContent = text;
+    return div;
+  }
+  function renderCommandItem(cmd) {
+    var a = document.createElement('a');
+    a.className = 'palette__item';
+    a.setAttribute('href', cmd.url || '#');
+    a.setAttribute('data-command', cmd.id);
+    if (cmd.action) a.setAttribute('data-action', cmd.action);
+    a.innerHTML = iconSvg(cmd.icon, 18); // 复用全局 .icon 尺寸，无需新类名
+    var title = document.createElement('span');
+    title.className = 'palette__item-title';
+    title.textContent = cmd.title;
+    a.appendChild(title);
+    return a;
+  }
+  function renderNoteItem(item, query) {
+    var a = document.createElement('a');
+    a.className = 'palette__item';
+    a.setAttribute('href', paletteItemUrl(item));
+    if (item && item.id !== null && item.id !== undefined) a.setAttribute('data-note-id', String(item.id));
+    var title = document.createElement('span');
+    title.className = 'palette__item-title';
+    title.innerHTML = highlightEscaped(escapeHtml(item && item.title ? item.title : '无标题'), query);
+    var meta = document.createElement('span');
+    meta.className = 'palette__item-meta';
+    var snippet = item && item.snippet ? String(item.snippet) : '';
+    if (snippet) {
+      meta.innerHTML = highlightEscaped(escapeHtml(snippet), query);
+      if (item.updated_at) meta.appendChild(document.createTextNode(' · 更新于 ' + item.updated_at));
+    } else if (item && item.updated_at) {
+      meta.textContent = '更新于 ' + item.updated_at;
+    }
+    a.appendChild(title);
+    a.appendChild(meta);
+    return a;
+  }
+  function renderDefault() {
+    PALETTE.model.commands = PALETTE_COMMANDS.slice();
+    PALETTE.model.notes = getRecentNotes();
+    PALETTE.model.noteHeader = '最近';
+    PALETTE.model.notesLoading = false;
+    PALETTE.model.noteError = '';
+    PALETTE.model.query = '';
+    renderPalette();
+  }
+  function renderPalette() {
     var results = PALETTE.results;
     if (!results) return;
     while (results.firstChild) results.removeChild(results.firstChild);
-    if (!items.length) {
-      results.textContent = '没有找到匹配的笔记';
+    var model = PALETTE.model;
+    var q = trim(model.query);
+    var hasCmd = model.commands.length > 0;
+    var hasNote = model.notes.length > 0;
+    if (!hasCmd && !hasNote && !model.notesLoading) {
+      var empty = document.createElement('div');
+      empty.className = 'palette__empty';
+      empty.textContent = model.noteError
+        ? model.noteError
+        : (q ? '没有找到匹配的命令或笔记，换个关键词试试' : '暂时没有内容');
+      results.appendChild(empty);
       PALETTE.activeIndex = -1;
       return;
     }
-    items.forEach(function (item) {
-      var a = document.createElement('a');
-      a.className = 'palette__item';
-      a.setAttribute('href', paletteItemUrl(item));
-      var title = document.createElement('span');
-      title.className = 'palette__item-title';
-      title.innerHTML = highlightEscaped(escapeHtml(item && item.title ? item.title : '无标题'), query);
-      var meta = document.createElement('span');
-      meta.className = 'palette__item-meta';
-      var snippet = item && item.snippet ? String(item.snippet) : '';
-      if (snippet) {
-        meta.innerHTML = highlightEscaped(escapeHtml(snippet), query);
-        if (item.updated_at) meta.appendChild(document.createTextNode(' · 更新于 ' + item.updated_at));
-      } else if (item && item.updated_at) {
-        meta.textContent = '更新于 ' + item.updated_at;
-      }
-      a.appendChild(title);
-      a.appendChild(meta);
-      results.appendChild(a);
-    });
+    if (hasCmd) {
+      results.appendChild(paletteGroupTitle('命令'));
+      model.commands.forEach(function (cmd) { results.appendChild(renderCommandItem(cmd)); });
+    }
+    if (model.notesLoading) {
+      results.appendChild(paletteGroupTitle('笔记'));
+      var loading = document.createElement('div');
+      loading.className = 'palette__empty';
+      loading.textContent = '搜索中…';
+      results.appendChild(loading);
+    } else if (hasNote) {
+      results.appendChild(paletteGroupTitle(model.noteHeader || '笔记'));
+      model.notes.forEach(function (item) { results.appendChild(renderNoteItem(item, q)); });
+    }
     setPaletteActive(0);
   }
   function paletteItems() { return PALETTE.results ? $$('.palette__item', PALETTE.results) : []; }
@@ -347,10 +527,14 @@
     if (typeof form.requestSubmit === 'function') form.requestSubmit();
     else form.submit();
   }
+  function runCommandAction(action) {
+    if (action === 'theme') onThemeToggleClick(); // 复用现成的主题切换逻辑
+  }
   function onPaletteKeydown(e) {
     if (!PALETTE.isOpen) return;
     var key = e.key;
     if (key === 'Escape') { e.preventDefault(); closePalette(); return; }
+    if (key === 'Tab') { e.preventDefault(); return; } // 焦点留在输入框，不跳走
     if (key === 'ArrowDown') { e.preventDefault(); setPaletteActive(PALETTE.activeIndex + 1); return; }
     if (key === 'ArrowUp') { e.preventDefault(); setPaletteActive(PALETTE.activeIndex - 1); return; }
     if (key !== 'Enter') return;
@@ -360,6 +544,8 @@
     var active = PALETTE.activeIndex >= 0 && PALETTE.activeIndex < list.length ? list[PALETTE.activeIndex] : null;
     if (!active && list.length) active = list[0];
     if (active) {
+      var action = active.getAttribute('data-action');
+      if (action === 'theme') { closePalette(); runCommandAction('theme'); return; }
       var href = active.getAttribute('href');
       if (href && href !== '#') window.location.assign(href);
     } else if (trim(PALETTE.input ? PALETTE.input.value : '')) {
@@ -389,6 +575,110 @@
         }
       }
     }, true);
+  }
+
+  // ===== 5b. 开关按钮无刷新（标星 / 置顶 / 公开）=====
+  // 带 data-flag-form 的表单：原生提交走 303 整页刷新（渐进增强兜底），
+  // JS 接管后改为 fetch JSON 端点（/notes/{id}/flag.json）就地更新按钮状态。
+  // 注意：必须排在 initConfirm（form[data-confirm]）之后；本委托只认 data-flag-form，
+  // 绝不影响删除等 data-confirm 表单。要求 style.css 有 .is-just-on 样式（合并补丁后生效）。
+  var FLAG_META = {
+    star:   { on: '取消星标', off: '标星', icon: null },
+    pin:    { on: '取消置顶', off: '置顶', icon: null },
+    public: { on: '取消公开（从博客撤下）', off: '公开到博客', icon: 'eye-off' }
+  };
+  // 与 _macros.html 的 icon() 对齐的内联 SVG（仅 public 在 eye / eye-off 间切换）
+  var FLAG_ICONS = {
+    star:    '<path d="M12 4l2.4 5 5.6.8-4 3.9 1 5.5-5-2.7-5 2.7 1-5.5-4-3.9 5.6-.8L12 4z"/>',
+    pin:     '<path d="M9 4h6l-1 7 3 3H7l3-3-1-7z"/><path d="M12 14v6"/>',
+    eye:     '<path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.6"/>',
+    'eye-off': '<path d="M4 4l16 16"/><path d="M9.5 5.3A10.6 10.6 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.4 4.2M6.6 7.2A17 17 0 0 0 2 12s3.6 7 10 7c1.2 0 2.3-.2 3.3-.6"/>'
+  };
+  function flagIconSvg(name, size) {
+    return '<svg class="icon icon--' + name + '" viewBox="0 0 24 24" width="' + size + '" height="' + size +
+      '" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      (FLAG_ICONS[name] || '') + '</svg>';
+  }
+
+  // 就地更新按钮：is-on 类、title / aria-label / aria-pressed，以及（public）图标切换。
+  // 同时把表单里的隐藏 value 改成「下一次要设的反向值」，保证可反复点击。
+  function flagSetButton(btn, form, flag, isOn) {
+    var meta = FLAG_META[flag];
+    if (!meta) return;
+    btn.classList.toggle('is-on', isOn);
+    btn.setAttribute('title', isOn ? meta.on : meta.off);
+    btn.setAttribute('aria-label', isOn ? meta.on : meta.off);
+    btn.setAttribute('aria-pressed', isOn ? 'true' : 'false');
+    if (meta.icon) { // public：on 态用 eye-off，off 态用 eye
+      var svg = btn.querySelector('svg');
+      var size = svg && svg.getAttribute('width') ? svg.getAttribute('width') : '16';
+      btn.innerHTML = flagIconSvg(isOn ? meta.icon : 'eye', size);
+    }
+    var valInput = form.querySelector('input[name="value"]');
+    if (valInput) valInput.value = isOn ? '0' : '1';
+  }
+
+  // 列表卡片上依赖状态的「小徽标」：note_card 里 star 有 card__flag--star（pin/public 同样可扩展）
+  function flagSyncCardBadge(card, flag, isOn) {
+    if (!card || flag !== 'star') return;
+    var badge = card.querySelector('.card__flag--star');
+    if (isOn && !badge) {
+      badge = document.createElement('span');
+      badge.className = 'card__flag card__flag--star';
+      badge.setAttribute('title', '已星标');
+      badge.setAttribute('aria-label', '已星标');
+      badge.innerHTML = flagIconSvg('star', 15);
+      var pin = card.querySelector('.card__flag--pin');
+      var head = card.querySelector('.card__title');
+      if (pin && pin.parentNode) pin.parentNode.insertBefore(badge, pin.nextSibling);
+      else if (head) head.insertBefore(badge, head.firstChild);
+    } else if (!isOn && badge && badge.parentNode) {
+      badge.parentNode.removeChild(badge);
+    }
+  }
+
+  // 点亮瞬间：先移除再强制重排再添加，确保动画每次都能重放；动画结束自动移除。
+  function flagBounceStar(btn) {
+    btn.classList.remove('is-just-on');
+    void btn.offsetWidth;
+    btn.classList.add('is-just-on');
+    btn.addEventListener('animationend', function handler() {
+      btn.classList.remove('is-just-on');
+      btn.removeEventListener('animationend', handler);
+    });
+  }
+
+  function initFlagButtons() {
+    if (!document.addEventListener) return;
+    document.addEventListener('submit', function (e) {
+      var form = e.target;
+      if (!form || !form.matches || !form.matches('form[data-flag-form]')) return;
+      e.preventDefault(); // 无刷新；无 JS 时这段不执行 → 退回整页刷新兜底
+      var btn = form.querySelector('button[type="submit"]');
+      if (!btn) return;
+      var flagInput = form.querySelector('input[name="flag"]');
+      var valueInput = form.querySelector('input[name="value"]');
+      var flag = flagInput ? flagInput.value : '';
+      if (!FLAG_META[flag]) return; // 不认识的开关交给原生提交
+      var desiredOn = valueInput ? valueInput.value === '1' : false;
+      var card = form.closest('.note-card');
+      // 乐观更新：先就地翻转到期望状态，失败再回滚
+      flagSetButton(btn, form, flag, desiredOn);
+      flagSyncCardBadge(card, flag, desiredOn);
+      var url = (form.getAttribute('action') || '') + '.json';
+      fetchJSON(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'flag=' + encodeURIComponent(flag) + '&value=' + encodeURIComponent(desiredOn ? '1' : '0')
+      }).then(function (data) {
+        if (!data || !data.ok) throw new Error((data && data.error) || '操作失败');
+        if (flag === 'star' && desiredOn) flagBounceStar(btn); // 仅「点亮」瞬间弹跳，取消不加动画
+      }).catch(function (err) {
+        flagSetButton(btn, form, flag, !desiredOn); // 回滚 UI
+        flagSyncCardBadge(card, flag, !desiredOn);
+        toast(err && err.message ? err.message : '操作失败，请重试', 'error');
+      });
+    });
   }
 
   // ===== 6. 代码块复制 =====
@@ -700,6 +990,10 @@
   InkNote.escapeHtml = escapeHtml; InkNote.theme = theme; InkNote.applyTheme = applyTheme;
   // 供 editor.js 在预览重渲染后复用
   InkNote.enhanceContent = enhanceContent; InkNote.setupCodeCopy = setupCodeCopy;
+  // 命令面板纯函数暴露：便于单测（pytest 经 node 加载本文件调用）与手动调试
+  InkNote.PALETTE_COMMANDS = PALETTE_COMMANDS;
+  InkNote.matchPaletteCommands = matchCommands;
+  InkNote.paletteSubsequence = isSubsequence;
 
   // ===== 统计页：热力图初始定位到最新（右端） =====
   // 53 周的格子比卡片宽，overflow 裁掉右半边；有记录的日子几乎总在最新那几周，
@@ -917,7 +1211,7 @@
   }
 
   ready(function () {
-    safe(initTheme); safe(initPalette); safe(initConfirm); safe(initCodeCopy); safe(initNoteCopy); safe(initHeatmapScroll); safe(initTodoPage); safe(initPalettePicker); safe(initTaskToggle);
+    safe(initTheme); safe(initPalette); safe(initConfirm); safe(initFlagButtons); safe(initCodeCopy); safe(initNoteCopy); safe(initHeatmapScroll); safe(initTodoPage); safe(initPalettePicker); safe(initTaskToggle);
     safe(initToc); safe(initOffline); safe(initTitleAutoSize); safe(initKbdNav); safe(initMenuGroup);
     safe(function () { enhanceContent(document); });
     safe(initToolbarAutoSubmit);

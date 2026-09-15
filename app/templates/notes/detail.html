@@ -42,7 +42,7 @@
     <a class="btn btn--primary" href="{{ note.url }}/edit">{{ icon('edit', 16) }} 编辑</a>
 
     {# 状态开关：图标 + 悬停提示 + aria-pressed；当前生效时高亮（is-on） #}
-    <form method="post" action="{{ note.url }}/flag">
+    <form method="post" action="{{ note.url }}/flag" data-flag-form>
       <input type="hidden" name="_csrf" value="{{ csrf }}">
       <input type="hidden" name="next" value="{{ back }}">
       <input type="hidden" name="flag" value="pin">
@@ -52,7 +52,7 @@
               aria-label="{{ '取消置顶' if note.is_pinned else '置顶' }}"
               aria-pressed="{{ 'true' if note.is_pinned else 'false' }}">{{ icon('pin', 16) }}</button>
     </form>
-    <form method="post" action="{{ note.url }}/flag">
+    <form method="post" action="{{ note.url }}/flag" data-flag-form>
       <input type="hidden" name="_csrf" value="{{ csrf }}">
       <input type="hidden" name="next" value="{{ back }}">
       <input type="hidden" name="flag" value="star">
@@ -62,7 +62,7 @@
               aria-label="{{ '取消星标' if note.is_starred else '标星' }}"
               aria-pressed="{{ 'true' if note.is_starred else 'false' }}">{{ icon('star', 16) }}</button>
     </form>
-    <form method="post" action="{{ note.url }}/flag">
+    <form method="post" action="{{ note.url }}/flag" data-flag-form>
       <input type="hidden" name="_csrf" value="{{ csrf }}">
       <input type="hidden" name="next" value="{{ back }}">
       <input type="hidden" name="flag" value="public">

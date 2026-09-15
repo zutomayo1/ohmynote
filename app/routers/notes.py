@@ -689,6 +689,39 @@ def toggle_flag(
     )
 
 
+@router.post("/notes/{note_id}/flag.json")
+def toggle_flag_json(
+    request: Request,
+    note_id: NoteId,
+    conn: sqlite3.Connection = Depends(db_conn),
+    flag: str = Form(...),
+    value: str = Form("toggle"),
+):
+    """无刷新开关接口：返回 JSON，供前端 fetch 后就地更新按钮状态（不再整页 303 刷新）。
+
+    沿用路由级的登录 + CSRF 依赖（require_login / csrf_protect）。
+    note_id 由 NoteId 做 1..MAX_SQLITE_INT 范围校验，越界直接 422 而非 int() 溢出变 500；
+    flag 必须在 FLAG_FIELDS 内，否则 400。返回体便于前端同步 is-on / 徽标等显示。
+    """
+    field = FLAG_FIELDS.get(flag)
+    if field is None:
+        raise HTTPException(status_code=400, detail="未知的开关类型")
+    note = _note_or_404(conn, note_id)
+    current = bool(note[field])
+    desired = (not current) if value == "toggle" else as_bool(value)
+    repo.set_flags(conn, note_id, **{field: desired})
+    return JSONResponse(
+        {
+            "ok": True,
+            "note_id": note_id,
+            "flag": flag,
+            "field": field,
+            "value": desired,
+            "is_on": desired,
+        }
+    )
+
+
 @router.post("/notes/{note_id}/archive")
 def toggle_archive(
     request: Request,

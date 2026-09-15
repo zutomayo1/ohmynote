@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% from '_macros.html' import icon, empty_state, tag_pill with context %}
+{% block page %}graph{% endblock %}
+{% block title %}关系图谱 · {{ settings.site_title }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">关系图谱</h1>
+    <p class="page-sub">
+      用 <code>[[双链]]</code> 把笔记连起来，看清它们之间的脉络。
+      共 {{ notes_count }} 篇笔记、{{ links_count }} 条链接。
+    </p>
+  </div>
+  <div class="page-actions"><a class="btn btn--ghost" href="/notes">返回笔记</a></div>
+</div>
+
+<section class="card graph-card">
+  <div class="graph-filters filter-bar" role="region" aria-label="图谱筛选">
+    <div class="filter-bar__group">
+      <label class="checkbox">
+        <input type="checkbox" id="graph-only-linked" checked>
+        <span>只看有链接的笔记</span>
+      </label>
+    </div>
+    <div class="filter-bar__group">
+      <label for="graph-tag" class="sr-only">按标签筛选</label>
+      <select id="graph-tag" class="select">
+        <option value="">全部标签</option>
+        {% for tag in all_tags %}<option value="{{ tag }}">{{ tag }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="filter-bar__group graph-filters__hint">
+      <span class="muted micro">拖拽移动 · 悬停高亮邻居 · 方向键导航，Enter 打开</span>
+    </div>
+  </div>
+
+  <div id="graph-stage" class="graph-stage" tabindex="0" role="application"
+       aria-label="笔记关系图谱，可用方向键在节点间移动、Enter 打开对应笔记">
+    <svg id="graph-svg" class="graph-svg" xmlns="http://www.w3.org/2000/svg"
+         aria-hidden="true" focusable="false"></svg>
+    <p id="graph-empty" class="graph-empty is-hidden">当前筛选下没有可显示的笔记。</p>
+  </div>
+
+  {# 无 JS 兜底：JS 接管后由 .no-js-only（html.js 时隐藏）或 graph.js 隐藏本块 #}
+  <div id="graph-fallback" class="graph-fallback no-js-only">
+    <h2 class="card__title">最近有链接的笔记</h2>
+    {% if recent_linked %}
+      <ul class="note-lines">
+        {% for note in recent_linked %}
+          <li class="note-line">
+            <a class="note-line__title" href="/notes/{{ note.id }}">{{ note.title }}</a>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      {{ empty_state("还没有相互链接的笔记",
+           text="在正文里用 [[标题]] 引用另一篇笔记，它们就会在这里连起来。",
+           icon_name="link") }}
+    {% endif %}
+  </div>
+</section>
+
+<script type="application/json" id="graph-data">{{ graph_json | safe }}</script>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/graph.js?v={{ asset_v }}" defer></script>
+{% endblock %}

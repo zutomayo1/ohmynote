@@ -26,7 +26,10 @@
     {% if templates %}
       <div class="template-grid">
         {% for item in templates %}
-          <article class="template-card{{ ' is-active' if editing and editing.id == item.id }}">
+          <article class="template-card{{ ' is-active' if editing and editing.id == item.id }}" data-template-id="{{ item.id }}" draggable="true">
+            <button class="tpl-drag" type="button" title="拖动排序" aria-label="拖动排序模板（按住后拖动，或聚焦后用 Alt+↑ / Alt+↓ 移动）">
+              <span class="tpl-drag__grip" aria-hidden="true">⠿</span>
+            </button>
             <header class="template-card__head">
               <h3 class="template-card__name">{{ item.name }}{% if default_template_id == item.id %} <span class="badge badge--saved">默认</span>{% endif %}</h3>
             </header>

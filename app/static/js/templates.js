@@ -122,9 +122,160 @@
     });
   }
 
+  /* ---------- 模板拖拽排序 ---------- */
+  function initDragSort() {
+    var grid = document.querySelector('.template-grid');
+    if (!grid) { return; }
+    var cards = Array.prototype.slice.call(grid.querySelectorAll('.template-card'));
+    if (cards.length < 2) { return; }   // 一张及以下没有排序意义
+
+    var dragging = null;
+    var handleArmed = false;            // 只有按住手柄才允许拖（避免误拖卡片里的按钮）
+    var dragStartOrder = [];            // 拖拽前的顺序，用于失败回滚
+
+    function idsInDom() {
+      return Array.prototype.slice.call(grid.querySelectorAll('.template-card'))
+        .map(function (el) { return parseInt(el.getAttribute('data-template-id'), 10); });
+    }
+
+    // FLIP：先记录旧位置，执行 DOM 变更，再对其它卡片用 translateY 平滑归位。
+    function flip(mutate) {
+      var before = {};
+      Array.prototype.slice.call(grid.querySelectorAll('.template-card')).forEach(function (el) {
+        before[el.getAttribute('data-template-id')] = el.getBoundingClientRect().top;
+      });
+      mutate();
+      Array.prototype.slice.call(grid.querySelectorAll('.template-card')).forEach(function (el) {
+        if (el === dragging) { return; }      // 正在拖的那张交给浏览器拖影，不参与归位
+        var tid = el.getAttribute('data-template-id');
+        var dy = before[tid] - el.getBoundingClientRect().top;
+        if (dy) {
+          el.style.transition = 'none';
+          el.style.transform = 'translateY(' + dy + 'px)';
+          requestAnimationFrame(function () {
+            el.style.transition = 'transform 0.18s ease';
+            el.style.transform = '';
+          });
+        }
+      });
+    }
+
+    // 把 DOM 按给定 id 顺序重排（带 FLIP 动画）。
+    function applyOrder(targetIds) {
+      var map = {};
+      grid.querySelectorAll('.template-card').forEach(function (el) {
+        map[el.getAttribute('data-template-id')] = el;
+      });
+      flip(function () {
+        targetIds.forEach(function (tid) {
+          var el = map[String(tid)];
+          if (el) { grid.appendChild(el); }
+        });
+      });
+    }
+
+    // 返回指针上方、应插到其前面的卡片。
+    function dragAfter(y) {
+      var els = Array.prototype.slice.call(grid.querySelectorAll('.template-card:not(.is-dragging)'));
+      var best = { offset: -Infinity, el: null };
+      els.forEach(function (el) {
+        var box = el.getBoundingClientRect();
+        var offset = y - box.top - box.height / 2;
+        if (offset < 0 && offset > best.offset) { best = { offset: offset, el: el }; }
+      });
+      return best.el;
+    }
+
+    // 松手后提交新顺序；失败则把 DOM 还原成 rollback（不让 UI 与服务端不一致）。
+    function commit(order, rollback) {
+      fetch('/templates/reorder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
+        body: JSON.stringify({ ids: order }),
+      }).then(function (res) {
+        return res.json().then(function (data) { return { ok: res.ok, data: data }; });
+      }).then(function (result) {
+        if (!result.ok || result.data.error) {
+          toast(result.data.error || '排序保存失败，已还原顺序', 'error');
+          if (rollback) { applyOrder(rollback); }
+        }
+      }).catch(function () {
+        toast('网络错误，排序未保存，已还原顺序', 'error');
+        if (rollback) { applyOrder(rollback); }
+      });
+    }
+
+    cards.forEach(function (card) {
+      var handle = card.querySelector('.tpl-drag');
+      if (!handle) { return; }
+
+      // 鼠标 / 触控按下手柄才「上膛」；松手或拖完解除。
+      handle.addEventListener('mousedown', function () { handleArmed = true; });
+      handle.addEventListener('mouseup', function () { handleArmed = false; });
+      handle.addEventListener('touchstart', function () { handleArmed = true; }, { passive: true });
+      handle.addEventListener('touchend', function () { handleArmed = false; });
+
+      card.addEventListener('dragstart', function (e) {
+        if (!handleArmed) { e.preventDefault(); return; }   // 不是从手柄发起 → 取消拖拽
+        dragging = card;
+        card.classList.add('is-dragging');
+        dragStartOrder = idsInDom();
+        if (e.dataTransfer) {
+          e.dataTransfer.effectAllowed = 'move';
+          try { e.dataTransfer.setData('text/plain', card.getAttribute('data-template-id') || ''); } catch (err) { /* 部分浏览器禁写 */ }
+        }
+      });
+
+      card.addEventListener('dragend', function () {
+        card.classList.remove('is-dragging');
+        handleArmed = false;
+        if (!dragging) { return; }
+        var order = idsInDom();
+        var rollback = dragStartOrder.slice();
+        dragging = null;
+        commit(order, rollback);
+      });
+
+      // 键盘可达：手柄 Tab 聚焦后 Alt+↑ / Alt+↓ 移动一张，同样提交。
+      handle.addEventListener('keydown', function (e) {
+        if (!e.altKey) { return; }
+        if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') { return; }
+        e.preventDefault();
+        var current = idsInDom();
+        var tid = parseInt(card.getAttribute('data-template-id'), 10);
+        var idx = current.indexOf(tid);
+        var swap = idx + (e.key === 'ArrowUp' ? -1 : 1);
+        if (swap < 0 || swap >= current.length) { return; }
+        var next = current.slice();
+        next[idx] = current[swap];
+        next[swap] = current[idx];
+        applyOrder(next);
+        commit(next, current);
+      });
+    });
+
+    // 拖动中其余卡片让位：随指针实时把被拖卡片插到合适位置。
+    grid.addEventListener('dragover', function (e) {
+      if (!dragging) { return; }
+      e.preventDefault();
+      if (e.dataTransfer) { e.dataTransfer.dropEffect = 'move'; }
+      var after = dragAfter(e.clientY);
+      if (after == null) {
+        if (grid.lastElementChild !== dragging) { flip(function () { grid.appendChild(dragging); }); }
+      } else if (after !== dragging && after.previousElementSibling !== dragging) {
+        flip(function () { grid.insertBefore(dragging, after); });
+      }
+    });
+
+    grid.addEventListener('drop', function (e) {
+      if (dragging) { e.preventDefault(); }   // 阻止浏览器把 dataTransfer 当导航
+    });
+  }
+
   ready(function () {
     initAiGenerate();
     initCopy();
     initListFold();
+    initDragSort();
   });
 })();

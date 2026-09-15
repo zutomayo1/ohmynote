@@ -95,21 +95,21 @@
         <div class="note-card__actions">
           <a class="icon-btn icon-btn--sm" href="{{ note.url }}/edit" title="编辑">{{ icon('edit', 15) }}</a>
             <a class="icon-btn icon-btn--sm" href="{{ note.url }}/versions" title="{{ '查看版本历史（' ~ vcount ~ ' 个版本）' if vcount else '查看版本历史' }}">{{ icon('history', 15) }}</a>
-          <form method="post" action="{{ note.url }}/flag">
+          <form method="post" action="{{ note.url }}/flag" data-flag-form>
             <input type="hidden" name="_csrf" value="{{ csrf }}">
             <input type="hidden" name="next" value="{{ back }}">
             <input type="hidden" name="flag" value="pin">
             <input type="hidden" name="value" value="{{ '0' if note.is_pinned else '1' }}">
             <button class="icon-btn icon-btn--sm{{ ' is-on' if note.is_pinned }}" type="submit" title="{{ '取消置顶' if note.is_pinned else '置顶' }}">{{ icon('pin', 15) }}</button>
           </form>
-          <form method="post" action="{{ note.url }}/flag">
+          <form method="post" action="{{ note.url }}/flag" data-flag-form>
             <input type="hidden" name="_csrf" value="{{ csrf }}">
             <input type="hidden" name="next" value="{{ back }}">
             <input type="hidden" name="flag" value="star">
             <input type="hidden" name="value" value="{{ '0' if note.is_starred else '1' }}">
             <button class="icon-btn icon-btn--sm{{ ' is-on' if note.is_starred }}" type="submit" title="{{ '取消星标' if note.is_starred else '标星' }}">{{ icon('star', 15) }}</button>
           </form>
-          <form method="post" action="{{ note.url }}/flag">
+          <form method="post" action="{{ note.url }}/flag" data-flag-form>
             <input type="hidden" name="_csrf" value="{{ csrf }}">
             <input type="hidden" name="next" value="{{ back }}">
             <input type="hidden" name="flag" value="public">

@@ -12,7 +12,7 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, Form, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 
 from .. import repo, search as search_mod
@@ -380,6 +380,30 @@ def template_delete(
     return RedirectResponse(url_with_query("/templates", msg="模板已删除"), status_code=303)
 
 
+@router.post("/templates/reorder")
+def template_reorder(
+    request: Request,
+    conn: sqlite3.Connection = Depends(db_conn),
+    ids: list[int] = Body(default=[], embed=True),
+):
+    """拖拽排序：把前端当前的模板顺序（id 数组）落库。
+
+    接收 JSON 体 ``{"ids": [3, 1, 2, ...]}``（顺序即新展示顺序）。
+    沿用 router 的登录 + CSRF 依赖。参数化 SQL，整数 id 已先过
+    ``MAX_SQLITE_INT`` 范围校验（由 ``repo.reorder_templates`` 负责），
+    所以超范围 / 不存在的 id 只会被跳过，绝不 500。
+
+    返回 ``{"ok": true, "updated": n}``；ids 为空或非数组返回 4xx 人话。
+    """
+    del request
+    if not ids:
+        return JSONResponse({"error": "缺少要排序的模板 id"}, status_code=400)
+    if len(ids) > 1000:
+        return JSONResponse({"error": "模板数量超出上限，无法排序"}, status_code=400)
+    updated = repo.reorder_templates(conn, ids)
+    return JSONResponse({"ok": True, "updated": updated})
+
+
 # ---------------------------------------------------------------------------
 # 导出：在 export.build_zip 基础上补 media/ 图片
 # ---------------------------------------------------------------------------
@@ -549,4 +573,83 @@ def stats_page(request: Request, conn: sqlite3.Connection = Depends(db_conn)):
         heatmap=heatmap,
         heatmap_written=heatmap_written,
         heatmap_last=heatmap_last,
+    )
+
+
+# ---------------------------------------------------------------------------
+# 关系图谱
+# ---------------------------------------------------------------------------
+def _build_graph(conn: sqlite3.Connection) -> dict[str, Any]:
+    """把全部笔记与 [[双链]] 抽成图谱的节点 / 边。
+
+    节点 = 笔记（含标签 / 分类 / 是否参与链接）；边 = 笔记之间的 [[双链]]，
+    只保留两端都还存在的笔记（悬空链接不单独建节点）。直接读 note_links
+    表（create_note 时已通过 sync_derived 填好），不再重解析正文。
+    """
+    notes = repo.all_notes(conn)
+    by_id: dict[int, dict[str, Any]] = {n["id"]: n for n in notes}
+
+    rows = conn.execute(
+        "SELECT source_id, target_id, target_title FROM note_links"
+    ).fetchall()
+
+    edges: list[dict[str, Any]] = []
+    linked: set[int] = set()
+    for row in rows:
+        source_id = int(row["source_id"])
+        target_id = row["target_id"]
+        if target_id is None:
+            continue
+        target_id = int(target_id)
+        if source_id in by_id and target_id in by_id:
+            edges.append(
+                {
+                    "source": source_id,
+                    "target": target_id,
+                    "title": row["target_title"],
+                }
+            )
+            linked.add(source_id)
+            linked.add(target_id)
+
+    nodes = [
+        {
+            "id": n["id"],
+            "title": n["title"],
+            "tags": list(n.get("tags") or []),
+            "category": n.get("category") or "",
+            "updated_at": n.get("updated_at") or "",
+            "has_links": n["id"] in linked,
+        }
+        for n in notes
+    ]
+    return {"nodes": nodes, "edges": edges}
+
+
+@router.get("/graph")
+def graph_page(request: Request, conn: sqlite3.Connection = Depends(db_conn)):
+    """笔记关系图谱页：服务端算好节点 / 边，序列化进模板给前端自绘图谱。"""
+    graph = _build_graph(conn)
+    nodes = graph["nodes"]
+    edges = graph["edges"]
+
+    linked_nodes = [n for n in nodes if n["has_links"]]
+    linked_nodes.sort(key=lambda n: n["updated_at"], reverse=True)
+    recent_linked = linked_nodes[:8]
+    all_tags = sorted({t for n in nodes for t in n["tags"]})
+
+    # 嵌入 <script type="application/json">：先 |safe 关掉自动转义，再把 </ 转义
+    # 成 <\/，避免正文里的 </script> 提前闭合标签（HTML 解析器不解码 script 内实体）。
+    graph_json = json.dumps(
+        {"nodes": nodes, "edges": edges}, ensure_ascii=False
+    ).replace("</", "<\\/")
+
+    return render(
+        request,
+        "graph.html",
+        graph_json=graph_json,
+        notes_count=len(nodes),
+        links_count=len(edges),
+        recent_linked=recent_linked,
+        all_tags=all_tags,
     )

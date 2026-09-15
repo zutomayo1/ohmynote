@@ -60,6 +60,7 @@
             <a class="nav-link" href="/notes/today">今日笔记</a>
             <a class="nav-link{{ ' is-active' if current_path.startswith('/todos') }}" href="/todos">今日待办</a>
             <a class="nav-link{{ ' is-active' if current_path.startswith('/stats') }}" href="/stats">写作统计</a>
+            <a class="nav-link{{ ' is-active' if current_path.startswith('/graph') }}" href="/graph">关系图谱</a>
             <div class="palette-dd" id="palette-dd">
               <button class="palette-dd__toggle" type="button" aria-haspopup="listbox" aria-expanded="false">
                 <span class="palette-dd__label">墨迹</span>
@@ -192,6 +193,8 @@
 <script src="/static/js/app.js?v={{ asset_v }}" defer></script>
 <script src="/static/js/chart-tip.js?v={{ asset_v }}" defer></script>
 <script src="/static/js/select.js?v={{ asset_v }}" defer></script>
+<script src="/static/js/reading-progress.js?v={{ asset_v }}" defer></script>
+<script src="/static/js/onboarding.js?v={{ asset_v }}" defer></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>
