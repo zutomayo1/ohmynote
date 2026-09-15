@@ -199,6 +199,40 @@ pbkdf2_sha256(200k) + 随机盐，`hmac.compare_digest` 比较，旧密码连错
 - **图片内容去重**：sha256 边车文件（`x.png.sha256`），上传命中即复用；`/images` 可清理未被引用的副本
 - **手机工具栏**：≤640px 收成「更多 ▾」，纯 CSS（`:checked ~`），桌面端 DOM 变了但布局像素级一致
 
+### 关系图谱与交互（2026-09 中旬）
+
+- **关系图谱** `GET /graph`：服务端把 `note_links` 表抽成 `{nodes, edges}`（只保留两端都存在的边，
+  悬空链接不建节点），JSON 塞进 `<script type="application/json" id="graph-data">`（`</` 已转义成 `<\/`）
+  → 前端 `static/js/graph.js` **零依赖自绘 SVG 力导向图**（斥力 + 弹簧 + 居中，rAF 驱动，
+  2.5s 后 alpha 衰减到阈值即停算，不长期占 CPU）。交互：hover 高亮邻居、点击进笔记、拖拽节点、
+  方向键分向选点 + Enter 打开；筛选「只看有链接」与按标签；无 JS 时 `.no-js-only` 兜底列表。
+- **标记操作无刷新**：`POST /notes/{id}/flag` 支持 JSON 返回，`app.js` 的 `initFlagButtons()`
+  委托 `form[data-flag-form]`，就地翻转 `is-on` / `title` / `aria-pressed`，失败 toast 并回滚状态；
+  无 JS 仍走整页表单提交（渐进增强）。星标点亮带 `is-just-on` 弹跳。
+- **命令面板**（`Ctrl+K`）：`PALETTE_COMMANDS` 命令表（新建 / 待办 / 图谱 / 统计 / 模板 / 回收站 /
+  切主题 / 设置）+ 拼音首字母子序列匹配（`isSubsequence`：`txp` → 关系图谱）+「命令 / 笔记」分组 +
+  最近打开笔记（localStorage）+ 无结果提示；原有搜索与 `Ctrl+Enter` 全量结果不变。
+- **首次引导** `static/js/onboarding.js`：4 步高亮 + 气泡（目标选择器写成数组做容错，
+  命中不到自动跳过该步），完成后写 `inknote.onboarded`；键盘可达、`Esc` 跳过、
+  `prefers-reduced-motion` 时不做过渡、结束后不留下焦点陷阱。
+- **博客阅读进度条** `static/js/reading-progress.js`：自建 DOM，仅在 `.post-body` / `article.post`
+  存在时生效（博客文章页、笔记详情页、使用说明页）；rAF 合并 + `passive` 监听，
+  `transform: scaleX()` 驱动（不做 width 动画、不触发布局），不足一屏 90% 不显示，读到 99% 淡出。
+- **模板拖拽排序**：`repo.reorder_templates` 按传入顺序重写 `sort_order`，`POST /templates/reorder`；
+  前端 HTML5 DnD（只认 `⠿` 手柄，避免误拖卡片里的按钮）+ 其余卡片让位 + FLIP 归位，
+  失败回滚顺序；键盘 `Alt+↑/↓` 等价操作。
+- **折叠区块高度动画**：`::details-content` + `interpolate-size: allow-keywords`（Chrome 129+；
+  旧浏览器退化为瞬时开合）。**豁免清单**：块内有 absolute 弹层的折叠块一律不参与，
+  否则 `overflow: clip` 会裁掉弹层 —— 现有豁免 `settings-block`（AI 模型下拉）、
+  `editor__settings`（标签联想）、`tag-admin`（选择标签）。给新折叠块加动画前先看块里有没有弹层。
+- **全站自绘悬浮提示**（`chart-tip.js`）：命中选择器 `[data-tip-title], [title], [data-tip-stash-title]`；
+  指针进入即把原生 `title` 摘到 `data-tip-stash-title`（原生气泡零窗口期），停 160ms 才弹、移开即撤、
+  键盘导航不延迟。`readInfo` 要兜底读 stash 属性、`closestTipped` 选择器必须含 stash 属性，
+  这三处不同步改会分别表现为「面板不出来」和「离开后仍弹」。
+- **滚动条常驻槽位**：`html { scrollbar-gutter: stable }` —— 修「展开折叠块时页面左右晃」。
+- **CSS 令牌守卫**：`tests/test_css_rules.py` 断言 `var(--x)` 必须有定义或有兜底，
+  且未定义令牌的 hex 兜底不能是浅色（暗色主题下会露馅）。并行开发的补丁最容易踩这个。
+
 ### AI 功能（可选）
 
 **在网页上配**：登录后点页脚「设置」（`/settings`）：
@@ -512,12 +546,22 @@ python scripts/build_highlight_css.py     # 重新生成代码高亮配色
   改了 embedding 模型、或想立刻对齐，去设置页点一次「重建索引」即可。
   索引是本地算的，每篇最多 20 块、单块 ≤800 字，超长笔记只索引前面的部分。
 - **回收站清理只在启动时跑一次**，常驻进程里不会定时清理。
+- **关系图谱只是「全局图」**：没有 Obsidian 那种「本地图」（只看当前笔记的邻居），
+  也没有缩放 / 平移、节点搜索、按连接数缩放节点、按标签或社区着色。力模拟是 O(n²) 两两斥力，
+  且 `nodeById()` 在边循环里线性查找（实际 O(E·N)）——个人笔记量级（几百篇）流畅，上千篇会明显变慢。
+  A→B 与 B→A 同时存在时，两条直线会完全重叠，看不出「互链」。
+- **模板拖拽排序在触屏不可用**：HTML5 拖拽 API 不支持触摸，触屏请用键盘 `Alt+↑/↓`。
+- **命令面板的拼音表是手写的**：只覆盖命令名（不引入拼音库），输错的（如带声调）不会命中。
+- **标题锚点用 `slugify_unicode`**：中文标题保留文字（`#安装步骤`），标点被剥掉、空格转 `-`；
+  同一篇里出现两个完全相同的标题时，第二个拿到 `-1` 后缀。
 - **时间用服务器本机时区**，没有时区配置项。
 - 编辑器是「纯文本 + 预览」，不是所见即所得。
 
 ## Roadmap
 
 - 收拢 `style.css`（多轮并行开发留下的补丁分节有重复选择器与重复断点，值得合并一遍）
+- **关系图谱升级**：本地图谱（笔记详情页画邻域）、按连接数缩放节点、按标签 / 社区着色
+  （Louvain）、缩放平移、节点搜索框；力模拟换 Barnes-Hut 以支撑上千节点
 - 图片上传时压缩 / 去 EXIF
 - 草稿箱自动清理、回收站定时清理（现在只在启动时清一次）
 - 文章目录支持多级折叠、代码块行号与复制按钮配置
@@ -526,4 +570,4 @@ python scripts/build_highlight_css.py     # 重新生成代码高亮配色
 
 ---
 
-*本文档于 2026-09-14 对照源码逐条核对，并实测：`python -m pytest tests -q` → **770 个用例全部通过**（含 AI 配置/向量检索/内联写作/问笔记/标签管理/导入恢复/批量操作/待办聚合/后台线程等新增模块）。`scripts/audit_css.py` → 模板里用到的 class 全部有样式。`scripts/check.py` 全量自检约 22 秒（测试那一步已改为并行）。*
+*本文档于 2026-09-15 对照源码逐条核对，并实测：`python -m pytest tests -q` → **882 个用例全部通过**（含 AI 配置/向量检索/内联写作/问笔记/标签管理/导入恢复/批量操作/待办聚合/后台线程/关系图谱/命令面板/首次引导/阅读进度条/模板排序/标记接口/文档守卫等新增模块）。`scripts/audit_css.py` → 模板里用到的 class 全部有样式。`scripts/check.py` 全量自检约 22 秒（测试那一步已改为并行）。*

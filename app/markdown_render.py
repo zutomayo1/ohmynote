@@ -15,6 +15,8 @@ from typing import Callable
 
 import markdown as markdown_lib
 
+from markdown.extensions.toc import slugify_unicode
+
 from .utils import CJK_RE
 
 # ---------------------------------------------------------------------------
@@ -44,7 +46,10 @@ EXTENSION_CONFIGS = {
         "noclasses": False,
         "pygments_style": "default",
     },
-    "toc": {"toc_depth": "1-4", "permalink": False, "anchorlink": False},
+    # slugify_unicode：中文标题保留文字（「一、怎么打开」→ #一怎么打开），
+    # 而不是退化成位置编号 _1/_2（那样加个标题就全错位，链接也没法分享）
+    "toc": {"toc_depth": "1-4", "permalink": False, "anchorlink": False,
+            "slugify": slugify_unicode},
     "footnotes": {"UNIQUE_IDS": True},
     "smarty": {"smart_dashes": True, "smart_quotes": True, "smart_ellipses": True},
     "pymdownx.tasklist": {"custom_checkbox": True, "clickable_checkbox": False},
