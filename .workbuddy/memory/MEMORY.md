@@ -8,6 +8,8 @@
 ## 版本管理（.git 丢过一次）
 - 提交后保持工作区干净（`.scratch/`、`data/`、`.venv/` 已 gitignore）；仓库无远端。
 - 每轮提交后刷新 `git bundle create C:/repo/inknote-<日期>.bundle --all`；跑批量工作区操作前先 `git log -1` 确认 .git 完好。
+- **图形/布局类改造**：零依赖 ⇒ 借算法不引库。Louvain 等局部移动算法必须「候选含原状态 + 严格更优才移动」，否则对称图震荡不挂死；指针拖拽别用 setPointerCapture（click 会跑到 <svg>）；力布局拖完要短时「钉住」节点，否则被弹簧拽回。
+- **e2e 断言**：临时库带着真实数据 ⇒ 只统计本测试造的记录；读数前先「等模拟停稳」；观感用 getComputedStyle 量化，别靠截图肉眼判断。
 - **.git 丢过两次**（09-14、09-15 并行 agent 期间）。恢复：`git init -b main` → `git fetch <bundle> "+refs/heads/main:refs/remotes/recover/main"` → `git reset --mixed refs/remotes/recover/main` → 删临时 ref；工作区不丢。已配每日 23:30 自动 bundle 备份（保留 7 份）。
 - 多 agent 并行：先侦察交叉文件 → 按文件所有权分波 → 样式走 `.scratch/css-patch-*.css`（agent 不碰 style.css）→ 主 agent 合并补丁 + 接线 base.html；e2e 端口一人一个。合并脚本别用长 assert 链（中断会静默跳过后半段动作）。
 
