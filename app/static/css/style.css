@@ -6541,3 +6541,72 @@ html.theme-anim .theme-toggle svg { animation: theme-moon-flip .45s cubic-bezier
   display: flex; align-items: baseline; gap: 10px;
   cursor: pointer; list-style: none; user-select: none;
 }
+
+/* ===== 补丁：微动效第二批（图标互动/打卡划线/纸飞机/页面淡入，2026-09-15，已合并） ===== */
+
+/* 按钮内图标统一弹性过渡：垃圾桶摇晃 / 放大镜凑近 / 加号转身 / 铅笔起笔 */
+.btn .icon, .icon-btn .icon { transition: transform .28s cubic-bezier(.34, 1.56, .5, 1); }
+
+.btn:hover .icon--trash, .icon-btn:hover .icon--trash { animation: icon-wiggle .45s ease; }
+
+@keyframes icon-wiggle {
+  20% { transform: rotate(-14deg); }
+  45% { transform: rotate(11deg); }
+  70% { transform: rotate(-6deg); }
+}
+
+.btn:hover .icon--search, .icon-btn:hover .icon--search { transform: scale(1.2) rotate(18deg); }
+
+.btn:hover .icon--plus, .icon-btn:hover .icon--plus { transform: rotate(90deg); }
+
+.btn:hover .icon--edit, .icon-btn:hover .icon--edit { transform: rotate(-26deg) translateY(-1px); }
+
+/* 发送按钮：提问提交后纸飞机飞出去再归位（ask.js 切 .is-sending） */
+.btn.is-sending .icon--send { animation: send-fly .55s ease; }
+
+@keyframes send-fly {
+  40% { transform: translate(12px, -10px) rotate(10deg); opacity: 0; }
+  41% { transform: translate(-10px, 8px); opacity: 0; }
+}
+
+/* 待办打卡：划线从左划到右 + 文字变淡（勾选动作实时切 is-done，过渡生效） */
+.todo-item__text {
+  background: linear-gradient(currentColor, currentColor) no-repeat 0 55% / 0% 1px;
+  transition: background-size .35s ease, opacity .35s ease;
+}
+
+.todo-item.is-done .todo-item__text { background-size: 100% 1px; opacity: .55; }
+
+/* 自动保存成功：绿色轻弹一下（editor.js 切 .is-saved-pop） */
+.save-state.is-saved-pop { color: var(--ok); animation: saved-pop .4s cubic-bezier(.34, 1.56, .5, 1); }
+
+@keyframes saved-pop { 40% { transform: scale(1.12); } }
+
+/* 字数统计：自动保存回来轻跳一下（editor.js 切 .is-pulsing） */
+#word-count.is-pulsing { animation: count-pulse .3s ease; }
+
+@keyframes count-pulse { 45% { transform: scale(1.08); } }
+
+/* 页面进入：主内容 200ms 淡入（纯 opacity，不残留 transform/层叠上下文） */
+main.site-main { animation: page-fade .22s ease backwards; }
+
+@keyframes page-fade { from { opacity: 0; } }
+
+/* 卡片删除离场：确认通过后缩扁淡出再提交（app.js 切 .is-leaving） */
+.note-card.is-leaving {
+  transition: opacity .28s ease, transform .28s ease;
+  opacity: 0;
+  transform: scale(.96) translateY(4px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn .icon, .icon-btn .icon { transition: none; }
+  .btn:hover .icon--trash, .icon-btn:hover .icon--trash,
+  .btn:hover .icon--search, .icon-btn:hover .icon--search,
+  .btn:hover .icon--plus, .icon-btn:hover .icon--plus,
+  .btn:hover .icon--edit, .icon-btn:hover .icon--edit,
+  .btn.is-sending .icon--send, .save-state.is-saved-pop,
+  #word-count.is-pulsing, main.site-main,
+  .btn:hover .icon--trash, .icon-btn:hover .icon--trash { animation: none; }
+  .todo-item__text, .note-card.is-leaving { transition: none; }
+}

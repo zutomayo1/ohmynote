@@ -208,7 +208,12 @@
       if (preview) { preview.innerHTML = '<p class="muted">开始输入，右侧会实时预览</p>'; }
     }
     function applyServerStats(wordCount, minutes) {
-      if (wordCountEl && typeof wordCount === 'number') { wordCountEl.textContent = wordCount + ' 字'; }
+      if (wordCountEl && typeof wordCount === 'number') {
+        wordCountEl.textContent = wordCount + ' 字';
+        wordCountEl.classList.remove('is-pulsing');
+        void wordCountEl.offsetWidth;   // 每次自动保存回来轻跳一下
+        wordCountEl.classList.add('is-pulsing');
+      }
       if (readingEl && typeof minutes === 'number') { readingEl.textContent = '约 ' + minutes + ' 分钟'; }
     }
     function fetchPreview() {
@@ -313,6 +318,13 @@
       if (!autosaveEl) { return; }
       autosaveEl.dataset.state = name;
       autosaveEl.textContent = AUTOSAVE_TEXT[name] || name;
+      if (name === 'saved') {
+        autosaveEl.classList.remove('is-saved-pop');
+        void autosaveEl.offsetWidth;   // 重启动画
+        autosaveEl.classList.add('is-saved-pop');
+      } else {
+        autosaveEl.classList.remove('is-saved-pop');
+      }
     }
     function markDirty() {
       state.dirty = true;

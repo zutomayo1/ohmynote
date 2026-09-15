@@ -72,7 +72,10 @@
     }
 
     function setBusy(busy) {
-      if (sendBtn) sendBtn.disabled = !!busy;
+      if (sendBtn) {
+        sendBtn.disabled = !!busy;
+        sendBtn.classList.toggle('is-sending', !!busy);  // 纸飞机飞出去
+      }
       form.classList.toggle('is-busy', !!busy);
     }
 

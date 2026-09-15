@@ -375,6 +375,18 @@
       if (!window.confirm(form.getAttribute('data-confirm') || '')) {
         e.preventDefault();
         e.stopPropagation();
+        return;
+      }
+      // 确认通过：卡片式删除附带离场动画（data-leave-anim = 要动画的祖先选择器）
+      var leaveSel = form.getAttribute('data-leave-anim');
+      if (leaveSel) {
+        var card = form.closest(leaveSel);
+        if (card) {
+          e.preventDefault();
+          e.stopPropagation();
+          card.classList.add('is-leaving');
+          setTimeout(function () { form.submit(); }, 280);  // 原生 submit 不再触发确认
+        }
       }
     }, true);
   }
