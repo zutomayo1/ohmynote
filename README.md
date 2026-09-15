@@ -269,7 +269,10 @@ pbkdf2_sha256(200k) + 随机盐，`hmac.compare_digest` 比较，旧密码连错
   前端 HTML5 DnD（只认 `⠿` 手柄，避免误拖卡片里的按钮）+ 其余卡片让位 + FLIP 归位，
   失败回滚顺序；键盘 `Alt+↑/↓` 等价操作。
 - **折叠区块高度动画**：`::details-content` + `interpolate-size: allow-keywords`（Chrome 129+；
-  旧浏览器退化为瞬时开合）。**豁免清单**：块内有 absolute 弹层的折叠块一律不参与，
+  旧浏览器退化为瞬时开合）。参与：`ask-recent-block`、`agent-runs`、`agent-history`、
+  `editor__templates`、`ai-presets-more`、`backup-errors`、`template-list-fold`、
+  `graph-params`（图谱页「布局松紧」，块内只有滑杆、`overflow: clip` 安全）。
+  **豁免清单**：块内有 absolute 弹层的折叠块一律不参与，
   否则 `overflow: clip` 会裁掉弹层 —— 现有豁免 `settings-block`（AI 模型下拉）、
   `editor__settings`（标签联想）、`tag-admin`（选择标签）。给新折叠块加动画前先看块里有没有弹层。
 - **全站自绘悬浮提示**（`chart-tip.js`）：命中选择器 `[data-tip-title], [title], [data-tip-stash-title]`；

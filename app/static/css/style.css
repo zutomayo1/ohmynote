@@ -7300,6 +7300,27 @@ html.js .local-graph__stage { display: block; }
   .link-del__btn { transition: none; }
 }
 
+/* ===== 补丁：图谱页「布局松紧」面板展开/折叠动画（2026-09-15，已合并） ===== */
+/* 与「最近提问」「管理标签」等块同款：::details-content 高度过渡 0.26s。
+   块内只有 label / range / span（常规流），没有 absolute 弹层，clip 安全。 */
+
+.graph-params { interpolate-size: allow-keywords; }
+
+.graph-params::details-content {
+  display: block; block-size: 0; overflow-y: clip;
+  transition: block-size .26s cubic-bezier(.3, .8, .3, 1), content-visibility .26s allow-discrete;
+}
+
+.graph-params[open]::details-content { block-size: auto; }
+
+/* 箭头：跟随 summary 的颜色（悬停变品牌色），展开时转 180° */
+.graph-params__chevron {
+  display: inline-flex; align-items: center;
+  transition: transform .2s ease;
+}
+
+.graph-params[open] .graph-params__chevron { transform: rotate(180deg); }
+
 /* ===== 补丁：图谱升级第三批（路径查找 / 布局参数 / 导出，2026-09-15，已合并） ===== */
 
 /* --- 路径高亮：起点品牌色实心、终点强调色实心、中间点描边，其余压暗 --- */
@@ -7376,4 +7397,6 @@ html.js .local-graph__stage { display: block; }
 @media (prefers-reduced-motion: reduce) {
   .graph-svg .edge.edge--path { animation: none; }
   .graph-params__summary { transition: none; }
+  .graph-params__chevron { transition: none; }
+  .graph-params::details-content { transition: none; }
 }
