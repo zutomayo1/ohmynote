@@ -270,3 +270,24 @@ def quick_search(
     )
 
 
+@router.get("/note-titles")
+def note_titles(
+    q: str = "",
+    limit: LimitParam = 8,
+    exclude: int | None = None,
+    conn: sqlite3.Connection = Depends(db_conn),
+):
+    """按标题补全候选（「[[ ]]」补全 / 建立联系用）。只匹配标题，不搜正文。"""
+    rows = repo.search_titles(conn, q, limit=max(1, min(int(limit or 8), 30)), exclude_id=exclude)
+    return _json(
+        {
+            "query": q.strip(),
+            "count": len(rows),
+            "items": [
+                {"id": row["id"], "title": row["title"], "updated_at": row["updated_at"]}
+                for row in rows
+            ],
+        }
+    )
+
+

@@ -1013,6 +1013,59 @@ def backlinks(conn: sqlite3.Connection, note_id: int, *, public_only: bool = Fal
     return hydrate(conn, rows)
 
 
+def search_titles(
+    conn: sqlite3.Connection,
+    query: str,
+    *,
+    limit: int = 8,
+    exclude_id: int | None = None,
+) -> list[dict[str, Any]]:
+    """按**标题**找笔记（给「[[ ]]」补全和建立联系用，不搜正文）。
+
+    排序：完全相等 > 前缀命中 > 包含，同档内短标题优先、再按最近更新。
+    ``query`` 为空时返回最近更新的几篇（一打开就有候选可挑）。
+    """
+    limit = max(1, min(int(limit or 8), 30))
+    if exclude_id is not None:
+        try:
+            exclude_id = int(exclude_id)
+        except (TypeError, ValueError):
+            exclude_id = None
+
+    q = (query or "").strip()
+    params: list[Any] = []
+    where = ["deleted_at IS NULL"]
+    if exclude_id is not None:
+        where.append("id <> ?")
+        params.append(exclude_id)
+
+    if not q:
+        rows = conn.execute(
+            "SELECT id, title, updated_at FROM notes WHERE "
+            + " AND ".join(where)
+            + " ORDER BY updated_at DESC, id DESC LIMIT ?",
+            (*params, limit),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    # 转义 LIKE 通配符，否则用户输入 % 会命中一切
+    escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    like_any = f"%{escaped}%"
+    like_prefix = f"{escaped}%"
+    rows = conn.execute(
+        "SELECT id, title, updated_at,"
+        " CASE WHEN title = ? COLLATE NOCASE THEN 0"
+        "      WHEN title LIKE ? ESCAPE '\\' COLLATE NOCASE THEN 1"
+        "      ELSE 2 END AS rank"
+        " FROM notes WHERE "
+        + " AND ".join(where)
+        + " AND title LIKE ? ESCAPE '\\' COLLATE NOCASE"
+        " ORDER BY rank ASC, length(title) ASC, updated_at DESC LIMIT ?",
+        (q, like_prefix, *params, like_any, limit),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def outgoing_links(conn: sqlite3.Connection, note_id: int) -> list[dict[str, Any]]:
     rows = conn.execute(
         "SELECT l.target_id, l.target_title, n.title AS resolved_title, n.deleted_at, n.is_public"

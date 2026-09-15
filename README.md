@@ -218,6 +218,17 @@ pbkdf2_sha256(200k) + 随机盐，`hmac.compare_digest` 比较，旧密码连错
   - **踩过的坑**：① 拖完节点会被弹簧拽回原位（拖了等于没拖）→ 松手后短暂「钉住」该节点再松弛；
     ② `setPointerCapture` 会让 click 派发到 `<svg>` 而不是节点，节点点击永远不触发 → 不用捕获，
     改为把 `pointermove` 挂到 `document`；③ 笔记页要单独引 `graph.js`（它不在 base.html 里）。
+- **建立联系（双链）**：`repo.search_titles()` 只匹配标题（排序：完全相等 > 前缀 > 包含，
+  LIKE 通配符已转义，否则用户输入 `%` 会命中一切）+ `GET /api/note-titles` 供前端补全；
+  `POST /notes/{id}/link` 在**正文末尾追加** `[[目标标题]]` —— 不直接写链接表，
+  而是走正常的正文保存（`reason="link"`），所以版本历史能回退、反向链接由 sync_derived 重建；
+  目标用 id 或标题都行，标题会做「完全相等 → 唯一命中 → 列出候选」的解析；
+  `POST /notes/{id}/unlink` 用正则删掉 `[[标题]]` 与 `[[标题|别名]]` 并收拾空行。
+  前端 `static/js/link-suggest.js` 两个入口共用一套下拉（候选来自标题接口而不是 /api/search ——
+  全文命中会推荐标题里根本没有关键词的笔记，用户会莫名其妙）：编辑器里输入 `[[` 就地补全
+  （用镜像 div 量光标位置；捕获阶段吃方向键，否则会撞上编辑器的 Tab 缩进）；
+  笔记页表单选目标（选中则按 id 精确提交，没选则服务端模糊解析）。
+  坑：方向键后不能重新拉取候选——重新 show() 会把选中项重置回第一条，用户按 ↓ 选完随手一按就插错了。
 - **标记操作无刷新**：`POST /notes/{id}/flag` 支持 JSON 返回，`app.js` 的 `initFlagButtons()`
   委托 `form[data-flag-form]`，就地翻转 `is-on` / `title` / `aria-pressed`，失败 toast 并回滚状态；
   无 JS 仍走整页表单提交（渐进增强）。星标点亮带 `is-just-on` 弹跳。
@@ -584,4 +595,4 @@ python scripts/build_highlight_css.py     # 重新生成代码高亮配色
 
 ---
 
-*本文档于 2026-09-15 对照源码逐条核对，并实测：`python -m pytest tests -q` → **902 个用例全部通过**（含 AI 配置/向量检索/内联写作/问笔记/标签管理/导入恢复/批量操作/待办聚合/后台线程/关系图谱/命令面板/首次引导/阅读进度条/模板排序/标记接口/文档守卫等新增模块）。`scripts/audit_css.py` → 模板里用到的 class 全部有样式。`scripts/check.py` 全量自检约 22 秒（测试那一步已改为并行）。*
+*本文档于 2026-09-15 对照源码逐条核对，并实测：`python -m pytest tests -q` → **916 个用例全部通过**（含 AI 配置/向量检索/内联写作/问笔记/标签管理/导入恢复/批量操作/待办聚合/后台线程/关系图谱/命令面板/首次引导/阅读进度条/模板排序/标记接口/文档守卫等新增模块）。`scripts/audit_css.py` → 模板里用到的 class 全部有样式。`scripts/check.py` 全量自检约 22 秒（测试那一步已改为并行）。*

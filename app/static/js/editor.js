@@ -374,6 +374,11 @@
     function handleTitleInput() { schedulePreview(); markDirty(); }
     if (titleInput) { titleInput.addEventListener('input', handleTitleInput); }
     textarea.addEventListener('input', handleContentInput);
+    // 「[[」输入补全：候选来自 /api/note-titles（只匹配标题）。
+    // 顺带把工具栏的「双链」按钮升级成「插 [[ 并直接开候选框」，不用再手打标题。
+    var wikiSuggest = window.LinkSuggest
+      ? window.LinkSuggest.attachWiki(textarea, { exclude: noteId })
+      : null;
     textarea.addEventListener('click', updateCursorInfo);
     textarea.addEventListener('keyup', updateCursorInfo);
     document.addEventListener('selectionchange', function () {
@@ -520,7 +525,9 @@
         case 'codeblock': insertCodeBlock(); break;
         case 'link': insertLink(); break;
         case 'image': insertImage(); break;
-        case 'wiki': insertWiki(); break;
+        case 'wiki':
+          if (wikiSuggest) { wikiSuggest.open(); } else { insertWiki(); }
+          break;
         case 'table': insertBlock('\n| 列 1 | 列 2 |\n| --- | --- |\n| 内容 | 内容 |\n'); break;
         case 'hr': insertBlock('\n---\n'); break;
         default: break;

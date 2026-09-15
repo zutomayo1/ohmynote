@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import sqlite3
+from typing import Any
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -768,6 +770,121 @@ def delete_note(
     repo.soft_delete(conn, note_id)
     return RedirectResponse(
         url_with_query(safe_next(next, "/notes"), msg="已移入回收站，可在回收站里恢复"),
+        status_code=303,
+    )
+
+
+def _resolve_link_target(
+    conn: sqlite3.Connection,
+    *,
+    target_id: str,
+    target_title: str,
+    source_id: int,
+) -> tuple[dict[str, Any] | None, str]:
+    """把「目标 id / 目标标题」解析成一篇真实笔记。返回 (笔记, 错误提示)。"""
+    raw_id = (target_id or "").strip()
+    if raw_id:
+        try:
+            found = repo.get_note(conn, int(raw_id))
+        except (TypeError, ValueError):
+            found = None
+        if found is None:
+            return None, "要连接的笔记不存在（可能已被删除）"
+        if found["id"] == source_id:
+            return None, "不能连接到笔记自己"
+        return found, ""
+
+    title = (target_title or "").strip()
+    if not title:
+        return None, "先填要连接的笔记标题，或从下拉里选一篇"
+    # 标题解析顺序：完全相等 → 唯一命中 → 否则列出候选让用户选
+    matches = repo.search_titles(conn, title, limit=5, exclude_id=source_id)
+    exact = [m for m in matches if m["title"].casefold() == title.casefold()]
+    if exact:
+        return repo.get_note(conn, exact[0]["id"]), ""
+    if len(matches) == 1:
+        return repo.get_note(conn, matches[0]["id"]), ""
+    if not matches:
+        return None, f"没找到标题含「{title}」的笔记"
+    names = "、".join("《%s》" % m["title"] for m in matches[:3])
+    return None, f"「{title}」匹配到多篇：{names} —— 写得更完整一点，或从下拉里选"
+
+
+@router.post("/notes/{note_id}/link")
+def link_note(
+    request: Request,
+    note_id: NoteId,
+    conn: sqlite3.Connection = Depends(db_conn),
+    target_id: str = Form(""),
+    target_title: str = Form(""),
+    next: str = Form(""),
+):
+    """在正文末尾追加一条 [[目标标题]]，即建立双链。
+
+    不直接改链接表 —— 走正常的正文保存（版本历史里能回退），
+    反向链接由 sync_derived 重新解析出来，和手写的 [[ ]] 完全等价。
+    """
+    note = _note_or_404(conn, note_id)
+    target, error = _resolve_link_target(
+        conn, target_id=target_id, target_title=target_title, source_id=note_id
+    )
+    back = safe_next(next, f"/notes/{note_id}")
+    if target is None:
+        return RedirectResponse(url_with_query(back, msg=error, kind="warn"), status_code=303)
+
+    title = target["title"]
+    content = note["content"] or ""
+    marker = f"[[{title}]]"
+    # 已连过（正文里已出现同名链接）就不重复追加
+    if re.search(r"\[\[\s*" + re.escape(title) + r"\s*(\|[^\[\]]*)?\]\]", content, re.IGNORECASE):
+        return RedirectResponse(
+            url_with_query(back, msg=f"这篇里已经连到《{title}》了", kind="warn"), status_code=303
+        )
+
+    appended = marker if not content.strip() else content.rstrip() + "\n\n" + marker + "\n"
+    repo.update_note(conn, note_id, content=appended, reason="link")
+    return RedirectResponse(
+        url_with_query(back, msg=f"已建立链接：这篇 →《{title}》（可在历史版本里撤销）"),
+        status_code=303,
+    )
+
+
+@router.post("/notes/{note_id}/unlink")
+def unlink_note(
+    request: Request,
+    note_id: NoteId,
+    conn: sqlite3.Connection = Depends(db_conn),
+    target_id: str = Form(""),
+    next: str = Form(""),
+):
+    """把正文里指向某篇的 [[标题]] 全部去掉（保留别的正文）。"""
+    note = _note_or_404(conn, note_id)
+    back = safe_next(next, f"/notes/{note_id}")
+    try:
+        target = repo.get_note(conn, int(target_id or 0))
+    except (TypeError, ValueError):
+        target = None
+    if target is None:
+        return RedirectResponse(
+            url_with_query(back, msg="要取消的链接不存在", kind="warn"), status_code=303
+        )
+
+    content = note["content"] or ""
+    pattern = re.compile(
+        r"\[\[\s*" + re.escape(target["title"]) + r"\s*(?:\|[^\[\]]*)?\]\]", re.IGNORECASE
+    )
+    stripped, count = pattern.subn("", content)
+    if not count:
+        return RedirectResponse(
+            url_with_query(back, msg=f"正文里没找到指向《{target['title']}》的 [[链接]]", kind="warn"),
+            status_code=303,
+        )
+    # 收拾留下的空行，别越删越乱
+    cleaned = re.sub(r"[ \t]+\n", "\n", stripped)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+    repo.update_note(conn, note_id, content=cleaned, reason="link")
+    return RedirectResponse(
+        url_with_query(back, msg=f"已取消指向《{target['title']}》的 {count} 处链接"),
         status_code=303,
     )
 

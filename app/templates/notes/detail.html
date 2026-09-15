@@ -129,7 +129,7 @@
              role="application"
              aria-label="这篇笔记的邻居关系图，可以点节点跳过去，方向键移动、Enter 打开"></div>
         <p class="local-graph__meta micro muted">
-          直接相连 {{ local_graph.neighbor_count }} 篇{% if local_graph.truncated %}，图里只画了 {{ local_graph.nodes | length - 1 }} 篇{% endif %}。
+          直接相连 {{ local_graph.neighbor_count }} 篇{% if local_graph.truncated %}，图里只画了 {{ local_graph.nodes | length - 1 }} 篇{% endif %} · <a class="local-graph__link" href="#link-add-input">＋ 建立联系</a>
           <span class="local-graph__depth">
             {% if graph_depth == 2 %}
               <a href="{{ note.url }}">只看 1 跳</a>
@@ -168,7 +168,18 @@
           {% for item in outgoing %}
             <li class="related__item">
               {% if item.exists %}
-                <a href="{{ item.url }}">{{ item.title }}</a>
+                <span class="related__row">
+                  <a href="{{ item.url }}">{{ item.title }}</a>
+                  <form class="link-del" method="post" action="{{ note.url }}/unlink"
+                        data-confirm="取消指向《{{ item.title }}》的链接？正文里的 [[链接]] 文字会被删掉（可在历史版本里找回）">
+                    <input type="hidden" name="_csrf" value="{{ csrf }}">
+                    <input type="hidden" name="next" value="{{ back }}">
+                    <input type="hidden" name="target_id" value="{{ item.note_id }}">
+                    <button class="link-del__btn" type="submit"
+                            title="取消指向《{{ item.title }}》的链接"
+                            aria-label="取消指向《{{ item.title }}》的链接">{{ icon('x', 12) }}</button>
+                  </form>
+                </span>
               {% else %}
                 <span class="wikilink wikilink--missing">{{ item.title }}</span>
                 <a class="related__action" href="/notes/new?title={{ item.title | urlencode }}">创建 →</a>
@@ -177,8 +188,24 @@
           {% endfor %}
         </ul>
       {% else %}
-        <p class="muted">在正文写 <code>[[另一篇标题]]</code> 即可建立双链。</p>
+        <p class="muted">还没有指向别处的链接。</p>
       {% endif %}
+
+      {# 建立联系：选一篇已有笔记，正文末尾追加 [[标题]]（版本历史可撤销） #}
+      <form class="link-add" method="post" action="{{ note.url }}/link">
+        <input type="hidden" name="_csrf" value="{{ csrf }}">
+        <input type="hidden" name="next" value="{{ back }}">
+        <input type="hidden" name="target_id" value="" data-link-target-id>
+        <label class="sr-only" for="link-add-input">要连接的笔记标题</label>
+        <input class="input input--sm link-add__input" id="link-add-input" name="target_title"
+               type="text" placeholder="输标题，连接另一篇笔记…" autocomplete="off" spellcheck="false"
+               data-link-add-input data-suggest-url="/api/note-titles"
+               data-exclude="{{ note.id }}" aria-describedby="link-add-hint">
+        <button class="btn btn--ghost btn--sm link-add__btn" type="submit">连接</button>
+      </form>
+      <p class="micro muted link-add__hint" id="link-add-hint">
+        打字会给出候选，选一篇即可；链接加在正文末尾，反悔了去「历史」回滚。
+      </p>
     </section>
 
     {% if versions %}

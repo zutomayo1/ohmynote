@@ -768,11 +768,19 @@
       if (ids.length < 2) { return; }
       var a = pointers[ids[0]], b = pointers[ids[1]];
       var dist = Math.hypot(a.x - b.x, a.y - b.y);
+      var midX = (a.x + b.x) / 2, midY = (a.y + b.y) / 2;
       if (pinch.last) {
-        var factor = dist / (pinch.last || dist);
-        zoomAt((a.x + b.x) / 2, (a.y + b.y) / 2, factor);
+        zoomAt(midX, midY, dist / (pinch.last || dist));
+        // 双指整体移动 → 平移（和地图一致）
+        if (pinch.mid) {
+          view.tx += midX - pinch.mid[0];
+          view.ty += midY - pinch.mid[1];
+          view.userMovedView = true;
+          applyView();
+        }
       }
       pinch.last = dist;
+      pinch.mid = [midX, midY];
       void ev;
     }
 
@@ -786,13 +794,17 @@
       pointers[ev.pointerId] = { x: ev.clientX, y: ev.clientY };
       var ids = Object.keys(pointers);
       if (ids.length === 2) {
-        pinch = { last: 0 };
+        pinch = { last: 0, mid: null };
         pan = null;
+        if (ev.preventDefault) { ev.preventDefault(); }
         return;
       }
-      // 不在节点上（空白、边、画布）→ 平移画布
+      // 不在节点上（空白、边、画布）→ 平移画布。
+      // 触摸时**不用单指平移**：那会把页面滚动吃掉（手机上最烦的就是这个），
+      // 单指留给页面滚动，图谱用双指拖/捏（见 handlePinch）。
       var onNode = ev.target && ev.target.closest && ev.target.closest(".node");
-      if (!onNode) {
+      var touch = ev.pointerType && ev.pointerType !== "mouse" && ev.pointerType !== "pen";
+      if (!onNode && !touch) {
         pan = { x: ev.clientX, y: ev.clientY };
         view.userMovedView = true;
         ev.preventDefault();

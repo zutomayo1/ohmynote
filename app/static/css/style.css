@@ -7109,9 +7109,11 @@ html.js .graph-stage { display: block; }
 
 /* ---------------- 画布：指针交互 ---------------- */
 
-.graph-stage { touch-action: none; cursor: grab; }
+/* 单指纵向滑动留给页面滚动（手机上从图上滑能滚页面），
+   图谱自身的缩放/平移用双指（见 graph.js 的 pinch 处理） */
+.graph-stage { touch-action: pan-y; cursor: grab; }
 .graph-stage:active { cursor: grabbing; }
-.graph-stage .graph-svg { display: block; touch-action: none; }
+.graph-stage .graph-svg { display: block; touch-action: pan-y; }
 
 .graph-svg .node__hit { cursor: pointer; }
 
@@ -7199,6 +7201,9 @@ html.js .local-graph__stage { display: block; }
 
 .local-graph__meta { margin: 8px 0 0; }
 
+.local-graph__link { color: var(--brand); text-decoration: none; }
+.local-graph__link:hover { text-decoration: underline; text-underline-offset: 2px; }
+
 .local-graph__depth { margin-left: 6px; }
 .local-graph__depth a { color: var(--brand); text-decoration: underline; text-underline-offset: 2px; }
 .local-graph__list { margin: 0; }
@@ -7211,4 +7216,131 @@ html.js .local-graph__stage { display: block; }
 
 @media (prefers-reduced-motion: reduce) {
   .graph-svg.graph-svg--dense .node__label { transition: none; }
+}
+
+/* ===== 补丁：建立联系（[[ 输入补全 + 连接表单 + 取消链接）（2026-09-15，已合并） ===== */
+/* 只用上面列出的既有令牌（--radius-sm / --shadow-md / --line-strong …）。
+   下拉用 position:fixed 挂在 body 上：编辑器与侧栏都有 overflow 容器，
+   就地挂会被裁掉（本项目在浮层上踩过好几次）。 */
+
+/* ---------------- 标题候选下拉 ---------------- */
+
+.link-suggest {
+  position: fixed;
+  z-index: 60;
+  max-height: 244px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+}
+
+.link-suggest[hidden] { display: none; }
+
+.link-suggest__item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-2);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: left;
+  cursor: pointer;
+}
+
+.link-suggest__item:hover,
+.link-suggest__item.is-active {
+  background: var(--brand-soft);
+  color: var(--brand-dark);
+}
+
+.link-suggest__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.link-suggest__meta {
+  flex: none;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.link-suggest__empty {
+  margin: 0;
+  padding: 8px 10px;
+  color: var(--ink-3);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/* ---------------- 「建立联系」表单（笔记页侧栏） ---------------- */
+
+.link-add {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+}
+
+.link-add__input { flex: 1 1 auto; min-width: 0; }
+.link-add__btn { flex: none; }
+.link-add__hint { margin: 6px 0 0; }
+
+/* ---------------- 取消链接 ---------------- */
+
+.related__row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.related__row a {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.link-del { flex: none; margin-left: auto; }
+
+.link-del__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-3);
+  opacity: 0.55;
+  cursor: pointer;
+  transition: opacity 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+
+.link-del__btn:hover,
+.link-del__btn:focus-visible {
+  opacity: 1;
+  color: var(--danger);
+  background: var(--bg-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .link-del__btn { transition: none; }
 }
