@@ -45,7 +45,14 @@ MAX_REPEAT_STEPS = 3         # 连续这么多步都在重复调用就收场，�
 _WRITE_TOOLS = frozenset({
     "create_note", "update_note", "add_tags", "remove_tags", "set_category",
     "publish_note", "archive_note", "trash_note", "restore_note", "pin_note", "star_note",
+    "bulk_add_tags", "bulk_remove_tags", "append_note",
 })
+
+# 这些写操作不可逆或影响面大，机制层强制「先确认再执行」：
+# 模型调用只会生成一张确认卡片（meta: agent.pending），用户在页面点「确认执行」
+# 才真正落地（execute_pending，绕过模型）——提示词约束之外的最后一道闸
+_CONFIRM_TOOLS = frozenset({"trash_note"})
+PENDING_TTL_SECONDS = 600      # 确认卡片有效期：10 分钟没用就作废
 
 _WEEKDAYS = ("周一", "周二", "周三", "周四", "周五", "周六", "周日")
 
@@ -76,7 +83,7 @@ SYSTEM_PROMPT = """你是墨痕笔记应用里的笔记助手 Agent。用户会�
   才续读，最多续读一两次，并在最终回答里说明「只读了前 N 字」。
 - update_note 只传需要修改的字段，没有提到的保持不变。注意语义差别：
   update_note 的 tags 是**整体替换**，add_tags 是追加，remove_tags 是删除指定标签。
-- 危险操作（trash_note 移入回收站）只在用户明确要求时做，回答里要说清楚去哪找回来。
+- 危险操作（trash_note 移入回收站）只在用户明确要求时做。调用后会生成确认卡片而不是直接执行：用 final 提醒用户在页面上点「确认执行」，用户确认前不要重复调用。回答里要说清楚去哪找回来（回收站）。
 - 信息不够就反问：如果任务含糊到无法安全执行（比如"改一下那篇笔记"但搜不到明确目标），
   用 final 提一个具体的问题让用户补充，宁可少做不可做错。
 - 对话可能包含之前的任务记录：用户说"继续 / 刚才那篇 / 再加点"时，从上下文里找对应的
@@ -346,6 +353,83 @@ def _make_tools(conn: sqlite3.Connection) -> dict[str, dict[str, Any]]:
         repo.set_flags(conn, note_id, **{column: value})
         return {"updated": True, "note_id": note_id, key: value}
 
+    def _apply_tags_to_many(params: dict, *, add: bool) -> dict:
+        ids = params.get("note_ids")
+        if not isinstance(ids, list):
+            return {"error": "note_ids 必须是 id 列表（先用 search_notes 找到它们）"}
+        note_ids = []
+        for raw in ids[:50]:
+            value = _as_int(raw)
+            if value > 0:
+                note_ids.append(value)
+        note_ids = list(dict.fromkeys(note_ids))[:50]
+        if not note_ids:
+            return {"error": "note_ids 里没有合法的笔记 id"}
+        tags = _as_tags(params.get("tags"))
+        if not tags:
+            return {"error": "tags 不能为空"}
+        updated, missing = [], []
+        for note_id in note_ids:
+            note = repo.get_note(conn, note_id)
+            if note is None:
+                missing.append(note_id)
+                continue
+            current = list(note.get("tags") or [])
+            title = str(note.get("title") or "")
+            if add:
+                merged = list(dict.fromkeys([*current, *tags]))
+                changed = merged != current
+                if changed:
+                    repo.update_note(conn, note_id, tags=merged, reason="agent")
+            else:
+                drop = {name.lower() for name in tags}
+                kept = [name for name in current if name.lower() not in drop]
+                removed = [name for name in current if name.lower() in drop]
+                changed = bool(removed)
+                if changed:
+                    repo.update_note(conn, note_id, tags=kept, reason="agent")
+            updated.append({"note_id": note_id, "title": title, "changed": changed})
+        return {
+            "updated": len([u for u in updated if u["changed"]]),
+            "unchanged": len([u for u in updated if not u["changed"]]),
+            "missing": missing,
+            "tags": tags,
+            "notes": updated,
+            "hint": "changed=false 表示本来就是这个状态，没有改动。",
+        }
+
+    def bulk_add_tags(params: dict) -> dict:
+        return _apply_tags_to_many(params, add=True)
+
+    def bulk_remove_tags(params: dict) -> dict:
+        return _apply_tags_to_many(params, add=False)
+
+    def append_note(params: dict) -> dict:
+        """在笔记末尾追加一段内容。「加一段」不必读全文再整体重写。"""
+        note_id = _as_int(params.get("note_id"))
+        note = repo.get_note(conn, note_id)
+        if note is None:
+            return {"error": "笔记不存在"}
+        text = str(params.get("content") or "").strip()
+        if not text:
+            return {"error": "content 不能为空"}
+        old = str(note.get("content") or "")
+        new = (old.rstrip() + "\n\n" + text) if old.strip() else text
+        repo.update_note(conn, note_id, content=new, reason="agent")
+        return {"updated": True, "note_id": note_id, "added_chars": len(text),
+                "content_chars": len(new), "note": "已在末尾追加，并存了版本历史"}
+
+    def list_trash(params: dict) -> dict:
+        limit = min(max(_opt_int(params.get("limit"), 10), 1), 30)
+        notes, total = repo.list_notes(conn, page=1, per_page=limit, include_deleted=True)
+        items = []
+        for note in notes:
+            item = _note_brief(note)
+            item["days_left"] = repo.trash_days_left(note.get("deleted_at"))
+            items.append(item)
+        return {"count": len(items), "total": total, "notes": items,
+                "hint": "这些笔记在回收站里；restore_note 可恢复，超过剩余天数会被自动清掉。"}
+
     return {
         "search_notes": {
             "description": "按关键词和/或标签、分类、状态、最近天数检索笔记，返回 id、标题、标签、分类",
@@ -427,9 +511,32 @@ def _make_tools(conn: sqlite3.Connection) -> dict[str, dict[str, Any]]:
             "run": archive_note,
         },
         "trash_note": {
-            "description": "把笔记移入回收站（软删除，30 天内可恢复）——只在用户明确要求删除时用",
+            "description": "把笔记移入回收站（软删除，30 天内可恢复）——只在用户明确要求删除时用。"
+                           "调用后不会立即执行，会生成确认卡片等用户确认",
             "params": {"note_id": "必填"},
             "run": trash_note,
+        },
+        "bulk_add_tags": {
+            "description": "给一批笔记批量追加标签（与各自现有标签合并；一次最多 50 篇，先 search_notes 拿 id）",
+            "params": {"note_ids": "笔记 id 列表", "tags": "要追加的标签列表"},
+            "run": bulk_add_tags,
+            "observe_limit": 2600,
+        },
+        "bulk_remove_tags": {
+            "description": "从一批笔记批量删掉指定标签（其它标签保留，一次最多 50 篇）",
+            "params": {"note_ids": "笔记 id 列表", "tags": "要删除的标签列表"},
+            "run": bulk_remove_tags,
+            "observe_limit": 2600,
+        },
+        "append_note": {
+            "description": "在笔记末尾追加一段内容（保留原有正文，自动存版本历史）——「加一段」用它，别整篇重写",
+            "params": {"note_id": "必填", "content": "要追加的正文（Markdown）"},
+            "run": append_note,
+        },
+        "list_trash": {
+            "description": "列出回收站里的笔记（含剩余可恢复天数）",
+            "params": {"limit": "可选，默认 10"},
+            "run": list_trash,
         },
         "restore_note": {
             "description": "把笔记从回收站恢复回来",
@@ -619,6 +726,88 @@ def clear_runs(conn: sqlite3.Connection) -> None:
         logger.warning("agent 执行历史清空失败", exc_info=True)
 
 
+# ---------------------------------------------------------------------------
+# 危险操作确认：meta: agent.pending 存一张待确认卡片；
+# 用户在页面点「确认执行」→ execute_pending 真正落地（绕过模型，机制层兜底）
+# ---------------------------------------------------------------------------
+def _save_pending_op(conn, action: str, params: dict, note: dict) -> dict:
+    pending = {
+        "id": uuid4().hex[:10],
+        "action": action,
+        "params": params,
+        "created_ts": time.time(),
+        "note": {"id": note.get("id"), "title": note.get("title")},
+    }
+    repo.save_meta_map(conn, {"pending": json.dumps(pending, ensure_ascii=False)}, prefix="agent.")
+    return pending
+
+
+def _get_pending_op(conn) -> dict | None:
+    """当前待确认卡片；过期（10 分钟）返回 None 并顺手清掉。同一时刻只留最新一张。"""
+    try:
+        meta = repo.get_meta_map(conn, "agent.")
+        pending = json.loads(str(meta.get("pending") or ""))
+    except Exception:
+        return None
+    if not isinstance(pending, dict) or not pending.get("id"):
+        return None
+    if time.time() - float(pending.get("created_ts") or 0) > PENDING_TTL_SECONDS:
+        _clear_pending_op(conn)
+        return None
+    return pending
+
+
+def _take_pending_op(conn, confirm_id: str) -> dict | None:
+    """取出指定 id 的待确认卡片（取走即删）。不存在 / 过期 / id 不符都返回 None。"""
+    pending = _get_pending_op(conn)
+    if pending is None or str(pending.get("id")) != str(confirm_id):
+        return None
+    _clear_pending_op(conn)
+    return pending
+
+
+def _clear_pending_op(conn) -> None:
+    try:
+        repo.save_meta_map(conn, {"pending": ""}, prefix="agent.")
+    except Exception:
+        logger.warning("agent 待确认卡片清理失败", exc_info=True)
+
+
+def execute_pending(conn: sqlite3.Connection, confirm_id: str) -> dict[str, Any]:
+    """用户点「确认执行」后真正落地待确认的写操作（不经过模型）。"""
+    pending = _take_pending_op(conn, str(confirm_id))
+    if pending is None:
+        return {"ok": False, "error": "确认已过期或不存在，请重新发起任务"}
+    action = str(pending.get("action") or "")
+    if action not in _CONFIRM_TOOLS:
+        return {"ok": False, "error": "该操作不需要确认或已失效"}
+    spec = _make_tools(conn).get(action)
+    if spec is None:
+        return {"ok": False, "error": "工具已不存在"}
+    try:
+        result = spec["run"](pending.get("params") or {})
+    except Exception as exc:
+        logger.warning("agent 确认执行 %s 失败", action, exc_info=True)
+        return {"ok": False, "error": f"执行失败：{exc}"}
+    ok = not (isinstance(result, dict) and result.get("error"))
+    note = pending.get("note") or {}
+    involved = {note["id"]: note.get("title")} if isinstance(note.get("id"), int) else None
+    _record_run(
+        conn, f"（用户确认后执行）{action}",
+        ok=ok,
+        answer=str((result or {}).get("note") or f"已执行 {action}")[:300],
+        steps=[{"tool": action, "summary": "用户在确认卡片上点「确认执行」"}],
+        error="" if ok else str((result or {}).get("error") or ""),
+        read_only=False, involved=involved,
+    )
+    return {"ok": ok, "result": result, "action": action}
+
+
+def cancel_pending(conn: sqlite3.Connection, confirm_id: str) -> bool:
+    """用户点「取消」：作废卡片，不做任何事。"""
+    return _take_pending_op(conn, str(confirm_id)) is not None
+
+
 def ensure_run_ids(conn: sqlite3.Connection) -> None:
     """给没有 id 的历史记录补上 id（早期记录没有这个字段，单条删除需要它）。
 
@@ -756,6 +945,30 @@ def iter_agent_events(
             observation = {"error": "只读模式：本次任务不执行写操作，如需修改请关闭只读模式后重试"}
             summary = f"已拦截写操作 {action}（只读模式）"
             seen_calls.add(signature)
+        elif action in _CONFIRM_TOOLS:
+            # 危险操作：不执行，生成确认卡片等用户点「确认执行」（见 _CONFIRM_TOOLS 注释）
+            note = repo.get_note(conn, _as_int(params.get("note_id")))
+            if note is None:
+                repeat_streak = 0
+                observation = {"error": "笔记不存在"}
+                summary = f"{action} 失败：笔记不存在"
+            else:
+                existing = _get_pending_op(conn)
+                if (existing and existing.get("action") == action
+                        and existing.get("params") == params):
+                    pending = existing
+                    repeat_streak += 1   # 反复生成同一张确认卡也按空转算
+                else:
+                    pending = _save_pending_op(conn, action, params, note)
+                    repeat_streak = 0
+                observation = {
+                    "confirm_required": True,
+                    "confirm_id": pending["id"],
+                    "note": "确认卡片已生成，本步没有真正执行。请用 final 提醒用户："
+                            "页面上有一张确认卡片，点「确认执行」才会移入回收站"
+                            "（软删除，可在回收站恢复）。用户确认前不要再调用本工具。",
+                }
+                summary = f"等待用户确认：移入回收站《{note.get('title')}》"
         elif spec is None:
             repeat_streak = 0
             observation = {"error": f"未知工具 {action!r}，可用工具：{', '.join(tools)}"}
@@ -795,8 +1008,16 @@ def iter_agent_events(
         step = {"tool": action, "summary": summary, "params": params}
         steps.append(step)
         # 先把这一步推给前端，再准备下一轮——这就是「流式」的核心
-        yield {"type": "step", "tool": action, "summary": summary, "params": params,
-              "notes": _notes_list(involved)}
+        event = {"type": "step", "tool": action, "summary": summary, "params": params,
+                 "notes": _notes_list(involved)}
+        if isinstance(observation, dict) and observation.get("confirm_required"):
+            note = repo.get_note(conn, _as_int(params.get("note_id")), include_deleted=True)
+            event["confirm"] = {
+                "id": observation.get("confirm_id"),
+                "note_id": params.get("note_id"),
+                "title": str((note or {}).get("title") or ""),
+            }
+        yield event
         messages.append({"role": "assistant", "content": json.dumps(data, ensure_ascii=False)})
         _push_observe(
             observation if isinstance(observation, dict) else {"result": observation},

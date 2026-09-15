@@ -6486,3 +6486,26 @@ html.theme-anim .theme-toggle svg { animation: theme-moon-flip .45s cubic-bezier
   font-family: var(--font-mono); font-size: 12px; line-height: 1.6; color: var(--ink-2);
   white-space: pre-wrap; overflow-wrap: anywhere;
 }
+
+/* ===== 补丁：agent 危险操作确认卡片（2026-09-15，已合并） ===== */
+
+.agent-confirm {
+  margin: 6px 0; padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--line));
+  border-left: 3px solid var(--danger);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--danger) 6%, var(--surface));
+}
+
+.agent-confirm__text {
+  margin: 0 0 8px; color: var(--ink); font-family: var(--font-sans);
+  font-size: 13.5px; line-height: 1.55;
+}
+
+.agent-confirm__text--warn { color: var(--danger); }
+
+.agent-confirm__actions { display: flex; align-items: center; gap: 8px; }
+
+.agent-confirm__ok { cursor: pointer; }
+
+.agent-confirm__no { cursor: pointer; }

@@ -542,6 +542,27 @@ async def agent_runs_clear(conn: sqlite3.Connection = Depends(db_conn)):
     return _json({"ok": True})
 
 
+@ai_api_router.post("/agent/confirm")
+async def agent_confirm(request: Request, conn: sqlite3.Connection = Depends(db_conn)):
+    """用户点「确认执行」：真正落地待确认的危险操作（不经过模型）。"""
+    payload = await read_json(request)
+    confirm_id = str(payload.get("confirm_id") or "")
+    if not confirm_id:
+        return _json({"ok": False, "error": "缺少 confirm_id"}, 400)
+    result = await run_in_threadpool(agent.execute_pending, conn, confirm_id)
+    return _json(result, 200 if result.get("ok") else 400)
+
+
+@ai_api_router.post("/agent/confirm/cancel")
+async def agent_confirm_cancel(request: Request, conn: sqlite3.Connection = Depends(db_conn)):
+    """用户点「取消」：作废确认卡片，不做任何事。"""
+    payload = await read_json(request)
+    confirm_id = str(payload.get("confirm_id") or "")
+    if not confirm_id:
+        return _json({"ok": False, "error": "缺少 confirm_id"}, 400)
+    return _json({"ok": agent.cancel_pending(conn, confirm_id)})
+
+
 @ai_api_router.post("/agent/stream")
 async def agent_stream(request: Request, conn: sqlite3.Connection = Depends(db_conn)):
     """agent 循环的流式版本：每完成一步就推一条 SSE 事件。

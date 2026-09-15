@@ -267,6 +267,66 @@
       });
     }
 
+    function renderConfirmCard(confirm) {
+      if (!stepsEl || !confirm || !confirm.id) { return; }
+      var li = document.createElement('li');
+      li.className = 'agent-confirm';
+      var text = document.createElement('p');
+      text.className = 'agent-confirm__text';
+      text.textContent = '确认把《' + (confirm.title || ('#' + confirm.note_id))
+        + '》移入回收站？软删除，30 天内可在回收站恢复。';
+      var actions = document.createElement('div');
+      actions.className = 'agent-confirm__actions';
+      var okBtn = document.createElement('button');
+      okBtn.className = 'btn btn--danger btn--sm agent-confirm__ok';
+      okBtn.type = 'button';
+      okBtn.textContent = '确认执行';
+      var noBtn = document.createElement('button');
+      noBtn.className = 'btn btn--ghost btn--sm agent-confirm__no';
+      noBtn.type = 'button';
+      noBtn.textContent = '取消';
+      actions.appendChild(okBtn);
+      actions.appendChild(noBtn);
+      li.appendChild(text);
+      li.appendChild(actions);
+      stepsEl.appendChild(li);
+
+      var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+      var csrf = csrfMeta ? csrfMeta.getAttribute('content') : '';
+
+      function settle(message, ok) {
+        text.textContent = message;
+        text.className = 'agent-confirm__text' + (ok ? '' : ' agent-confirm__text--warn');
+        if (actions.parentNode) { actions.parentNode.removeChild(actions); }
+      }
+
+      okBtn.addEventListener('click', function () {
+        okBtn.disabled = true;
+        noBtn.disabled = true;
+        fetch('/api/agent/confirm', {
+          method: 'POST',
+          headers: { 'X-CSRF-Token': csrf, 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ confirm_id: confirm.id }),
+        }).then(function (res) { return res.json(); }).then(function (data) {
+          if (data && data.ok) { settle('已移入回收站（30 天内可在回收站恢复）。', true); }
+          else { settle((data && data.error) || '执行失败', false); }
+        }).catch(function () { settle('网络错误，请重试', false); });
+      });
+
+      noBtn.addEventListener('click', function () {
+        okBtn.disabled = true;
+        noBtn.disabled = true;
+        fetch('/api/agent/confirm/cancel', {
+          method: 'POST',
+          headers: { 'X-CSRF-Token': csrf, 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ confirm_id: confirm.id }),
+        }).then(function () { settle('已取消，没有做任何改动。', true); })
+          .catch(function () { settle('已取消，没有做任何改动。', true); });
+      });
+    }
+
     function render(result) {
       if (!resultEl || !stepsEl || !answerEl) { return; }
       resultEl.hidden = false;
@@ -322,6 +382,7 @@
         stepCount += 1;
         setStatus('第 ' + stepCount + ' 步：' + (item.summary || item.tool || ''), '');
         renderNotes(item.notes);
+        if (item.confirm) { renderConfirmCard(item.confirm); }   // 危险操作确认卡片
       }
 
       function onFinal(ev) {
@@ -377,7 +438,7 @@
           try { ev = JSON.parse(payload); }
           catch (e) { return; } // 容错坏行：跳过无法解析的事件
           if (ev.type === 'step') {
-            onStep({ tool: ev.tool, summary: ev.summary, params: ev.params });
+            onStep(ev);   // 整个事件传下去：confirm 卡片、涉及笔记都在里面
           } else if (ev.type === 'final') {
             onFinal(ev);
           } else if (ev.type === 'error') {

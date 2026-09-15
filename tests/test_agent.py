@@ -750,3 +750,155 @@ def test_agent_page_has_mode_segment_and_no_readonly_checkbox(auth_client):
     for mode in ("rw", "ro", "dry"):
         assert f'data-mode="{mode}"' in page.text
     assert "agent-readonly" not in page.text
+
+
+# ---------------------------------------------------------------------------
+# 批量工具 / append_note / list_trash
+# ---------------------------------------------------------------------------
+def test_bulk_add_tags_and_missing_ids(db_conn, seeded_note):
+    tools = agent_service._make_tools(db_conn)
+    result = tools["bulk_add_tags"]["run"]({"note_ids": [seeded_note, 99999], "tags": ["运维"]})
+    assert result["updated"] == 1 and result["missing"] == [99999]
+    note = agent_service.repo.get_note(db_conn, seeded_note)
+    assert "运维" in note["tags"] and "docker" in note["tags"]   # 追加不覆盖
+
+
+def test_bulk_add_tags_is_idempotent(db_conn, seeded_note):
+    tools = agent_service._make_tools(db_conn)
+    tools["bulk_add_tags"]["run"]({"note_ids": [seeded_note], "tags": ["运维"]})
+    result = tools["bulk_add_tags"]["run"]({"note_ids": [seeded_note], "tags": ["运维"]})
+    assert result["updated"] == 0 and result["unchanged"] == 1
+
+
+def test_bulk_remove_tags_keeps_others(db_conn, seeded_note):
+    tools = agent_service._make_tools(db_conn)
+    result = tools["bulk_remove_tags"]["run"]({"note_ids": [seeded_note], "tags": ["docker"]})
+    assert result["updated"] == 1
+    note = agent_service.repo.get_note(db_conn, seeded_note)
+    assert "docker" not in note["tags"]
+    absent = tools["bulk_remove_tags"]["run"]({"note_ids": [seeded_note], "tags": ["docker"]})
+    assert absent["updated"] == 0   # 没有可删的也不报错
+
+
+def test_bulk_tags_reject_bad_input(db_conn):
+    tools = agent_service._make_tools(db_conn)
+    assert "error" in tools["bulk_add_tags"]["run"]({"note_ids": "x", "tags": ["a"]})
+    assert "error" in tools["bulk_add_tags"]["run"]({"note_ids": [1], "tags": []})
+
+
+def test_bulk_tools_count_as_writes():
+    for name in ("bulk_add_tags", "bulk_remove_tags", "append_note"):
+        assert name in agent_service._WRITE_TOOLS
+
+
+def test_append_note_preserves_original(db_conn, seeded_note):
+    tools = agent_service._make_tools(db_conn)
+    result = tools["append_note"]["run"]({"note_id": seeded_note, "content": "## 补充\n新的一段"})
+    assert result["updated"] is True
+    note = agent_service.repo.get_note(db_conn, seeded_note)
+    assert note["content"].startswith("用 Docker Compose 部署服务。")
+    assert note["content"].rstrip().endswith("新的一段")
+
+
+def test_list_trash_shows_soft_deleted(db_conn, seeded_note):
+    assert agent_service.repo.soft_delete(db_conn, seeded_note)
+    tools = agent_service._make_tools(db_conn)
+    result = tools["list_trash"]["run"]({"limit": 10})
+    ids = [n["id"] for n in result["notes"]]
+    assert seeded_note in ids
+    assert all(n["days_left"] >= 0 for n in result["notes"])
+
+
+# ---------------------------------------------------------------------------
+# 危险操作确认：trash_note 先出卡片，用户确认后才执行
+# ---------------------------------------------------------------------------
+def _script(monkeypatch, replies):
+    chat = ScriptedChat(replies)
+    monkeypatch.setattr(agent_service.ai, "chat", chat)
+    return chat
+
+
+def test_trash_generates_confirmation_and_does_not_execute(db_conn, seeded_note, monkeypatch):
+    _script(monkeypatch, [
+        json.dumps({"action": "trash_note", "params": {"note_id": seeded_note}}, ensure_ascii=False),
+        json.dumps({"action": "final", "answer": "请在确认卡片上点「确认执行」"}, ensure_ascii=False),
+    ])
+    result = agent_service.run_agent(db_conn, "删掉那篇 Docker 笔记")
+    assert result["ok"] is True
+    assert "等待用户确认" in result["steps"][0]["summary"]
+    # 没有真的删
+    assert agent_service.repo.get_note(db_conn, seeded_note) is not None
+    # 待确认卡片在
+    pending = agent_service._get_pending_op(db_conn)
+    assert pending and pending["action"] == "trash_note"
+
+
+def test_execute_pending_really_trashes(db_conn, seeded_note, monkeypatch):
+    _script(monkeypatch, [
+        json.dumps({"action": "trash_note", "params": {"note_id": seeded_note}}, ensure_ascii=False),
+        json.dumps({"action": "final", "answer": "等确认"}, ensure_ascii=False),
+    ])
+    agent_service.run_agent(db_conn, "删掉那篇 Docker 笔记")
+    pending = agent_service._get_pending_op(db_conn)
+    result = agent_service.execute_pending(db_conn, pending["id"])
+    assert result["ok"] is True
+    # 真的进了回收站
+    assert agent_service.repo.get_note(db_conn, seeded_note) is None
+    # 取走即删：同一个 id 不能再执行一次
+    again = agent_service.execute_pending(db_conn, pending["id"])
+    assert again["ok"] is False
+
+
+def test_execute_pending_rejects_bad_id(db_conn):
+    assert agent_service.execute_pending(db_conn, "nope")["ok"] is False
+
+
+def test_cancel_pending_discards(db_conn, seeded_note, monkeypatch):
+    _script(monkeypatch, [
+        json.dumps({"action": "trash_note", "params": {"note_id": seeded_note}}, ensure_ascii=False),
+        json.dumps({"action": "final", "answer": "等确认"}, ensure_ascii=False),
+    ])
+    agent_service.run_agent(db_conn, "删掉那篇 Docker 笔记")
+    pending = agent_service._get_pending_op(db_conn)
+    assert agent_service.cancel_pending(db_conn, pending["id"]) is True
+    assert agent_service._get_pending_op(db_conn) is None
+    assert agent_service.repo.get_note(db_conn, seeded_note) is not None
+
+
+def test_trash_confirmation_event_carries_confirm_info(db_conn, seeded_note, monkeypatch):
+    _script(monkeypatch, [
+        json.dumps({"action": "trash_note", "params": {"note_id": seeded_note}}, ensure_ascii=False),
+        json.dumps({"action": "final", "answer": "等确认"}, ensure_ascii=False),
+    ])
+    confirm = None
+    for event in agent_service.iter_agent_events(db_conn, "删掉那篇 Docker 笔记"):
+        if event["type"] == "step" and event.get("confirm"):
+            confirm = event["confirm"]
+            break
+    assert confirm and confirm["id"] and confirm["title"]
+
+
+def test_confirm_endpoints(auth_client, seeded_note, monkeypatch, db_conn):
+    from app.services import ai as ai_service
+    _script(monkeypatch, [
+        json.dumps({"action": "trash_note", "params": {"note_id": seeded_note}}, ensure_ascii=False),
+        json.dumps({"action": "final", "answer": "请在卡片上确认"}, ensure_ascii=False),
+    ])
+    monkeypatch.setattr(ai_service, "is_enabled", lambda: True)
+    db_conn.commit()   # 让应用的请求连接能看到 seeded_note（否则「笔记不存在」）
+    headers = {"X-CSRF-Token": _csrf(auth_client)}
+    events = []
+    with auth_client.stream("POST", "/api/agent/stream", json={"task": "删掉那篇 Docker 笔记"},
+                            headers=headers) as resp:
+        for line in resp.iter_lines():
+            if line.startswith("data: "):
+                events.append(json.loads(line[len("data: "):]))
+    confirm = next(e["confirm"] for e in events if e.get("confirm"))
+    # 确认 → 真的删
+    resp = auth_client.post("/api/agent/confirm", json={"confirm_id": confirm["id"]}, headers=headers)
+    assert resp.status_code == 200 and resp.json()["ok"] is True
+    # 取消 / 坏 id
+    assert auth_client.post("/api/agent/confirm", json={"confirm_id": "bad"},
+                            headers=headers).json()["ok"] is False
+    assert auth_client.post("/api/agent/confirm/cancel", json={"confirm_id": "bad"},
+                            headers=headers).json()["ok"] is False

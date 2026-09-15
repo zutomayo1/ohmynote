@@ -138,3 +138,35 @@ if sources is None:
 - 改完**必须自己跑** `C:\repo\inknote\.venv\Scripts\python.exe -m pytest tests -q`，**必须 186+ 全绿**（你自己新增的用例算增量）。
 - 每条新功能都要有测试，测试自己起假服务（参考 `tests/test_smoke.py` 里的 `fake_ai_server`，它在 `tests/test_smoke.py` 里，别改那个文件）。
 - 写完在总结里说明：改了哪些文件、新增哪些接口、测试结果、**哪些地方需要主 agent 帮你接线**（比如新路由要注册、新模板要挂链接）。
+
+## agent v2：批量工具 + 危险操作确认（2026-09-15）
+
+### 新工具（agent 循环内）
+- `bulk_add_tags` `{note_ids: int[], tags: string[]}` → `{updated, unchanged, missing, notes}`（一次 ≤50 篇，observe_limit 2600）
+- `bulk_remove_tags` 同上，删指定标签（其余保留）
+- `append_note` `{note_id, content}` → 在末尾追加正文（走版本历史）；「加一段」用它，别整篇重写
+- `list_trash` `{limit?}` → 回收站笔记 + `days_left` 剩余可恢复天数
+
+### 危险操作确认（机制层，不依赖提示词）
+- `trash_note` 调用**不立即执行**：生成确认卡片（meta `agent.pending`，TTL 10 分钟），
+  step 事件附带 `confirm: {id, note_id, title}`；提示词要求模型 final 提醒用户确认
+- `POST /api/agent/confirm` `{confirm_id}` → 用户点「确认执行」后真正落地（绕过模型），
+  结果记入执行历史；取走即删，同 id 不能执行两次
+- `POST /api/agent/confirm/cancel` `{confirm_id}` → 作废卡片
+- `_CONFIRM_TOOLS` 目前 = {trash_note}；后续加入其它危险操作只需扩这个集合
+
+## agent v2：批量工具 + 危险操作确认（2026-09-15）
+
+### 新工具（agent 循环内）
+- `bulk_add_tags` `{note_ids: int[], tags: string[]}` → `{updated, unchanged, missing, notes}`（一次 ≤50 篇，observe_limit 2600）
+- `bulk_remove_tags` 同上，删指定标签（其余保留）
+- `append_note` `{note_id, content}` → 在末尾追加正文（走版本历史）；「加一段」用它，别整篇重写
+- `list_trash` `{limit?}` → 回收站笔记 + `days_left` 剩余可恢复天数
+
+### 危险操作确认（机制层，不依赖提示词）
+- `trash_note` 调用**不立即执行**：生成确认卡片（meta `agent.pending`，TTL 10 分钟），
+  step 事件附带 `confirm: {id, note_id, title}`；提示词要求模型 final 提醒用户确认
+- `POST /api/agent/confirm` `{confirm_id}` → 用户点「确认执行」后真正落地（绕过模型），
+  结果记入执行历史；取走即删，同 id 不能执行两次
+- `POST /api/agent/confirm/cancel` `{confirm_id}` → 作废卡片
+- `_CONFIRM_TOOLS` 目前 = {trash_note}；后续加入其它危险操作只需扩这个集合
