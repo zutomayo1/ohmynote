@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import sqlite3
 from urllib.parse import quote
@@ -14,6 +15,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 
 from .. import repo, search as search_mod
+from ..services import graph as graph_service
 from ..config import settings
 from ..deps import (
     MAX_SQLITE_INT,
@@ -593,12 +595,27 @@ def note_detail(request: Request, note_id: NoteId, conn: sqlite3.Connection = De
         context["related"] = semantic
         related_engine = "semantic"
     versions = repo.list_versions(conn, note_id)
+    # 局部关系图：这篇笔记的邻居（借鉴 Obsidian / Quartz 的 local graph）；
+    # ?graph_depth=2 看两跳（邻居的邻居），默认 1 跳
+    try:
+        graph_depth = int(request.query_params.get("graph_depth") or 1)
+    except ValueError:
+        graph_depth = 1
+    graph_depth = 1 if graph_depth < 2 else 2
+    local_graph = graph_service.ego_graph(conn, note_id, depth=graph_depth)
     return render(
         request,
         "notes/detail.html",
         versions=versions[:5],
         version_count=len(versions),
         related_engine=related_engine,
+        local_graph=local_graph,
+        graph_depth=graph_depth,
+        local_graph_json=(
+            json.dumps(local_graph, ensure_ascii=False).replace("</", "<\\/")
+            if local_graph
+            else ""
+        ),
         **context,
     )
 

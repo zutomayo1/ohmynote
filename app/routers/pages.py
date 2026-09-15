@@ -18,7 +18,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, Response
 from .. import repo, search as search_mod
 from ..config import settings
 from ..deps import EditParam, MAX_SQLITE_INT, PageParam, TemplateId, csrf_protect, db_conn, require_login
-from ..services import ai, ai_search, media, note_templates, stats_heatmap
+from ..services import ai, ai_search, graph as graph_service, media, note_templates, stats_heatmap
 from ..services import export as export_service
 from ..templating import render
 from ..utils import now, total_pages, url_with_query
@@ -579,57 +579,18 @@ def stats_page(request: Request, conn: sqlite3.Connection = Depends(db_conn)):
 # ---------------------------------------------------------------------------
 # 关系图谱
 # ---------------------------------------------------------------------------
-def _build_graph(conn: sqlite3.Connection) -> dict[str, Any]:
-    """把全部笔记与 [[双链]] 抽成图谱的节点 / 边。
-
-    节点 = 笔记（含标签 / 分类 / 是否参与链接）；边 = 笔记之间的 [[双链]]，
-    只保留两端都还存在的笔记（悬空链接不单独建节点）。直接读 note_links
-    表（create_note 时已通过 sync_derived 填好），不再重解析正文。
-    """
-    notes = repo.all_notes(conn)
-    by_id: dict[int, dict[str, Any]] = {n["id"]: n for n in notes}
-
-    rows = conn.execute(
-        "SELECT source_id, target_id, target_title FROM note_links"
-    ).fetchall()
-
-    edges: list[dict[str, Any]] = []
-    linked: set[int] = set()
-    for row in rows:
-        source_id = int(row["source_id"])
-        target_id = row["target_id"]
-        if target_id is None:
-            continue
-        target_id = int(target_id)
-        if source_id in by_id and target_id in by_id:
-            edges.append(
-                {
-                    "source": source_id,
-                    "target": target_id,
-                    "title": row["target_title"],
-                }
-            )
-            linked.add(source_id)
-            linked.add(target_id)
-
-    nodes = [
-        {
-            "id": n["id"],
-            "title": n["title"],
-            "tags": list(n.get("tags") or []),
-            "category": n.get("category") or "",
-            "updated_at": n.get("updated_at") or "",
-            "has_links": n["id"] in linked,
-        }
-        for n in notes
-    ]
-    return {"nodes": nodes, "edges": edges}
-
-
 @router.get("/graph")
-def graph_page(request: Request, conn: sqlite3.Connection = Depends(db_conn)):
-    """笔记关系图谱页：服务端算好节点 / 边，序列化进模板给前端自绘图谱。"""
-    graph = _build_graph(conn)
+def graph_page(
+    request: Request,
+    conn: sqlite3.Connection = Depends(db_conn),
+    focus: int | None = None,
+):
+    """笔记关系图谱页。
+
+    服务端算好节点 / 边（含连接数与 Louvain 社区），序列化进模板给前端自绘图谱。
+    ``?focus=<id>`` 用来从笔记页跳过来时把某个节点居中选中（节点不存在就忽略）。
+    """
+    graph = graph_service.build_graph(conn)
     nodes = graph["nodes"]
     edges = graph["edges"]
 
@@ -638,11 +599,17 @@ def graph_page(request: Request, conn: sqlite3.Connection = Depends(db_conn)):
     recent_linked = linked_nodes[:8]
     all_tags = sorted({t for n in nodes for t in n["tags"]})
 
+    focus_id = None
+    focus_title = ""
+    if focus:
+        hit = next((n for n in nodes if n["id"] == focus), None)
+        if hit is not None:
+            focus_id = hit["id"]
+            focus_title = hit["title"]
+
     # 嵌入 <script type="application/json">：先 |safe 关掉自动转义，再把 </ 转义
     # 成 <\/，避免正文里的 </script> 提前闭合标签（HTML 解析器不解码 script 内实体）。
-    graph_json = json.dumps(
-        {"nodes": nodes, "edges": edges}, ensure_ascii=False
-    ).replace("</", "<\\/")
+    graph_json = json.dumps(graph, ensure_ascii=False).replace("</", "<\\/")
 
     return render(
         request,
@@ -650,6 +617,10 @@ def graph_page(request: Request, conn: sqlite3.Connection = Depends(db_conn)):
         graph_json=graph_json,
         notes_count=len(nodes),
         links_count=len(edges),
+        community_count=graph["community_count"],
+        max_degree=graph["max_degree"],
+        focus_id=focus_id,
+        focus_title=focus_title,
         recent_linked=recent_linked,
         all_tags=all_tags,
     )

@@ -10,6 +10,18 @@ from urllib.parse import quote, urlencode
 
 ISO_FMT = "%Y-%m-%d %H:%M:%S"
 
+
+def tag_color(name: str) -> int:
+    """标签名 → 0..7 的稳定色组编号（md5，跨进程稳定）。
+
+    全项目唯一实现：模板过滤器 ``tag_color``、图谱节点配色都用它，
+    这样「图谱里某个簇的颜色」和「标签药丸的颜色」是同一个色组。
+    """
+    import hashlib
+
+    digest = hashlib.md5((name or "").encode("utf-8")).hexdigest()
+    return int(digest[:8], 16) % 8
+
 logger = logging.getLogger("inknote.utils")
 
 # 中日韩字符（用于字数统计与摘要长度判断）

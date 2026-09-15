@@ -7030,3 +7030,185 @@ html.js .graph-stage { display: block; }
   padding: 14px 12px; color: var(--ink-3);
   font-family: var(--font-sans); font-size: 13px; line-height: 1.5;
 }
+
+/* ===== 补丁：关系图谱升级（聚类着色 / 度数缩放 / 缩放平移 / 局部图）（2026-09-15，已合并） ===== */
+/* 只使用项目既有令牌；节点色板复用标签色组（hsl 与 .tag-pill--cN 同色相）。
+   注意选择器权重：.graph-svg .node.node--xxx 写成三/四级，确保能压过下面的
+   .gnode--cN > .node__circle（同为三级的规则按书写顺序决定胜负）。 */
+
+/* ---------------- 工具栏 ---------------- */
+
+.graph-toolbar { margin-bottom: 12px; }
+
+.graph-toolbar__row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+}
+
+.graph-toolbar__search { flex: 1 1 190px; min-width: 130px; }
+.graph-toolbar__search .input { width: 100%; }
+
+.graph-toolbar__field { flex: none; }
+.graph-toolbar__check { flex: none; }
+
+.graph-toolbar__zoom {
+  display: flex; align-items: center; gap: 6px; margin-left: auto;
+}
+
+.graph-toolbar__hint { margin: 8px 0 0; }
+.graph-toolbar__hint code {
+  padding: 1px 4px; border: 1px solid var(--line); border-radius: 3px;
+  background: var(--bg-soft); font-family: var(--font-mono); font-size: 11px;
+}
+
+.graph-match { margin: 0 0 6px; min-height: 16px; color: var(--ink-3); }
+
+.graph-focus {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 10px; border-radius: var(--radius-pill);
+  background: var(--brand-soft); color: var(--brand);
+}
+.graph-focus a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+
+/* ---------------- 图例 ---------------- */
+
+.graph-legend {
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: 6px 16px; margin: 0 0 12px;
+}
+
+.graph-legend__row {
+  display: inline-flex; align-items: center; gap: 6px;
+  color: var(--ink-2); font-family: var(--font-sans); font-size: 12px;
+}
+
+.graph-legend__swatch {
+  flex: none; width: 10px; height: 10px; border-radius: 3px;
+}
+
+.graph-legend__swatch--plain { background: var(--brand); }
+
+.gswatch--c0 { background: hsl(6 45% 50%); }
+.gswatch--c1 { background: hsl(38 50% 48%); }
+.gswatch--c2 { background: hsl(75 38% 42%); }
+.gswatch--c3 { background: hsl(130 38% 44%); }
+.gswatch--c4 { background: hsl(175 42% 42%); }
+.gswatch--c5 { background: hsl(215 45% 50%); }
+.gswatch--c6 { background: hsl(270 42% 52%); }
+.gswatch--c7 { background: hsl(330 45% 52%); }
+
+.graph-legend__label { overflow-wrap: anywhere; }
+
+.graph-legend__count {
+  color: var(--ink-3); font-family: var(--font-mono); font-size: 11px;
+}
+
+.graph-legend__note {
+  width: 100%; margin: 0; color: var(--ink-3);
+  font-family: var(--font-sans); font-size: 11.5px;
+}
+
+/* ---------------- 画布：指针交互 ---------------- */
+
+.graph-stage { touch-action: none; cursor: grab; }
+.graph-stage:active { cursor: grabbing; }
+.graph-stage .graph-svg { display: block; touch-action: none; }
+
+.graph-svg .node__hit { cursor: pointer; }
+
+/* 节点色：按聚类 / 按标签（色组与标签药丸一致），单色模式不带 gnode--cN */
+.graph-svg .gnode--c0 > .node__circle { fill: hsl(6 45% 50%); }
+.graph-svg .gnode--c1 > .node__circle { fill: hsl(38 50% 48%); }
+.graph-svg .gnode--c2 > .node__circle { fill: hsl(75 38% 42%); }
+.graph-svg .gnode--c3 > .node__circle { fill: hsl(130 38% 44%); }
+.graph-svg .gnode--c4 > .node__circle { fill: hsl(175 42% 42%); }
+.graph-svg .gnode--c5 > .node__circle { fill: hsl(215 45% 50%); }
+.graph-svg .gnode--c6 > .node__circle { fill: hsl(270 42% 52%); }
+.graph-svg .gnode--c7 > .node__circle { fill: hsl(330 45% 52%); }
+
+[data-theme="dark"] .graph-svg .gnode--c0 > .node__circle { fill: hsl(6 52% 62%); }
+[data-theme="dark"] .graph-svg .gnode--c1 > .node__circle { fill: hsl(38 55% 62%); }
+[data-theme="dark"] .graph-svg .gnode--c2 > .node__circle { fill: hsl(75 42% 58%); }
+[data-theme="dark"] .graph-svg .gnode--c3 > .node__circle { fill: hsl(130 40% 58%); }
+[data-theme="dark"] .graph-svg .gnode--c4 > .node__circle { fill: hsl(175 45% 58%); }
+[data-theme="dark"] .graph-svg .gnode--c5 > .node__circle { fill: hsl(215 50% 64%); }
+[data-theme="dark"] .graph-svg .gnode--c6 > .node__circle { fill: hsl(270 45% 68%); }
+[data-theme="dark"] .graph-svg .gnode--c7 > .node__circle { fill: hsl(330 48% 66%); }
+
+[data-theme="dark"] .gswatch--c0 { background: hsl(6 52% 62%); }
+[data-theme="dark"] .gswatch--c1 { background: hsl(38 55% 62%); }
+[data-theme="dark"] .gswatch--c2 { background: hsl(75 42% 58%); }
+[data-theme="dark"] .gswatch--c3 { background: hsl(130 40% 58%); }
+[data-theme="dark"] .gswatch--c4 { background: hsl(175 45% 58%); }
+[data-theme="dark"] .gswatch--c5 { background: hsl(215 50% 64%); }
+[data-theme="dark"] .gswatch--c6 { background: hsl(270 45% 68%); }
+[data-theme="dark"] .gswatch--c7 { background: hsl(330 48% 66%); }
+
+/* 高亮状态：四级权重，确保压过着色规则 */
+.graph-svg .node.node--active > .node__circle { fill: var(--accent); }
+.graph-svg .node.node--selected > .node__circle {
+  fill: var(--brand-dark, var(--brand));
+  stroke: var(--brand); stroke-width: 3;
+}
+.graph-svg .node.node--focus > .node__circle { stroke: var(--brand); stroke-width: 3; }
+.graph-svg .node.node--match > .node__circle { stroke: var(--accent); stroke-width: 2.5; }
+.graph-svg .node.node--dim { opacity: 0.18; }
+.graph-svg .node.node--hover > .node__circle { stroke: var(--ink); stroke-width: 2; }
+.graph-svg .node.node--isolated > .node__circle { opacity: 0.5; }
+[data-theme="dark"] .graph-svg .node.node--dim { opacity: 0.22; }
+
+/* 搜索命中的标题也提亮一点 */
+.graph-svg .node.node--match > .node__label { fill: var(--ink); }
+
+/* 节点多的时候先只显示大节点的标题，避免糊成一片（悬停/选中/命中时再显示） */
+.graph-svg.graph-svg--dense .node__label { opacity: 0; transition: opacity 0.15s ease; }
+.graph-svg.graph-svg--dense .node.node--hover > .node__label,
+.graph-svg.graph-svg--dense .node.node--active > .node__label,
+.graph-svg.graph-svg--dense .node.node--selected > .node__label,
+.graph-svg.graph-svg--dense .node.node--match > .node__label,
+.graph-svg.graph-svg--dense .node.node--focus > .node__label { opacity: 1; }
+
+/* ---------------- 笔记详情页：局部关系图 ---------------- */
+
+.local-graph { min-width: 0; }   /* 栏很窄：防止 SVG 把栅格列撑开 */
+
+.local-graph__head {
+  display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px;
+}
+
+.local-graph__head .rail-block__title { margin-bottom: 0; }
+
+.local-graph__more {
+  margin-left: auto; flex: none;
+  color: var(--brand); font-family: var(--font-sans); font-size: 12px;
+  font-weight: 600; text-decoration: none;
+}
+
+.local-graph__more:hover { color: var(--brand-dark); text-decoration: underline; text-underline-offset: 3px; }
+
+.local-graph__stage {
+  position: relative; display: none;
+  height: 190px; border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background:
+    radial-gradient(circle at 1px 1px, var(--line) 1px, transparent 0) 0 0 / 18px 18px,
+    var(--surface-2);
+  overflow: hidden;
+}
+html.js .local-graph__stage { display: block; }
+.local-graph__stage:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+.local-graph__meta { margin: 8px 0 0; }
+
+.local-graph__depth { margin-left: 6px; }
+.local-graph__depth a { color: var(--brand); text-decoration: underline; text-underline-offset: 2px; }
+.local-graph__list { margin: 0; }
+
+/* 局部图里的节点标题小一号，240px 的栏宽塞得下 */
+.local-graph__stage .node__label {
+  font-size: 10.5px; stroke-width: 2.5px;
+}
+.local-graph__stage .node__hit { cursor: pointer; }
+
+@media (prefers-reduced-motion: reduce) {
+  .graph-svg.graph-svg--dense .node__label { transition: none; }
+}

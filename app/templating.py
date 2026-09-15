@@ -18,6 +18,7 @@ from starlette.templating import Jinja2Templates
 
 from .config import STATIC_DIR, TEMPLATES_DIR, settings
 from .deps import csrf_token, current_session
+from .utils import tag_color
 from .services import ai
 from .utils import (
     fmt_date_cn,
@@ -178,11 +179,8 @@ def _f_highlight(value: str, tokens: list[str] | None = None) -> str:
 
 
 def _f_tag_color(name: str) -> int:
-    """标签名 → 0..7 的稳定色组编号（md5，跨进程稳定）。"""
-    import hashlib
-
-    digest = hashlib.md5((name or "").encode("utf-8")).hexdigest()
-    return int(digest[:8], 16) % 8
+    """标签名 → 0..7 的稳定色组编号（实现见 utils.tag_color）。"""
+    return tag_color(name)
 
 
 

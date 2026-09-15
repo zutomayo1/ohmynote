@@ -9,36 +9,69 @@
     <h1 class="page-title">关系图谱</h1>
     <p class="page-sub">
       用 <code>[[双链]]</code> 把笔记连起来，看清它们之间的脉络。
-      共 {{ notes_count }} 篇笔记、{{ links_count }} 条链接。
+      共 {{ notes_count }} 篇笔记、{{ links_count }} 条链接{% if community_count %}、{{ community_count }} 个聚类{% endif %}。
+      圆点越大的连接越多。
     </p>
   </div>
-  <div class="page-actions"><a class="btn btn--ghost" href="/notes">返回笔记</a></div>
+  <div class="page-actions">
+    {% if focus_title %}
+      <span class="graph-focus micro">已定位到《{{ focus_title }}》<a href="/graph">取消</a></span>
+    {% endif %}
+    <a class="btn btn--ghost" href="/notes">返回笔记</a>
+  </div>
 </div>
 
 <section class="card graph-card">
-  <div class="graph-filters filter-bar" role="region" aria-label="图谱筛选">
-    <div class="filter-bar__group">
-      <label class="checkbox">
+  <div class="graph-toolbar" role="region" aria-label="图谱工具栏">
+    <div class="graph-toolbar__row">
+      <label class="graph-toolbar__search">
+        <span class="sr-only">在图谱里搜索笔记标题</span>
+        <input class="input input--sm" id="graph-search" type="search"
+               placeholder="搜索笔记标题…" autocomplete="off" spellcheck="false">
+      </label>
+      <label class="graph-toolbar__field">
+        <span class="sr-only">着色方式</span>
+        <select class="select select--sm" id="graph-color" title="着色方式">
+          <option value="community">按聚类着色</option>
+          <option value="tag">按标签着色</option>
+          <option value="none">单色</option>
+        </select>
+      </label>
+      <label class="graph-toolbar__field">
+        <span class="sr-only">按标签筛选</span>
+        <select class="select select--sm" id="graph-tag" title="按标签筛选">
+          <option value="">全部标签</option>
+          {% for tag in all_tags %}<option value="{{ tag }}">{{ tag }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="checkbox graph-toolbar__check">
         <input type="checkbox" id="graph-only-linked" checked>
         <span>只看有链接的笔记</span>
       </label>
+      <div class="graph-toolbar__zoom">
+        <button class="btn btn--ghost btn--icon" id="graph-zoom-out" type="button"
+                title="缩小" aria-label="缩小图谱">−</button>
+        <button class="btn btn--ghost btn--icon" id="graph-zoom-in" type="button"
+                title="放大" aria-label="放大图谱">+</button>
+        <button class="btn btn--ghost btn--sm" id="graph-fit" type="button"
+                title="让所有节点回到视野">适应视图</button>
+        <button class="btn btn--ghost btn--sm" id="graph-relayout" type="button"
+                title="重新计算布局（位置会重排）">重新布局</button>
+      </div>
     </div>
-    <div class="filter-bar__group">
-      <label for="graph-tag" class="sr-only">按标签筛选</label>
-      <select id="graph-tag" class="select">
-        <option value="">全部标签</option>
-        {% for tag in all_tags %}<option value="{{ tag }}">{{ tag }}</option>{% endfor %}
-      </select>
-    </div>
-    <div class="filter-bar__group graph-filters__hint">
-      <span class="muted micro">拖拽移动 · 悬停高亮邻居 · 方向键导航，Enter 打开</span>
-    </div>
+    <p class="graph-toolbar__hint micro muted">
+      滚轮缩放 · 拖空白处平移 · 拖节点挪位置 · 悬停高亮邻居 ·
+      方向键移动、Enter 打开、<code>+</code> <code>-</code> <code>0</code> 缩放与适应
+    </p>
   </div>
 
+  <p class="graph-match micro" id="graph-match" role="status" aria-live="polite"></p>
+
+  <div class="graph-legend" id="graph-legend" aria-label="图例"></div>
+
   <div id="graph-stage" class="graph-stage" tabindex="0" role="application"
+       data-focus="{{ focus_id or '' }}"
        aria-label="笔记关系图谱，可用方向键在节点间移动、Enter 打开对应笔记">
-    <svg id="graph-svg" class="graph-svg" xmlns="http://www.w3.org/2000/svg"
-         aria-hidden="true" focusable="false"></svg>
     <p id="graph-empty" class="graph-empty is-hidden">当前筛选下没有可显示的笔记。</p>
   </div>
 

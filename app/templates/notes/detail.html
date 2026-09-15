@@ -118,6 +118,35 @@
   <aside class="post-rail">
     {{ toc_nav(toc) }}
 
+    {% if local_graph and local_graph.neighbor_count %}
+      <section class="rail-block local-graph">
+        <div class="local-graph__head">
+          <h2 class="rail-block__title">{{ icon('graph', 15) }} 局部关系图</h2>
+          <a class="local-graph__more" href="/graph?focus={{ note.id }}"
+             title="在全局图谱里定位这篇笔记">全图 →</a>
+        </div>
+        <div id="local-graph-stage" class="local-graph__stage" tabindex="0"
+             role="application"
+             aria-label="这篇笔记的邻居关系图，可以点节点跳过去，方向键移动、Enter 打开"></div>
+        <p class="local-graph__meta micro muted">
+          直接相连 {{ local_graph.neighbor_count }} 篇{% if local_graph.truncated %}，图里只画了 {{ local_graph.nodes | length - 1 }} 篇{% endif %}。
+          <span class="local-graph__depth">
+            {% if graph_depth == 2 %}
+              <a href="{{ note.url }}">只看 1 跳</a>
+            {% else %}
+              <a href="{{ note.url }}?graph_depth=2">看 2 跳</a>
+            {% endif %}
+          </span>
+        </p>
+        <ul class="related local-graph__list no-js-only">
+          {% for item in local_graph.nodes if not item.focus %}
+            <li class="related__item"><a href="/notes/{{ item.id }}">{{ item.title }}</a></li>
+          {% endfor %}
+        </ul>
+        <script type="application/json" id="local-graph-data">{{ local_graph_json | safe }}</script>
+      </section>
+    {% endif %}
+
   </aside>
 </div>
 
@@ -188,5 +217,9 @@
 
 {% block scripts %}
   <script type="application/json" id="note-copy-data">{{ {"md": note.content or "", "plain": rendered.plain or ""} | tojson }}</script>
+  {% if local_graph and local_graph.neighbor_count %}
+    {# 局部关系图（#local-graph-stage）需要图谱引擎 #}
+    <script src="/static/js/graph.js?v={{ asset_v }}" defer></script>
+  {% endif %}
   {% include '_enrich.html' %}
 {% endblock %}
