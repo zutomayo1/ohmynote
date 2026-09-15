@@ -6578,7 +6578,7 @@ html.theme-anim .theme-toggle svg { animation: theme-moon-flip .45s cubic-bezier
 .todo-item.is-done .todo-item__text { background-size: 100% 1px; opacity: .55; }
 
 /* 自动保存成功：绿色轻弹一下（editor.js 切 .is-saved-pop） */
-.save-state.is-saved-pop { color: var(--ok); animation: saved-pop .4s cubic-bezier(.34, 1.56, .5, 1); }
+.save-state.is-saved-pop { color: var(--accent); animation: saved-pop .4s cubic-bezier(.34, 1.56, .5, 1); }
 
 @keyframes saved-pop { 40% { transform: scale(1.12); } }
 
@@ -6812,8 +6812,8 @@ html.js .graph-stage { display: block; }
   padding: 16px 16px 14px;
   border-radius: 14px;
   background: var(--surface, #fff);
-  color: var(--text, #1c1c1e);
-  border: 1px solid var(--border, rgba(0, 0, 0, .12));
+  color: var(--ink);
+  border: 1px solid var(--line));
   box-shadow: 0 16px 40px rgba(0, 0, 0, .28);
   font-size: 14px;
   line-height: 1.55;
@@ -6854,12 +6854,12 @@ html.js .graph-stage { display: block; }
   border: none;
   border-radius: 8px;
   background: transparent;
-  color: var(--muted, #6b7280);
+  color: var(--ink-3);
   font-size: 14px;
   line-height: 1;
   cursor: pointer;
 }
-.onboard-pop__close:hover { background: var(--hover, rgba(0, 0, 0, .06)); }
+.onboard-pop__close:hover { background: var(--bg-soft)); }
 
 .onboard-pop__body {
   margin: 0 0 12px;
@@ -6875,7 +6875,7 @@ html.js .graph-stage { display: block; }
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--border-strong, rgba(0, 0, 0, .2));
+  background: var(--line-strong));
   transition: transform .2s cubic-bezier(.34, 1.56, .5, 1), background .2s ease;
 }
 .onboard-dot--active {
@@ -6891,7 +6891,7 @@ html.js .graph-stage { display: block; }
 
 .onboard-pop__count {
   margin-left: auto;
-  color: var(--muted, #6b7280);
+  color: var(--ink-3);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
@@ -6910,17 +6910,17 @@ html.js .graph-stage { display: block; }
 
 .onboard-pop__btn--skip {
   background: transparent;
-  color: var(--muted, #6b7280);
-  border-color: var(--border, rgba(0, 0, 0, .12));
+  color: var(--ink-3);
+  border-color: var(--line));
 }
-.onboard-pop__btn--skip:hover { background: var(--hover, rgba(0, 0, 0, .06)); }
+.onboard-pop__btn--skip:hover { background: var(--bg-soft)); }
 
 .onboard-pop__btn--prev {
   background: transparent;
-  color: var(--text, #1c1c1e);
-  border-color: var(--border, rgba(0, 0, 0, .12));
+  color: var(--ink);
+  border-color: var(--line));
 }
-.onboard-pop__btn--prev:hover { background: var(--hover, rgba(0, 0, 0, .06)); }
+.onboard-pop__btn--prev:hover { background: var(--bg-soft)); }
 
 .onboard-pop__btn--next {
   background: var(--accent, #B5533C);
@@ -6982,7 +6982,7 @@ html.js .graph-stage { display: block; }
   border: 1px solid transparent;
   border-radius: 8px;
   background: transparent;
-  color: var(--muted, #9aa3ad);
+  color: var(--ink-3);
   cursor: grab;
   opacity: 0.55;
   transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
@@ -6992,8 +6992,8 @@ html.js .graph-stage { display: block; }
 .tpl-drag:focus-visible {
   opacity: 1;
   background: var(--surface-2, #f1f3f5);
-  color: var(--text, #1f2933);
-  border-color: var(--border, #e3e7ec);
+  color: var(--ink);
+  border-color: var(--line);
   outline: none;
 }
 .tpl-drag:focus-visible {
