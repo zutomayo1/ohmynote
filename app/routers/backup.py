@@ -38,23 +38,6 @@ router = APIRouter(dependencies=[Depends(require_login), Depends(csrf_protect)])
 _LAST_RESULT: dict | None = None
 _LAST_LOCK = threading.Lock()
 
-# 开发期让页面自带样式：主 agent 把补丁合并进 style.css 后这段可删。
-_CSS_PATCH = Path(__file__).resolve().parents[2] / ".scratch" / "css-patch-backup.css"
-_CSS_PATCH2 = Path(__file__).resolve().parents[2] / ".scratch" / "css-patch-backup2.css"
-_CSS_PATCH3 = Path(__file__).resolve().parents[2] / ".scratch" / "css-patch-backup3.css"
-
-
-def _load_css(*paths: Path) -> str:
-    chunks: list[str] = []
-    for path in paths:
-        try:
-            if path.is_file():
-                chunks.append(path.read_text(encoding="utf-8"))
-        except OSError:
-            continue
-    return "\n".join(chunks)
-
-
 def _remember(result: dict) -> None:
     global _LAST_RESULT
     with _LAST_LOCK:
@@ -94,7 +77,6 @@ def backup_page(request: Request):
         request,
         "backup.html",
         result=_last_result(),
-        backup_css=_load_css(_CSS_PATCH, _CSS_PATCH2, _CSS_PATCH3),
         snapshots=db_backup.list_snapshots(),
         backups_dir=str(db_backup.backup_dir()),
         reason_labels=db_backup.REASON_LABELS,

@@ -7,7 +7,6 @@
 {% block content %}
 {# 开发期自包含样式：把 .scratch/css-patch-backup.css 内联进来。
    主 agent 合并补丁进 style.css 后，这段 <style> 可以删掉。 #}
-{% if backup_css %}<style>{{ backup_css | safe }}</style>{% endif %}
 
 <div class="page-head">
   <div>

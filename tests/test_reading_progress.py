@@ -1,9 +1,8 @@
-"""阅读进度条守卫：把交付物（JS + 补丁 CSS）绑在一起断言。
+"""阅读进度条守卫：把交付物（JS + 样式）绑在一起断言。
 
-真正的「动态类名在 style.css 里有样式」由 tests/test_js_class_guard.py 守，
-那个文件扫的是合并后的 style.css —— 在 .scratch/css-patch-reading.css 还没并进去之前它会报红，
-并进去之后自然转绿。本文件只断言「我交付的东西自洽」，不依赖是否已经接线，
-所以能稳定通过全量测试，也不会因为 base.html 还没接 <script> 而挂。
+样式原先写在 `.scratch/css-patch-reading.css`，合并进 app/static/css/style.css 之后
+就改成断言 style.css —— `.scratch/` 是可随时清理的临时目录，测试不该依赖它。
+「动态类名在 style.css 里有样式」另有 tests/test_js_class_guard.py 从全站角度再守一道。
 """
 
 from __future__ import annotations
@@ -13,7 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 JS = ROOT / "app/static/js/reading-progress.js"
-PATCH = ROOT / ".scratch/css-patch-reading.css"
+CSS_FILE = ROOT / "app/static/css/style.css"
 BASE = ROOT / "app/templates/base.html"
 
 
@@ -40,19 +39,19 @@ def test_reading_progress_js_is_well_formed():
     assert "passive: true" in text, "scroll 监听必须 passive"
 
 
-def test_reading_progress_classes_have_styles_in_patch():
-    """JS 自建的类名在补丁 CSS 里都要有对应规则（并进去后才满足 test_js_class_guard）。"""
-    assert PATCH.exists(), ".scratch/css-patch-reading.css 补丁必须存在"
+def test_reading_progress_classes_have_styles():
+    """JS 自建的类名在 style.css 里都要有对应规则（与 test_js_class_guard 同源）。"""
+    assert CSS_FILE.exists(), "app/static/css/style.css 必须存在"
     js_text = JS.read_text(encoding="utf-8")
-    css = PATCH.read_text(encoding="utf-8")
+    css = CSS_FILE.read_text(encoding="utf-8")
 
     created = _classes_created_by(js_text)
     assert created, "应当能从 JS 里解析出自建类名"
     for name in created:
-        assert f".{name}" in css, f"补丁 CSS 里缺少 .{name} 的样式"
+        assert f".{name}" in css, f"style.css 里缺少 .{name} 的样式"
 
-    # 通过变量传入的可视态类名也必须在补丁里
-    assert ".reading-progress--visible" in css, "补丁 CSS 里缺少 .reading-progress--visible"
+    # 通过变量传入的可视态类名也必须在样式里
+    assert ".reading-progress--visible" in css, "style.css 里缺少 .reading-progress--visible"
     # 减弱动效覆盖：直接跳变，不做过渡
     assert "prefers-reduced-motion: reduce" in css, "必须尊重 prefers-reduced-motion"
 

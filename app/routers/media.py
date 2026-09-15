@@ -26,20 +26,6 @@ from ..utils import as_bool, human_size, url_with_query
 
 router = APIRouter(dependencies=[Depends(require_login), Depends(csrf_protect)])
 
-# 开发期自包含样式：把 .scratch/css-patch-media3.css 内联进 /images。
-# 主 agent 用 .scratch/merge4.py 合并进 style.css 后，这段可以删。
-_CSS_PATCH = Path(__file__).resolve().parents[2] / ".scratch" / "css-patch-media3.css"
-
-
-def _load_css(path: Path) -> str:
-    try:
-        if path.is_file():
-            return path.read_text(encoding="utf-8")
-    except OSError:
-        pass
-    return ""
-
-
 def _truthy(value: object) -> bool:
     """唯一口径在 app.utils.as_bool；这里只是给本模块留个短名字。"""
     return as_bool(value)
@@ -82,7 +68,6 @@ def images_page(
         page=page,
         pages=pages,
         filtered_total=len(all_items),
-        media_css=_load_css(_CSS_PATCH),
     )
 
 

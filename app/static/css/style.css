@@ -1007,7 +1007,6 @@ img { border-radius: var(--radius-sm); }
 
 /* ===== 问笔记 / AI ===== */
 
-
 .ai-answer {
   margin-top: 20px; padding: 20px 22px; border: 1px solid var(--line); border-left: 3px solid var(--accent);
   border-radius: var(--radius); background: var(--accent-soft); color: var(--ink);
@@ -5214,7 +5213,6 @@ body.editor-focus .editor__bar {
   .nav-palette__opt { padding: 8px 5px; font-size: 0; }
 }
 
-
 /* ===== 补丁：配色切换器改下拉（2026-09-13，替代色点方案） ===== */
 /* 样式完全复用全站 .select / .select--sm，这里只管布局 */
 .nav-palette { display: flex; align-items: center; }
@@ -5910,9 +5908,6 @@ body.split-dragging .editor__textarea { pointer-events: none; }
 
 .chart-tip__row.is-warn .chart-tip__value { color: var(--danger); }
 
-
-
-
 .chart-tip__row.is-strong .chart-tip__value { color: var(--ink); font-weight: 700; }
 
 /* 输入/输出占比条：和柱子里那两段同色 */
@@ -6501,46 +6496,6 @@ html.theme-anim .theme-toggle svg { animation: theme-moon-flip .45s cubic-bezier
 .agent-confirm__ok { cursor: pointer; }
 
 .agent-confirm__no { cursor: pointer; }
-
-/* ===== 补丁：模板页「全部模板」区块折叠（2026-09-15，已合并） ===== */
-
-.template-list-fold { interpolate-size: allow-keywords; }
-
-.template-list-fold__summary {
-  display: flex; align-items: baseline; gap: 10px;
-  cursor: pointer; list-style: none; user-select: none;
-}
-/* ===== 补丁：agent 危险操作确认卡片（2026-09-15，已合并） ===== */
-
-.agent-confirm {
-  margin: 6px 0; padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--line));
-  border-left: 3px solid var(--danger);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--danger) 6%, var(--surface));
-}
-
-.agent-confirm__text {
-  margin: 0 0 8px; color: var(--ink); font-family: var(--font-sans);
-  font-size: 13.5px; line-height: 1.55;
-}
-
-.agent-confirm__text--warn { color: var(--danger); }
-
-.agent-confirm__actions { display: flex; align-items: center; gap: 8px; }
-
-.agent-confirm__ok { cursor: pointer; }
-
-.agent-confirm__no { cursor: pointer; }
-
-/* ===== 补丁：模板页「全部模板」区块折叠（2026-09-15，已合并） ===== */
-
-.template-list-fold { interpolate-size: allow-keywords; }
-
-.template-list-fold__summary {
-  display: flex; align-items: baseline; gap: 10px;
-  cursor: pointer; list-style: none; user-select: none;
-}
 
 /* ===== 补丁：微动效第二批（图标互动/打卡划线/纸飞机/页面淡入，2026-09-15，已合并） ===== */
 
