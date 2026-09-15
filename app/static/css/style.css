@@ -6479,3 +6479,65 @@ html.theme-anim .theme-toggle svg { animation: theme-moon-flip .45s cubic-bezier
 .template-list-fold[open]::details-content { block-size: auto; }
 
 .template-list-fold__body { min-width: 0; }
+/* ===== 补丁：agent 危险操作确认卡片（2026-09-15，已合并） ===== */
+
+.agent-confirm {
+  margin: 6px 0; padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--line));
+  border-left: 3px solid var(--danger);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--danger) 6%, var(--surface));
+}
+
+.agent-confirm__text {
+  margin: 0 0 8px; color: var(--ink); font-family: var(--font-sans);
+  font-size: 13.5px; line-height: 1.55;
+}
+
+.agent-confirm__text--warn { color: var(--danger); }
+
+.agent-confirm__actions { display: flex; align-items: center; gap: 8px; }
+
+.agent-confirm__ok { cursor: pointer; }
+
+.agent-confirm__no { cursor: pointer; }
+
+/* ===== 补丁：模板页「全部模板」区块折叠（2026-09-15，已合并） ===== */
+
+.template-list-fold { interpolate-size: allow-keywords; }
+
+.template-list-fold__summary {
+  display: flex; align-items: baseline; gap: 10px;
+  cursor: pointer; list-style: none; user-select: none;
+}
+/* ===== 补丁：agent 危险操作确认卡片（2026-09-15，已合并） ===== */
+
+.agent-confirm {
+  margin: 6px 0; padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--line));
+  border-left: 3px solid var(--danger);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--danger) 6%, var(--surface));
+}
+
+.agent-confirm__text {
+  margin: 0 0 8px; color: var(--ink); font-family: var(--font-sans);
+  font-size: 13.5px; line-height: 1.55;
+}
+
+.agent-confirm__text--warn { color: var(--danger); }
+
+.agent-confirm__actions { display: flex; align-items: center; gap: 8px; }
+
+.agent-confirm__ok { cursor: pointer; }
+
+.agent-confirm__no { cursor: pointer; }
+
+/* ===== 补丁：模板页「全部模板」区块折叠（2026-09-15，已合并） ===== */
+
+.template-list-fold { interpolate-size: allow-keywords; }
+
+.template-list-fold__summary {
+  display: flex; align-items: baseline; gap: 10px;
+  cursor: pointer; list-style: none; user-select: none;
+}
