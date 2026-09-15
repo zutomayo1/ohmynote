@@ -9,7 +9,7 @@
 - 提交后保持工作区干净（`.scratch/`、`data/`、`.venv/` 已 gitignore）。
 - 每轮提交后 `git bundle create C:/repo/inknote-<日期>.bundle --all`；批量操作前 `git log -1` 确认。
 - 恢复：`git init -b main` → `git fetch <bundle> "+refs/heads/main:refs/remotes/recover/main"` → `git reset --mixed refs/remotes/recover/main`；工作区不丢。已配每日自动备份。
-- 多 agent 并行：按文件所有权分波（样式走 `.scratch/css-patch-*.css`，agent 不碰 style.css），主 agent 合并 + 接线；e2e 端口一人一个；合并脚本别用长 assert 链（中断会静默跳过后半段）。
+- 多 agent 并行：按文件所有权分波（样式走 `.scratch/css-patch-*.css`，agent 不碰 style.css），主 agent 合并接线；e2e 端口一人一个；合并脚本别用长 assert 链。
 
 ## 全局约定
 - 真值解析唯一入口 `utils.as_bool()`，禁止 `bool(表单串)`。
@@ -40,14 +40,15 @@
 ## UI/UX 惯例
 - 历史/审计区块默认折叠（details + 条数徽标）；summary 里的按钮 preventDefault + stopPropagation。
 - 「无 JS 才显示」：head 内联脚本挂 js 类（**CSP 要 nonce**，缺了静默失效）+ `.js .no-js-only{display:none}`。
-- Enter 发送 / Shift+Enter 换行（IME 组词不误触）；合并 keydown 时 Enter 分支会吃掉 Ctrl+Enter。seg 滑块用绝对定位 `.seg__thumb`。
+- Enter 发送 / Shift+Enter 换行（IME 组词不误触）；合并 keydown 时 Enter 分支会吃掉 Ctrl+Enter。
 
 ## 笔记助手（agent.py）
 - 每轮一个 JSON；观察结果按工具给 `observe_limit`（统一截断会废掉 read 工具）；防空转拦「同工具同参数」。
 
 ## 图形 / 布局类改动 + e2e（近期教训）
-- 零依赖 ⇒ 借算法不引库。Louvain 类局部移动算法：候选必须含「原状态」且严格更优才移动，否则对称图震荡不收敛（会挂死）；指针拖拽别用 setPointerCapture（click 会跑到 `<svg>`，节点收不到）；力布局拖完要短时「钉住」节点，否则被弹簧拽回。
-- e2e：临时库带着真实数据 ⇒ 只统计本测试造的记录；读数前先「等模拟停稳」；观感用 getComputedStyle 量化，别靠截图肉眼判断。
+- 零依赖 ⇒ 借算法不引库。Louvain 类局部移动算法：候选必须含「原状态」且严格更优才移动，否则对称图震荡不收敛（会挂死）；指针拖拽别用 setPointerCapture（click 会跑到 `<svg>`）；力布局拖完要短时「钉住」节点，**且钉住在所有力里都要豁免——碰撞也会把它推走（输入设备永远压过物理模拟）**。
+- 导出/截图 DOM：先把 getComputedStyle 内联（样式表带不走），且**先取目标节点再内联**（内联会删 class）；导出整图摘掉视图 transform、按 getBBox 裁边、铺一层背景色。e2e 用 expect_download 拿真文件校验文件头。
+- e2e：临时库带着真实数据 ⇒ 只统计本测试造的记录，期望值**从 payload 自己算**（写死数字会被用户新数据打红）；读数前「等模拟停稳」；观感/主题用 getComputedStyle 量化，别靠截图肉眼判断。
 
 ## 界面问题排查
 - 真实数据复现：复制 `data/inknote.db` 到临时目录 + `INKNOTE_DATA_DIR`；用户改过密码用 `make_session()` 造 cookie。
