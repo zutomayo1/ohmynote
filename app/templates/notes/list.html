@@ -177,6 +177,11 @@
       <span class="sr-only">分类名</span>
       <input class="input" type="text" name="action_category" placeholder="分类名，如 技术" data-batch-category-input>
     </label>
+    <button type="button" class="btn btn--ghost is-hidden" data-batch-flow-add
+            title="把当前选择的动作追加到操作流（最多 5 步），一次执行">＋ 加入操作流</button>
+    <button type="button" class="btn btn--primary is-hidden" data-batch-flow-run>执行操作流</button>
+    <input type="hidden" name="flow" data-batch-flow-input>
+    <div class="batch-flow is-hidden" data-batch-flow aria-live="polite"></div>
     <button class="btn btn--primary" type="submit">执行</button>
   </form>
 

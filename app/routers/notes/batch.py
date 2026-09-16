@@ -178,6 +178,26 @@ async def batch_notes(
     最后 flash 汇报「已处理 N 篇、跳过 M 篇」，绝不因为脏数据 500。
     """
     form = await request.form()  # csrf_protect 已解析过，这里直接复用缓存
+    # 操作流：flow 是 JSON 数组（每步 {action, tag?, category?}），按序在同一次
+    # 勾选上执行多个动作；没有 flow 时退回单个 action（无 JS / 老调用方）。
+    flow_queue: list[dict[str, str]] = []
+    flow_raw = str(form.get("flow") or "").strip()
+    if flow_raw:
+        try:
+            parsed = json.loads(flow_raw)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="操作流格式错误")
+        if not isinstance(parsed, list) or not (1 <= len(parsed) <= 5):
+            raise HTTPException(status_code=400, detail="操作流需要 1~5 个步骤")
+        for step in parsed:
+            if not isinstance(step, dict):
+                raise HTTPException(status_code=400, detail="操作流格式错误")
+            step_action = str(step.get("action") or "")
+            if step_action not in BATCH_ACTIONS:
+                raise HTTPException(status_code=400, detail="操作流里有未知的批量操作")
+            step_tag = str(step.get("tag") or "").strip().lstrip("#").strip()[:64]
+            step_category = str(step.get("category") or "").strip()[:80]
+            flow_queue.append({"action": step_action, "tag": step_tag, "category": step_category})
     action = str(form.get("action") or "")
     # 批量动作要用的标签名走 action_tag；老调用方只传 tag，这里保持兼容。
     raw_action_tag = form.get("action_tag")
@@ -188,8 +208,14 @@ async def batch_notes(
     target = safe_next(str(form.get("next") or ""), "/notes")
     note_ids = [str(value) for value in form.getlist("note_ids")]
 
-    if action not in BATCH_ACTIONS:
-        raise HTTPException(status_code=400, detail="未知的批量操作")
+    if not flow_queue:
+        if action not in BATCH_ACTIONS:
+            raise HTTPException(status_code=400, detail="未知的批量操作")
+        flow_queue = [{"action": action, "tag": tag_name, "category": category_name}]
+    if any(step["action"] in {"add_tag", "remove_tag"} and not step["tag"] for step in flow_queue):
+        return RedirectResponse(
+            url_with_query(target, msg="没有填写标签名，未执行任何操作"), status_code=303
+        )
 
     # ---- 「选中当前筛选出的全部 N 篇」：按同一套条件取 id（不另写 SQL）----
     overflow = 0
@@ -229,76 +255,91 @@ async def batch_notes(
         note_ids = [str(note["id"]) for note in matched]
         overflow = max(0, int(matched_total) - len(note_ids))
 
-    if action in {"add_tag", "remove_tag"} and not tag_name:
-        return RedirectResponse(
-            url_with_query(target, msg="没有填写标签名，未执行任何操作"), status_code=303
-        )
-
     ids, skipped = _parse_note_ids(note_ids)
 
-    # 「补摘要」是唯一要调模型的动作：每篇一次，单次上限 BACKFILL_LIMIT，剩下的提示再点一次。
-    # 必须丢线程池 —— batch_notes 是 async，同步的 urllib 模型调用会把事件循环一起卡住，
-    # 博客访客的请求也会被拖住（和 agent 循环是同一类问题）。
-    if action == "backfill_summary":
-        if not ai.is_enabled():
-            return RedirectResponse(
-                url_with_query(target, msg="还没配置 AI 服务，无法补摘要", kind="warn"),
-                status_code=303,
+    async def run_step(step: dict[str, str]) -> str:
+        """执行操作流里的一步，返回本步的汇报文本。"""
+        act = step["action"]
+        step_tag = step["tag"]
+        step_category = step["category"]
+
+        # 「补摘要」是唯一要调模型的动作：每篇一次，单次上限 BACKFILL_LIMIT，剩下的提示再点一次。
+        # 必须丢线程池 —— batch_notes 是 async，同步的 urllib 模型调用会把事件循环一起卡住，
+        # 博客访客的请求也会被拖住（和 agent 循环是同一类问题）。
+        if act == "backfill_summary":
+            if not ai.is_enabled():
+                return 0, 0, "还没配置 AI 服务，无法补摘要"
+            result = await run_in_threadpool(
+                ai.backfill_summaries, conn, note_ids=ids, limit=ai.BACKFILL_LIMIT
             )
-        result = await run_in_threadpool(
-            ai.backfill_summaries, conn, note_ids=ids, limit=ai.BACKFILL_LIMIT
-        )
-        parts = [f"已补 {result['done']} 篇摘要"]
-        if result["skipped"]:
-            parts.append(f"{result['skipped']} 篇本来就有摘要")
-        if result["failed"]:
-            parts.append(f"{result['failed']} 篇失败")
-        if result["remaining"]:
-            parts.append(f"还剩 {result['remaining']} 篇，可以再点一次")
-        return RedirectResponse(
-            url_with_query(target, msg="，".join(parts), kind="warn" if result["failed"] else "ok"),
-            status_code=303,
-        )
+            parts = [f"已补 {result['done']} 篇摘要"]
+            if result["skipped"]:
+                parts.append(f"{result['skipped']} 篇本来就有摘要")
+            if result["failed"]:
+                parts.append(f"{result['failed']} 篇失败")
+            if result["remaining"]:
+                parts.append(f"还剩 {result['remaining']} 篇，可以再点一次")
+            return result["done"], result["skipped"] + result["failed"], "，".join(parts)
 
-    done = 0
-    for note_id in ids:
-        note = repo.get_note(conn, note_id)  # 不存在 / 已在回收站 -> None -> 跳过
-        if note is None:
-            skipped += 1
-            continue
-        if action == "add_tag":
-            names = list(note["tags"])
-            if tag_name.casefold() not in {name.casefold() for name in names}:
-                names.append(tag_name)
-            repo.set_tags(conn, note_id, names)
-        elif action == "remove_tag":
-            names = [name for name in note["tags"] if name.casefold() != tag_name.casefold()]
-            repo.set_tags(conn, note_id, names)
-        elif action == "publish":
-            repo.set_flags(conn, note_id, is_public=True)
-        elif action == "unpublish":
-            repo.set_flags(conn, note_id, is_public=False)
-        elif action == "pin":
-            repo.set_flags(conn, note_id, is_pinned=True)
-        elif action == "unpin":
-            repo.set_flags(conn, note_id, is_pinned=False)
-        elif action == "star":
-            repo.set_flags(conn, note_id, is_starred=True)
-        elif action == "unstar":
-            repo.set_flags(conn, note_id, is_starred=False)
-        elif action == "archive":
-            repo.set_archived(conn, note_id, True)
-        elif action == "unarchive":
-            repo.set_archived(conn, note_id, False)
-        elif action == "set_category":
-            repo.update_note(conn, note_id, category=category_name, reason="batch-category")
-        elif action == "trash":
-            if not repo.soft_delete(conn, note_id):
-                skipped += 1
+        step_done = 0
+        step_skipped = 0
+        for note_id in ids:
+            note = repo.get_note(conn, note_id)  # 不存在 / 已在回收站 -> None -> 跳过
+            if note is None:
+                step_skipped += 1
                 continue
-        done += 1
+            if act == "add_tag":
+                names = list(note["tags"])
+                if step_tag.casefold() not in {name.casefold() for name in names}:
+                    names.append(step_tag)
+                repo.set_tags(conn, note_id, names)
+            elif act == "remove_tag":
+                names = [name for name in note["tags"] if name.casefold() != step_tag.casefold()]
+                repo.set_tags(conn, note_id, names)
+            elif act == "publish":
+                repo.set_flags(conn, note_id, is_public=True)
+            elif act == "unpublish":
+                repo.set_flags(conn, note_id, is_public=False)
+            elif act == "pin":
+                repo.set_flags(conn, note_id, is_pinned=True)
+            elif act == "unpin":
+                repo.set_flags(conn, note_id, is_pinned=False)
+            elif act == "star":
+                repo.set_flags(conn, note_id, is_starred=True)
+            elif act == "unstar":
+                repo.set_flags(conn, note_id, is_starred=False)
+            elif act == "archive":
+                repo.set_archived(conn, note_id, True)
+            elif act == "unarchive":
+                repo.set_archived(conn, note_id, False)
+            elif act == "set_category":
+                repo.update_note(conn, note_id, category=step_category, reason="batch-category")
+            elif act == "trash":
+                if not repo.soft_delete(conn, note_id):
+                    step_skipped += 1
+                    continue
+            step_done += 1
+        return step_done, step_skipped, None
 
-    msg = f"已处理 {done} 篇、跳过 {skipped} 篇"
+    results = [await run_step(step) for step in flow_queue]
+
+    def step_text(index: int, done: int, step_skipped: int, custom: str | None) -> str:
+        return custom or f"已处理 {done} 篇、跳过 {step_skipped} 篇"
+
+    if len(flow_queue) == 1:
+        # 单步保持旧消息格式（解析丢弃数并入「跳过」）
+        done, step_skipped, custom = results[0]
+        if custom:
+            msg = custom
+        else:
+            msg = f"已处理 {done} 篇、跳过 {step_skipped + skipped} 篇"
+    else:
+        msg = f"操作流完成（{len(flow_queue)} 步）：" + "；".join(
+            f"{'①②③④⑤'[i]}{step_text(i, done, step_skipped, custom)}"
+            for i, (done, step_skipped, custom) in enumerate(results)
+        )
+        if skipped:
+            msg += f"（另有 {skipped} 个无效 id 被跳过）"
     if overflow:
         msg += f"（另有 {overflow} 篇超出单次上限 {BATCH_ALL_LIMIT}，未处理）"
     return RedirectResponse(url_with_query(target, msg=msg), status_code=303)

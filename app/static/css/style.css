@@ -7827,3 +7827,29 @@ html.js .local-graph__stage { display: block; }
 @media (prefers-reduced-motion: reduce) {
   .timeline__item:hover .timeline__title { transform: none; }
 }
+
+
+/* ===== 补丁：批量操作流（2026-09-16，已合并） ===== */
+
+.batch-flow {
+  flex-basis: 100%; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 8px 12px; border: 1px dashed var(--line-strong); border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.batch-flow__label { color: var(--ink-3); font-size: 12.5px; }
+
+.batch-flow__chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 6px 3px 10px; border: 1px solid var(--line-strong); border-radius: var(--radius-pill);
+  background: var(--surface); color: var(--ink); font-size: 12.5px;
+}
+
+.batch-flow__chip-step { color: var(--ink-3); font-family: var(--font-mono); font-size: 11px; }
+
+.batch-flow__chip-remove {
+  width: 18px; height: 18px; padding: 0; border: none; border-radius: 50%;
+  background: transparent; color: var(--ink-3); font-size: 13px; line-height: 1; cursor: pointer;
+}
+
+.batch-flow__chip-remove:hover { color: var(--danger, #b3413c); }

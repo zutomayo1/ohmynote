@@ -268,5 +268,96 @@
     refresh();
   }
 
+
+  /* ============ 操作流：把多个动作排队，一次提交按序执行 ============ */
+  var FLOW_NAMES = {
+    add_tag: '添加标签', remove_tag: '移除标签', publish: '设为公开', unpublish: '取消公开',
+    pin: '置顶', unpin: '取消置顶', star: '加星标', unstar: '取消星标',
+    trash: '移入回收站', archive: '归档', unarchive: '取消归档',
+    set_category: '设为分类', backfill_summary: '补摘要',
+  };
+
+  function setupFlow() {
+    var form = document.getElementById('batch-form');
+    if (!form) { return; }
+    var actionSelect = form.querySelector('[data-batch-action]');
+    var tagField = form.querySelector('[data-batch-tag]');
+    var addBtn = form.querySelector('[data-batch-flow-add]');
+    var runBtn = form.querySelector('[data-batch-flow-run]');
+    var wrap = form.querySelector('[data-batch-flow]');
+    var flowInput = form.querySelector('[data-batch-flow-input]');
+    if (!addBtn || !runBtn || !wrap || !flowInput) { return; }
+
+    var queue = [];
+
+    function describe(step) {
+      var name = FLOW_NAMES[step.action] || step.action;
+      if (step.action === 'add_tag' || step.action === 'remove_tag') { return name + '「' + step.tag + '」'; }
+      if (step.action === 'set_category') { return name + '「' + step.category + '」'; }
+      return name;
+    }
+
+    function render() {
+      wrap.innerHTML = '';
+      if (!queue.length) {
+        wrap.classList.add('is-hidden');
+        runBtn.classList.add('is-hidden');
+        return;
+      }
+      wrap.classList.remove('is-hidden');
+      runBtn.classList.remove('is-hidden');
+      var label = document.createElement('span');
+      label.className = 'batch-flow__label';
+      label.textContent = '操作流（按序执行）：';
+      wrap.appendChild(label);
+      queue.forEach(function (step, index) {
+        var chip = document.createElement('span');
+        chip.className = 'batch-flow__chip';
+        var stepNo = document.createElement('span');
+        stepNo.className = 'batch-flow__chip-step';
+        stepNo.textContent = String(index + 1);
+        chip.appendChild(stepNo);
+        chip.appendChild(document.createTextNode(describe(step)));
+        var remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'batch-flow__chip-remove';
+        remove.textContent = '×';
+        remove.setAttribute('aria-label', '移除第 ' + (index + 1) + ' 步');
+        remove.addEventListener('click', function () {
+          queue.splice(index, 1);
+          render();
+        });
+        chip.appendChild(remove);
+        wrap.appendChild(chip);
+      });
+    }
+
+    addBtn.classList.remove('is-hidden');
+    addBtn.addEventListener('click', function () {
+      var action = actionSelect.value;
+      if (!action || queue.length >= 5) { return; }
+      var step = { action: action };
+      if (action === 'add_tag' || action === 'remove_tag') {
+        step.tag = tagField ? (tagField.querySelector('input') || {}).value || '' : '';
+        if (!step.tag.trim()) { return; }
+      }
+      if (action === 'set_category') {
+        var catField = form.querySelector('[data-batch-category-input]');
+        step.category = catField ? catField.value || '' : '';
+        if (!step.category.trim()) { return; }
+      }
+      queue.push(step);
+      render();
+    });
+
+    runBtn.addEventListener('click', function () {
+      if (!queue.length) { return; }
+      flowInput.value = JSON.stringify(queue);
+      if (actionSelect) { actionSelect.disabled = true; }   // flow 优先，避免空 action 干扰
+      form.submit();
+    });
+  }
+
   ready(initBatch);
+  ready(setupFlow);
 })();
