@@ -7756,28 +7756,26 @@ html.js .local-graph__stage { display: block; }
   letter-spacing: -.01em;
 }
 
-.timeline__list { list-style: none; margin: 0; padding: 0 0 0 4px; }
+.timeline__list { list-style: none; margin: 0; padding: 0; }
 
-/* 竖线：贯穿整个年份分组 */
-.timeline__list { position: relative; }
-
-.timeline__list::before {
-  content: ""; position: absolute; left: 79px; top: 6px; bottom: 6px;
-  width: 2px; background: var(--line);
-}
-
+/* 竖线改为**每条自己画一段**（::after），与圆点（::before）同以 item 为
+   定位基准——此前线挂列表、点挂条目，两个绝对定位基准在真实浏览器里
+   漂移错位（用户截图实证）。相邻条目的线段首尾相接成贯穿竖线。 */
 .timeline__item {
-  /* gap 必须容下「竖线 + 圆点」：日期右缘 56 → 线 79 → 标题 100，
-     gap 小了标题会压在竖线上（用户截图实证） */
   position: relative; display: flex; align-items: baseline; gap: 44px;
   padding: 13px 4px 13px 0;
+}
+
+.timeline__item::after {
+  content: ""; position: absolute; left: 78px; top: 0; bottom: 0;
+  width: 2px; background: var(--line);
 }
 
 .timeline__item + .timeline__item { border-top: 1px dashed var(--line); }
 
 /* 圆点：压在竖线上，hover 放大点亮 */
 .timeline__item::before {
-  content: ""; position: absolute; left: 76px; top: 50%;
+  content: ""; position: absolute; left: 75px; top: 50%;
   width: 8px; height: 8px; margin-top: -4px;
   border-radius: 50%; background: var(--surface);
   border: 2px solid var(--ink-3); box-sizing: border-box;
