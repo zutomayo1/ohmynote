@@ -7775,7 +7775,7 @@ html.js .local-graph__stage { display: block; }
 
 /* 圆点：压在竖线上，hover 放大点亮 */
 .timeline__item::before {
-  content: ""; position: absolute; left: 75px; top: 50%;
+  content: ""; position: absolute; left: 75px; top: 50%; z-index: 1;
   width: 8px; height: 8px; margin-top: -4px;
   border-radius: 50%; background: var(--surface);
   border: 2px solid var(--ink-3); box-sizing: border-box;
