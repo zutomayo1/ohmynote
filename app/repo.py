@@ -1725,3 +1725,35 @@ def save_meta_map(conn: sqlite3.Connection, values: dict[str, Any], prefix: str 
 def delete_meta(conn: sqlite3.Connection, keys: list[str]) -> None:
     for key in keys:
         conn.execute("DELETE FROM meta WHERE key = ?", (key,))
+
+
+# ---------------------------------------------------------------------------
+# 博客互动统计（点赞 / 阅读）：按 slug 计数，公开页专用
+# ---------------------------------------------------------------------------
+def blog_stats_get(conn: sqlite3.Connection, slug: str) -> dict[str, int]:
+    row = conn.execute(
+        "SELECT likes, reads FROM blog_stats WHERE slug = ?", (slug,)
+    ).fetchone()
+    if row is None:
+        return {"likes": 0, "reads": 0}
+    return {"likes": int(row["likes"] or 0), "reads": int(row["reads"] or 0)}
+
+
+def blog_stats_like(conn: sqlite3.Connection, slug: str) -> int:
+    """点赞 +1（原子），返回最新总数。"""
+    conn.execute(
+        "INSERT INTO blog_stats (slug, likes) VALUES (?, 1) "
+        "ON CONFLICT(slug) DO UPDATE SET likes = likes + 1",
+        (slug,),
+    )
+    conn.commit()
+    return blog_stats_get(conn, slug)["likes"]
+
+
+def blog_stats_add_read(conn: sqlite3.Connection, slug: str) -> None:
+    conn.execute(
+        "INSERT INTO blog_stats (slug, reads) VALUES (?, 1) "
+        "ON CONFLICT(slug) DO UPDATE SET reads = reads + 1",
+        (slug,),
+    )
+    conn.commit()

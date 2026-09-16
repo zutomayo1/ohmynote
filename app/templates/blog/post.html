@@ -7,6 +7,7 @@
 {% block og_title %}{{ note.title }}{% endblock %}
 {% block og_description %}{{ note.meta_description or note.summary }}{% endblock %}
 {% block canonical %}<link rel="canonical" href="{{ absolute(note.blog_url) }}">{% endblock %}
+{% block jsonld %}<script type="application/ld+json">{{ jsonld | tojson }}</script>{% endblock %}
 
 {% block content %}
 <article class="post">
@@ -41,6 +42,16 @@
 
   {# 相关内容放在正文下方而不是侧栏：侧栏只有吸顶目录，互不遮挡 #}
   <div class="post-after">
+    <section class="post-like" data-slug="{{ note.slug }}">
+      <form class="post-like__form" method="post" action="/blog/{{ note.slug }}/like">
+        <button class="post-like__btn" type="submit">
+          <span class="post-like__icon" aria-hidden="true">&#9825;</span>
+          觉得有用，点个赞
+          <span class="post-like__count">{{ stats.likes }}</span>
+        </button>
+      </form>
+      <span class="post-like__reads">{{ stats.reads }} 次阅读</span>
+    </section>
     {% if related %}
       <section class="rail-block">
         <h2 class="rail-block__title">相关文章</h2>

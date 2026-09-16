@@ -7462,3 +7462,98 @@ html.js .local-graph__stage { display: block; }
   padding: 1px 5px; border-radius: 4px;
   background: var(--surface-2); font-family: var(--font-mono); font-size: 11px;
 }
+
+
+/* ===== 补丁：博客阅读增强（2026-09-16，已合并） ===== */
+
+/* 代码块语言标签（服务端渲染，右上角复制按钮的左邻） */
+.code-lang {
+  position: absolute; top: 10px; left: 12px; z-index: 1;
+  padding: 2px 9px; border: 1px solid var(--line); border-radius: var(--radius-pill);
+  background: var(--surface); color: var(--ink-3);
+  font-family: var(--font-mono); font-size: 11px; line-height: 1.5;
+  pointer-events: none; user-select: none;
+}
+
+/* 点赞 / 阅读计数 */
+.post-like { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+
+.post-like__form { margin: 0; }
+
+.post-like__btn {
+  display: inline-flex; align-items: center; gap: 8px; padding: 8px 18px;
+  border: 1px solid var(--line-strong); border-radius: var(--radius-pill);
+  background: var(--surface); color: var(--ink);
+  font-family: var(--font-sans); font-size: 14px; cursor: pointer;
+  transition: color .15s ease, border-color .15s ease, background-color .15s ease, transform .15s ease;
+}
+
+.post-like__btn:hover, .post-like__btn:focus-visible { color: var(--brand); border-color: var(--brand); }
+
+.post-like__btn:active { transform: scale(.96); }
+
+.post-like__btn.is-liked {
+  color: #fff; background: var(--brand); border-color: var(--brand); cursor: default;
+}
+
+.post-like__icon { font-size: 15px; line-height: 1; }
+
+.post-like__btn.is-liked .post-like__icon { animation: like-pop .32s ease; }
+
+@keyframes like-pop {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.5); }
+  100% { transform: scale(1); }
+}
+
+.post-like__count { font-variant-numeric: tabular-nums; }
+
+.post-like__reads { color: var(--ink-3); font-size: 13px; }
+
+/* 图片灯箱（blog.js 构建，点击 .post-body 里的图放大） */
+.lightbox {
+  position: fixed; inset: 0; z-index: 1000; display: none;
+  align-items: center; justify-content: center; padding: 40px 32px;
+  background: rgba(0, 0, 0, .78);
+}
+
+.lightbox.is-open { display: flex; }
+
+.lightbox figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 12px; max-width: 100%; }
+
+.lightbox__img {
+  max-width: 100%; max-height: calc(100vh - 140px);
+  border-radius: var(--radius); box-shadow: var(--shadow-md);
+}
+
+.lightbox__cap { margin: 0; color: #e8e4dc; font-size: 13px; text-align: center; }
+
+.lightbox__close {
+  position: absolute; top: 16px; right: 20px; width: 40px; height: 40px;
+  border: none; border-radius: 50%; background: rgba(255, 255, 255, .14);
+  color: #fff; font-size: 20px; line-height: 1; cursor: pointer;
+}
+
+.lightbox__close:hover { background: rgba(255, 255, 255, .26); }
+
+/* TOC 滚动高亮（blog.js 切换） */
+.toc__link.is-active {
+  border-left-color: var(--brand); color: var(--brand); background: var(--surface-2);
+}
+
+/* 文章卡入场：初始态只挂在 .js 下（无 JS 不藏内容）；featured 稍慢稍深 */
+.js .blog-list .post-card { opacity: 0; transform: translateY(14px); }
+
+.js .blog-list .post-card--feature { transform: translateY(20px) scale(.985); }
+
+.js .blog-list .post-card.is-inview {
+  opacity: 1; transform: none;
+  transition: opacity .45s ease, transform .45s ease, box-shadow .2s ease, border-color .2s ease;
+}
+
+.js .blog-list .post-card--feature.is-inview { transition-duration: .55s, .55s, .2s, .2s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .js .blog-list .post-card, .js .blog-list .post-card--feature { opacity: 1; transform: none; transition: none; }
+  .post-like__btn.is-liked .post-like__icon { animation: none; }
+}

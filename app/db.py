@@ -90,6 +90,12 @@ CREATE TABLE IF NOT EXISTS templates (
     created_at  TEXT    NOT NULL,
     updated_at  TEXT    NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS blog_stats (
+    slug  TEXT    PRIMARY KEY,
+    likes INTEGER NOT NULL DEFAULT 0,
+    reads INTEGER NOT NULL DEFAULT 0
+);
 """
 
 # 新版本若给已有表加字段，写在这里即可（启动时自动 ALTER TABLE）

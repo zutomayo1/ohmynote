@@ -23,7 +23,9 @@ from .utils import CJK_RE
 # 配置
 # ---------------------------------------------------------------------------
 EXTENSIONS = [
-    "fenced_code",
+    # superfences 取代 fenced_code：支持 custom_fences，带语言的围栏
+    # 走自己的渲染（pygments 高亮 + 右上角语言标签），无语言/未知语言回退纯文本
+    "pymdownx.superfences",
     "codehilite",
     "tables",
     "toc",
@@ -38,7 +40,47 @@ EXTENSIONS = [
     "pymdownx.mark",
 ]
 
+def _fence_format(
+    src: str = "",
+    language: str = "",
+    class_name: str | None = None,
+    options: dict | None = None,
+    md=None,
+    classes: list | None = None,
+    **kwargs,
+) -> str:
+    """SuperFences 自定义围栏渲染：带语言 → pygments + 语言标签；否则纯文本。
+
+    输出结构与 codehilite 保持一致（.codehilite > pre > code），token 类名
+    交给 highlight.css 配色；mermaid 围栏在这之前就被抽成占位符，不受影响。
+    """
+    lang = (language or "").strip().lower()
+    body = ""
+    if lang:
+        try:
+            from pygments import highlight as _highlight
+            from pygments.formatters import HtmlFormatter
+            from pygments.lexers import get_lexer_by_name
+
+            body = _highlight(
+                src, get_lexer_by_name(lang, stripall=False), HtmlFormatter(nowrap=True)
+            ).rstrip("\n")
+        except Exception:
+            body = ""   # 未知语言：按无语言处理，宁可没标签也不能丢代码
+    if not body:
+        body = html.escape(src)
+    label = f'<span class="code-lang">{html.escape(lang)}</span>' if lang else ""
+    return (
+        f'<div class="codehilite">{label}<pre><span></span>'
+        f"<code>{body}</code></pre></div>"
+    )
+
+
 EXTENSION_CONFIGS = {
+    "pymdownx.superfences": {
+        "css_class": "codehilite",
+        "custom_fences": [{"name": "*", "class": "*", "format": _fence_format}],
+    },
     "codehilite": {
         "guess_lang": False,
         "css_class": "codehilite",
