@@ -28,6 +28,7 @@ CSS = (Path(__file__).resolve().parent.parent / "app/static/css/style.css").read
 ALLOWED_DUPLICATES = {
     "*::before": "全局 reset 的 box-sizing 与「减弱动效」各一处，作用完全不同",
     "*::after": "同上",
+    ".timeline__item:hover::before": "主规则是 hover 放大点亮；reduced-motion 媒体查询里 同选择器把 transform 归零——是对动效的关闭而非叠加，必须分处",
     ".nav-more__menu::before": "宽屏当 hover 桥接用、窄屏要把它 display:none 关掉",
     # 下面这条不是设计，是历史遗留：待办对勾被重画过一次，旧规则的
     # display/opacity 还在参与计算（新规则只覆盖了尺寸与 transform）。

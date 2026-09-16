@@ -7812,3 +7812,18 @@ html.js .local-graph__stage { display: block; }
   .js .timeline__item { opacity: 1; transform: none; transition: none; }
   .timeline__item:hover::before { transform: none; }
 }
+
+/* ===== 补丁：归档时间轴标题悬浮放大（2026-09-16，已合并） ===== */
+
+.timeline__title {
+  display: inline-block; transform-origin: left center;
+  transition: color .15s ease, transform .18s ease;
+}
+
+.timeline__item:hover .timeline__title {
+  transform: scale(1.045); color: var(--brand);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .timeline__item:hover .timeline__title { transform: none; }
+}
