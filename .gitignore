@@ -13,3 +13,5 @@ data/
 .DS_Store
 start-inknote.bat
 start-local.bat
+.coverage
+htmlcov/
