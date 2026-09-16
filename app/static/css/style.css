@@ -7767,7 +7767,9 @@ html.js .local-graph__stage { display: block; }
 }
 
 .timeline__item {
-  position: relative; display: flex; align-items: baseline; gap: 18px;
+  /* gap 必须容下「竖线 + 圆点」：日期右缘 56 → 线 79 → 标题 100，
+     gap 小了标题会压在竖线上（用户截图实证） */
+  position: relative; display: flex; align-items: baseline; gap: 44px;
   padding: 13px 4px 13px 0;
 }
 
