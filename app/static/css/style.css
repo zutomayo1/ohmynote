@@ -7743,10 +7743,22 @@ html.js .local-graph__stage { display: block; }
 
 /* ===== 补丁：详情页正文居中于屏幕（2026-09-16，已合并） ===== */
 
-/* 右侧目录 240+36 不对称，正文只会「列内居中」。左侧补等宽内边距，
-   正文列正好落在视口中心（两侧视觉平衡，均来自同一套居中） */
+/* 详情页三栏：左（局部关系图）/ 中（正文，屏幕居中）/ 右（目录）；
+   左右等宽 → 中栏天然居中于屏幕 */
 @media (min-width: 1280px) {
-  body[data-page="detail"] .post-layout { padding-left: 276px; }
+  body[data-page="detail"] .post-layout {
+    grid-template-columns: 240px minmax(0, 1fr) 240px;
+    gap: 36px;
+  }
+
+  body[data-page="detail"] .post-rail--left {
+    padding-left: 20px; border-left: 1px solid var(--line);
+  }
+}
+
+/* 窄屏单列：关系图排到正文与目录之后 */
+@media (max-width: 1279.98px) {
+  body[data-page="detail"] .post-rail--left { order: 3; }
 }
 
 /* ===== 补丁：归档页时间轴（2026-09-16，已合并） ===== */
@@ -7856,3 +7868,38 @@ html.js .local-graph__stage { display: block; }
 }
 
 .batch-flow__chip-remove:hover { color: var(--danger, #b3413c); }
+
+/* ===== 补丁：专注阅读模式（2026-09-16，已合并） ===== */
+
+.focus-toggle {
+  position: fixed; right: 24px; bottom: 24px; z-index: 60;
+  padding: 10px 18px; border: 1px solid var(--line-strong); border-radius: var(--radius-pill);
+  background: var(--surface); color: var(--ink);
+  box-shadow: var(--shadow-md); cursor: pointer;
+  font-family: var(--font-sans); font-size: 13.5px;
+  transition: color .15s ease, border-color .15s ease, transform .15s ease;
+}
+
+.focus-toggle:hover, .focus-toggle:focus-visible { color: var(--brand); border-color: var(--brand); }
+
+.focus-toggle:active { transform: scale(.95); }
+
+body.focus-reading .post-side,
+body.focus-reading .post-rail,
+body.focus-reading .post-after,
+body.focus-reading .post-nav,
+body.focus-reading .site-footer { display: none; }
+
+body.focus-reading .container { max-width: 860px; }
+
+/* 侧栏 display:none 后网格项消失，但显式列模板仍在——必须同时改回单列，
+   否则正文会被塞进 220px 的第一列（实测 220px 宽） */
+body.focus-reading .post-layout { grid-template-columns: minmax(0, 1fr); }
+
+body.focus-reading .post-body { max-width: none; font-size: 18px; }
+
+body.focus-reading .post-header { margin-bottom: 34px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .focus-toggle { transition: none; }
+}

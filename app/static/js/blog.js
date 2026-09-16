@@ -188,10 +188,43 @@
     });
   }
 
+
+  /* ============ 6) 专注阅读模式（仅博客文章页）：隐藏两侧与附属区块 ============ */
+  function setupFocusMode() {
+    if (document.body.dataset.page !== 'post') { return; }
+
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'focus-toggle';
+    btn.setAttribute('aria-pressed', 'false');
+    btn.title = '专注阅读（Esc 退出）';
+
+    function paint() {
+      var on = document.body.classList.contains('focus-reading');
+      btn.textContent = on ? '退出专注' : '专注';
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+
+    btn.addEventListener('click', function () {
+      document.body.classList.toggle('focus-reading');
+      paint();
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && document.body.classList.contains('focus-reading')) {
+        document.body.classList.remove('focus-reading');
+        paint();
+      }
+    });
+
+    document.body.appendChild(btn);
+    paint();
+  }
+
   ready(function () {
     try { setupLike(); } catch (error) { /* 单功能失败不拖垮其它 */ }
     try { setupLightbox(); } catch (error) { /* 同上 */ }
     try { setupReveal(); } catch (error) { /* 同上 */ }
     try { setupTimelineReveal(); } catch (error) { /* 同上 */ }
+    try { setupFocusMode(); } catch (error) { /* 同上 */ }
   });
 })();
