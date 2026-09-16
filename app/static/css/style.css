@@ -7869,7 +7869,7 @@ html.js .local-graph__stage { display: block; }
 
 .batch-flow__chip-remove:hover { color: var(--danger, #b3413c); }
 
-/* ===== 补丁：专注阅读模式（2026-09-16，已合并；本轮重做按钮与动画） ===== */
+/* ===== 补丁：专注阅读模式（2026-09-16，已合并；动画仅合成器属性） ===== */
 
 .focus-toggle {
   position: fixed; right: 20px; bottom: 20px; z-index: 60;
@@ -7889,7 +7889,6 @@ html.js .local-graph__stage { display: block; }
 
 .focus-toggle:active { transform: translateY(0); }
 
-/* 开启中：品牌浅底 + 深字，一眼能看出「正在专注」 */
 body.focus-reading .focus-toggle {
   background: var(--brand-soft); border-color: var(--brand-soft); color: var(--brand-dark);
 }
@@ -7898,10 +7897,9 @@ body.focus-reading .focus-toggle {
 
 .focus-toggle__text { flex: none; }
 
-/* 动画核心：不再 display 硬切（回流跳动是「卡」的根因）——
-   宽屏把三栏网格两侧列收拢为 0（轨道数不变，可平滑过渡），
-   页头原地淡出（sticky 占位保留，滚动位置零跳动），下方区块淡出
-   + visibility 延迟隐藏；关闭即全部反向过渡。 */
+/* 动画只碰 opacity / visibility / transform（合成器属性，零回流）——
+   正文与版心完全不动，各区块在原地淡出淡入。上一版过渡网格列宽 /
+   版心宽 / 字号（布局属性，逐帧重排长文），实测仍卡，这版彻底去掉。 */
 body[data-page="post"] .site-header,
 body[data-page="post"] .site-footer,
 body[data-page="post"] .post-side,
@@ -7911,46 +7909,17 @@ body[data-page="post"] .post-nav {
   transition: opacity .3s ease, transform .3s ease, visibility .3s ease;
 }
 
-body[data-page="post"] .post-layout {
-  transition: grid-template-columns .3s ease, gap .3s ease;
-}
-
-body[data-page="post"] .container { transition: max-width .3s ease; }
-
-body[data-page="post"] .post-body { transition: font-size .3s ease; }
-
 body.focus-reading .site-header {
   opacity: 0; visibility: hidden; pointer-events: none;
 }
 
+body.focus-reading .post-side { opacity: 0; visibility: hidden; }
+
+body.focus-reading .post-rail { opacity: 0; visibility: hidden; }
+
 body.focus-reading .post-after,
 body.focus-reading .post-nav,
 body.focus-reading .site-footer { opacity: 0; visibility: hidden; }
-
-body.focus-reading .post-side,
-body.focus-reading .post-rail { opacity: 0; }
-
-body.focus-reading .container { max-width: 860px; }
-
-body.focus-reading .post-body { max-width: none; font-size: 18px; }
-
-body.focus-reading .post-header { margin-bottom: 34px; }
-
-@media (min-width: 1280px) {
-  body.focus-reading .post-layout {
-    grid-template-columns: 0px minmax(0, 1fr) 0px;
-    gap: 0;
-  }
-
-  body.focus-reading .post-side,
-  body.focus-reading .post-rail { min-width: 0; overflow: hidden; }
-}
-
-@media (max-width: 1279.98px) {
-  /* 窄屏侧栏竖向堆叠在正文之前，收拢网格不适用：淡出后直接隐藏 */
-  body.focus-reading .post-side,
-  body.focus-reading .post-rail { display: none; }
-}
 
 @media (prefers-reduced-motion: reduce) {
   body[data-page="post"] .site-header,
@@ -7958,10 +7927,7 @@ body.focus-reading .post-header { margin-bottom: 34px; }
   body[data-page="post"] .post-side,
   body[data-page="post"] .post-rail,
   body[data-page="post"] .post-after,
-  body[data-page="post"] .post-nav,
-  body[data-page="post"] .post-layout,
-  body[data-page="post"] .container,
-  body[data-page="post"] .post-body { transition: none; }
+  body[data-page="post"] .post-nav { transition: none; }
 }
 
 /* ===== 补丁：主按钮底色调浅（2026-09-16，已合并） ===== */
