@@ -149,3 +149,25 @@ def test_reorder_route_updates_and_validates(auth_client, csrf, db_conn):
 
     bad = auth_client.post("/notes/reorder", json={"ids": "x"}, headers=headers)
     assert bad.status_code == 400 and bad.json()["ok"] is False
+
+
+def test_pinned_card_renders_real_draggable_attribute(auth_client, csrf, db_conn):
+    """回归：draggable 的引号曾经过 {{ }} 被转义成 &quot;，属性值非法 → 真实鼠标拖不动。
+
+    draggable 是枚举属性，值必须是裸的 true；渲染结果里不允许出现转义引号。
+    """
+    a = _make(db_conn, "回归拖甲")
+    b = _make(db_conn, "回归拖乙")
+    _pin(db_conn, a["id"])
+    _pin(db_conn, b["id"])
+    db_conn.commit()
+
+    page = auth_client.get("/notes", headers={"X-CSRF-Token": csrf})
+    assert page.status_code == 200
+    html = page.text
+    assert "&quot;true&quot;" not in html, "draggable 的值被自动转义了（曾导致拖拽失效）"
+    # 库里可能有其它测试留下的置顶笔记，按 id 定位本测试的两篇
+    for note_id in (a["id"], b["id"]):
+        assert (
+            f'data-note-id="{note_id}" draggable="true"' in html
+        ), f"笔记 {note_id} 的卡片缺裸 draggable=\"true\""

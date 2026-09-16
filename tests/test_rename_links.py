@@ -134,3 +134,50 @@ def test_rename_route_rejects_duplicate_title(auth_client, csrf, db_conn):
     from urllib.parse import unquote
 
     assert "先给它改个别的名字" in unquote(resp2.headers["location"])
+
+
+def test_detail_page_shows_rename_banner_and_back_redirect(auth_client, csrf, db_conn):
+    """回归：保存默认落到详情页，但提示条只渲染在编辑页——用户什么都看不到。
+
+    详情页带 ?rename_from= 时也要出提示条；从详情页提交后应回到详情页。
+    """
+    target = repo.create_note(db_conn, title=PREFIX + "详情目标", content="x")
+    src = repo.create_note(
+        db_conn, title=PREFIX + "详情引用", content=f"见 [[{PREFIX}详情目标]]。"
+    )
+    db_conn.commit()
+    headers = {"X-CSRF-Token": csrf}
+
+    # 改名 → 落到详情页（带 rename_from）
+    resp = auth_client.post(
+        f"/notes/{target['id']}",
+        data={"title": PREFIX + "详情新名", "content": "x", "action": "view"},
+        headers=headers,
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+
+    detail = auth_client.get(
+        f"/notes/{target['id']}?rename_from={PREFIX}详情目标", headers=headers
+    )
+    assert "引用着旧标题" in detail.text and "一并更新" in detail.text
+
+    # 从详情页提交（带 back）→ 回详情页而不是编辑页
+    resp2 = auth_client.post(
+        f"/notes/{target['id']}/rename-links",
+        data={"old_title": PREFIX + "详情目标", "back": f"/notes/{target['id']}"},
+        headers=headers,
+        follow_redirects=False,
+    )
+    assert resp2.status_code == 303
+    assert resp2.headers["location"].startswith(f"/notes/{target['id']}?")
+    assert f"[[{PREFIX}详情新名]]" in repo.get_note(db_conn, src["id"])["content"]
+
+    # back 只接受站内路径：// 与外链一律回落到编辑页
+    resp3 = auth_client.post(
+        f"/notes/{target['id']}/rename-links",
+        data={"old_title": PREFIX + "详情新名", "back": "https://evil.example"},
+        headers=headers,
+        follow_redirects=False,
+    )
+    assert resp3.headers["location"].startswith(f"/notes/{target['id']}/edit")

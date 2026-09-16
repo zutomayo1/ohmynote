@@ -9,6 +9,22 @@
 {% block og_description %}{{ note.meta_description or note.summary }}{% endblock %}
 
 {% block content %}
+{% if rename_from and rename_ref_notes %}
+<div class="flash flash--warn rename-links" role="status">
+  <p class="rename-links__text">
+    有 {{ rename_ref_notes | length }} 篇笔记还引用着旧标题《{{ rename_from }}》
+    {% for title, hits in rename_ref_notes[:4] %}（《{{ title }}》×{{ hits }}）{% endfor %}——改标题不会自动更新它们。
+  </p>
+  <form class="rename-links__form" method="post" action="/notes/{{ note.id }}/rename-links">
+    <input type="hidden" name="_csrf" value="{{ csrf }}">
+    <input type="hidden" name="old_title" value="{{ rename_from }}">
+    <input type="hidden" name="back" value="{{ back }}">
+    <button class="btn btn--ghost btn--sm" type="submit">
+      把 {{ rename_ref_notes | length }} 篇笔记里的链接一并更新
+    </button>
+  </form>
+</div>
+{% endif %}
 {% set _img_count = note.content | image_count %}
 <div class="page-head page-head--article">
   <div>

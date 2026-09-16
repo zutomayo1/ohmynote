@@ -56,7 +56,9 @@
   {% set tags = note.tags if note.tags else [] %}
     {% set vcount = version_counts.get(note.id) if version_counts else none %}
   {% set orderable = sortable and note.is_pinned %}
-  <article class="note-card{{ ' is-pinned' if note.is_pinned }}" data-note-id="{{ note.id }}"{{ ' draggable="true"' if orderable }}>
+  {# draggable 的引号必须写在模板字面量里：放进 {{ }} 会被自动转义成 &quot;，
+     属性值变成 "true"（带引号字符），对枚举属性是非法值 → 浏览器按 auto 处理 → 拖不动 #}
+  <article class="note-card{{ ' is-pinned' if note.is_pinned }}" data-note-id="{{ note.id }}"{% if orderable %} draggable="true"{% endif %}>
     {% if orderable %}<button class="note-drag" type="button" title="拖动调整置顶顺序" aria-label="拖动调整《{{ note.title }}》的置顶顺序（或聚焦后按 Alt+↑ / Alt+↓ 移动）"><span class="note-drag__icon" aria-hidden="true">⠿</span></button>{% endif %}
     <header class="note-card__head">
       <h2 class="card__title">

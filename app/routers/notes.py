@@ -605,9 +605,19 @@ def note_detail(request: Request, note_id: NoteId, conn: sqlite3.Connection = De
         graph_depth = 1
     graph_depth = 1 if graph_depth < 2 else 2
     local_graph = graph_service.ego_graph(conn, note_id, depth=graph_depth)
+    # 改标题后从保存页跳过来（?rename_from=旧标题）：详情页也要提示「还有链接
+    # 引用旧标题」——之前只渲染在编辑页，而保存默认落到详情页，用户什么都看不到
+    rename_from = (request.query_params.get("rename_from") or "").strip()
+    rename_ref_notes = (
+        [(n["title"], hits) for n, hits in repo.link_refs_to(conn, note_id, rename_from)]
+        if rename_from
+        else []
+    )
     return render(
         request,
         "notes/detail.html",
+        rename_from=rename_from if rename_ref_notes else "",
+        rename_ref_notes=rename_ref_notes,
         versions=versions[:5],
         version_count=len(versions),
         related_engine=related_engine,
@@ -723,9 +733,14 @@ def rename_note_links(
     note_id: NoteId,
     conn: sqlite3.Connection = Depends(db_conn),
     old_title: str = Form(""),
+    back: str = Form(""),
 ):
     """把引用了旧标题的 [[链接]] 一并改写成新标题（别名保留、走版本历史）。"""
     note = _note_or_404(conn, note_id)
+    # 从详情页提交时带 back，更新完回详情页而不是编辑页
+    back = (back or "").strip()
+    if not back.startswith("/") or back.startswith("//"):
+        back = ""
     old_title = (old_title or "").strip()
     duplicate = conn.execute(
         "SELECT id FROM notes WHERE title = ? AND id != ? AND deleted_at IS NULL",
@@ -755,7 +770,7 @@ def rename_note_links(
         )
     return RedirectResponse(
         url_with_query(
-            f"/notes/{note_id}/edit",
+            back or f"/notes/{note_id}/edit",
             msg=f"已把 {updated_notes} 篇笔记里的 {updated_refs} 处链接更新为新标题",
         ),
         status_code=303,
