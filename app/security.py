@@ -10,7 +10,10 @@ import hashlib
 import hmac
 import json
 import secrets
+import logging
 import threading
+
+logger = logging.getLogger("inknote.security")
 import time
 from typing import Any
 
@@ -136,6 +139,9 @@ class LoginThrottle:
             if len(self._failures) >= self.limit and self._blocked_until <= now:
                 self._blocked_until = now + self.lockout
                 self._failures.clear()
+                # 进程内存状态重启即清零，至少留条日志让公网扫描有迹可循
+                logger.warning("登录限流已触发：锁定 %s 秒（窗口内失败 %s 次）",
+                               self.lockout, self.limit)
             return self._remaining_locked()
 
     def reset(self) -> None:

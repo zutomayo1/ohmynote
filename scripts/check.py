@@ -288,6 +288,27 @@ def check_live_server(port: int) -> Result:
 
 
 # ---------------------------------------------------------------------------
+def check_file_sizes() -> Result:
+    """单文件超过阈值就在报告里提示「该拆了」，把大文件治理变成自动检查。"""
+    r = Result("大文件扫描")
+    threshold = 1200
+    offenders = []
+    for base in (Path(__file__).resolve().parent.parent / "app",):
+        for f in sorted(base.rglob("*.py")):
+            if "__pycache__" in str(f) or "vendor" in str(f):
+                continue
+            n = len(f.read_text(encoding="utf-8").splitlines())
+            if n > threshold:
+                offenders.append(f"app/{f.relative_to(base.parent)}: {n} 行")
+    if offenders:
+        r.lines = [f"[{r.name}] 提示（非失败）：以下文件超过 {threshold} 行，建议按分区拆分："] + offenders
+        r.ok = True   # 提示性质，不算失败
+    else:
+        r.lines = [f"[{r.name}] OK：没有超过 {threshold} 行的文件"]
+        r.ok = True
+    return r
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="墨痕 InkNote 一键自检")
     parser.add_argument("--quick", action="store_true", help="跳过慢的：只跑快速测试")
@@ -301,6 +322,7 @@ def main() -> int:
         ("冒烟", lambda: check_smoke()),
         ("数据库", lambda: check_database()),
         ("环境", lambda: check_environment()),
+        ("大文件", lambda: check_file_sizes()),
     ]
     if args.port:
         steps.append((f"在线 :{args.port}", lambda: check_live_server(args.port)))
