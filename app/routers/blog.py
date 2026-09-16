@@ -68,18 +68,25 @@ def blog_index(
 
 @router.get("/blog/archive")
 def blog_archive(request: Request, conn: sqlite3.Connection = Depends(db_conn)):
-    months = repo.archive_months(conn)
-    # 批量一次查完（窗口函数按月份分区），替代逐月的 N+1 查询
-    grouped = repo.notes_grouped_by_months(conn, [item["key"] for item in months], per_page=100)
-    groups = [
-        {"month": item, "notes": grouped.get(item["key"], [])}
-        for item in months
-    ]
+    """时间轴归档：按发布时间倒序，年份分节（无发布时间回退创建/更新时间）。"""
+    notes = repo.all_notes(conn, sort="updated", public_only=True)
+
+    def pub_key(n: dict) -> str:
+        return n.get("published_at") or n.get("created_at") or n.get("updated_at") or ""
+
+    items = sorted(notes, key=pub_key, reverse=True)
+    timeline: list[dict] = []
+    for n in items:
+        d = pub_key(n)
+        year, md = (d[:4], f"{int(d[5:7])}/{int(d[8:10])}") if len(d) >= 10 else ("", "")
+        if not timeline or timeline[-1]["year"] != year:
+            timeline.append({"year": year, "items": []})
+        timeline[-1]["items"].append({"title": n["title"], "url": n["blog_url"], "md": md})
     return render(
         request,
         "blog/archive.html",
-        groups=groups,
-        total=sum(item["count"] for item in months),
+        timeline=timeline,
+        total=len(items),
     )
 
 

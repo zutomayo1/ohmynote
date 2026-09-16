@@ -7745,3 +7745,70 @@ html.js .local-graph__stage { display: block; }
 @media (min-width: 1280px) {
   body[data-page="detail"] .post-layout { padding-left: 276px; }
 }
+
+/* ===== 补丁：归档页时间轴（2026-09-16，已合并） ===== */
+
+.timeline { max-width: 760px; }
+
+.timeline__year {
+  margin: 34px 0 14px; color: var(--ink);
+  font-family: var(--font-serif); font-size: 30px; font-weight: 700;
+  letter-spacing: -.01em;
+}
+
+.timeline__list { list-style: none; margin: 0; padding: 0 0 0 4px; }
+
+/* 竖线：贯穿整个年份分组 */
+.timeline__list { position: relative; }
+
+.timeline__list::before {
+  content: ""; position: absolute; left: 79px; top: 6px; bottom: 6px;
+  width: 2px; background: var(--line);
+}
+
+.timeline__item {
+  position: relative; display: flex; align-items: baseline; gap: 18px;
+  padding: 13px 4px 13px 0;
+}
+
+.timeline__item + .timeline__item { border-top: 1px dashed var(--line); }
+
+/* 圆点：压在竖线上，hover 放大点亮 */
+.timeline__item::before {
+  content: ""; position: absolute; left: 76px; top: 50%;
+  width: 8px; height: 8px; margin-top: -4px;
+  border-radius: 50%; background: var(--surface);
+  border: 2px solid var(--ink-3); box-sizing: border-box;
+  transition: transform .15s ease, border-color .15s ease, background-color .15s ease;
+}
+
+.timeline__item:hover::before {
+  transform: scale(1.45); border-color: var(--brand); background: var(--brand-soft, var(--surface-2));
+}
+
+.timeline__date {
+  flex: none; width: 52px; text-align: right;
+  color: var(--ink-3); font-family: var(--font-mono); font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.timeline__title {
+  color: var(--ink); font-family: var(--font-serif); font-size: 16.5px; font-weight: 600;
+  line-height: 1.5; text-decoration: none;
+  transition: color .15s ease;
+}
+
+.timeline__title:hover { color: var(--brand); }
+
+/* 入场动效：JS 挂 .is-inview，初始态只在 .js 下（无 JS 不藏内容） */
+.js .timeline__item { opacity: 0; transform: translateX(-14px); }
+
+.js .timeline__item.is-inview {
+  opacity: 1; transform: none;
+  transition: opacity .4s ease, transform .4s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .js .timeline__item { opacity: 1; transform: none; transition: none; }
+  .timeline__item:hover::before { transform: none; }
+}

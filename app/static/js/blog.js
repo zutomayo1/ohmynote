@@ -161,9 +161,37 @@
     });
   }
 
+  /* ============ 5) 归档时间轴条目入场 ============ */
+  function setupTimelineReveal() {
+    var timeline = document.querySelector('.timeline');
+    if (!timeline || reduceMotion) { return; }
+    var items = timeline.querySelectorAll('.timeline__item');
+    if (!items.length) { return; }
+
+    if (typeof window.IntersectionObserver !== 'function') {
+      Array.prototype.forEach.call(items, function (item) { item.classList.add('is-inview'); });
+      return;
+    }
+
+    var observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) { return; }
+        entry.target.classList.add('is-inview');
+        observer.unobserve(entry.target);
+      });
+    }, { rootMargin: '0px 0px -6% 0px', threshold: 0.1 });
+
+    Array.prototype.forEach.call(items, function (item, index) {
+      // 首屏条目按序错峰淡入
+      item.style.transitionDelay = Math.min(index * 40, 280) + 'ms';
+      observer.observe(item);
+    });
+  }
+
   ready(function () {
     try { setupLike(); } catch (error) { /* 单功能失败不拖垮其它 */ }
     try { setupLightbox(); } catch (error) { /* 同上 */ }
     try { setupReveal(); } catch (error) { /* 同上 */ }
+    try { setupTimelineReveal(); } catch (error) { /* 同上 */ }
   });
 })();
