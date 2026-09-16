@@ -213,31 +213,10 @@
       btn.setAttribute('aria-pressed', on ? 'true' : 'false');
     }
 
-    // 丝滑切换：开启 = 先让页头/侧栏淡出滑出，再 display 收起；
-    // 关闭 = 先移除 display，下一帧起播淡入。
-    var LEAVE_MS = 240;
-    var leaving = false;
+    // 过渡全部交给 CSS（网格收拢 + 原地淡出，无 display 回流跳动）
     function setFocus(on) {
-      if (leaving) { return; }
-      if (on) {
-        leaving = true;
-        document.body.classList.add('focus-leaving');
-        window.setTimeout(function () {
-          document.body.classList.remove('focus-leaving');
-          document.body.classList.add('focus-reading');
-          leaving = false;
-          paint();
-        }, LEAVE_MS);
-      } else {
-        document.body.classList.add('focus-entering');
-        document.body.classList.remove('focus-reading');
-        paint();
-        window.requestAnimationFrame(function () {
-          window.requestAnimationFrame(function () {
-            document.body.classList.remove('focus-entering');
-          });
-        });
-      }
+      document.body.classList.toggle('focus-reading', on);
+      paint();
     }
 
     btn.addEventListener('click', function () {
@@ -267,6 +246,41 @@
       });
     }
     Array.prototype.forEach.call(cats, function (d) {
+      var body = d.querySelector('.post-side__list');
+      var name = d.querySelector('.post-side__cat-name');
+      var animating = false;
+      if (name && body) {
+        name.addEventListener('click', function (event) {
+          if (reduceMotion || animating) { return; }   // 退化：原生瞬切
+          event.preventDefault();                       // 自己播动画
+          animating = true;
+          if (!d.open) {
+            d.open = true;
+            body.style.overflow = 'hidden';
+            body.style.maxHeight = '0px';
+            window.requestAnimationFrame(function () {
+              body.style.transition = 'max-height .22s ease';
+              body.style.maxHeight = body.scrollHeight + 'px';
+            });
+            window.setTimeout(function () {
+              body.style.transition = ''; body.style.maxHeight = ''; body.style.overflow = '';
+              animating = false;
+            }, 240);
+          } else {
+            body.style.overflow = 'hidden';
+            body.style.maxHeight = body.scrollHeight + 'px';
+            window.requestAnimationFrame(function () {
+              body.style.transition = 'max-height .22s ease';
+              body.style.maxHeight = '0px';
+            });
+            window.setTimeout(function () {
+              d.open = false;
+              body.style.transition = ''; body.style.maxHeight = ''; body.style.overflow = '';
+              animating = false;
+            }, 240);
+          }
+        });
+      }
       d.addEventListener('toggle', function () {
         var map = {};
         Array.prototype.forEach.call(cats, function (x) {

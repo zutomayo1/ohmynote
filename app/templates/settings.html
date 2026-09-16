@@ -806,8 +806,11 @@
 
         <label class="field">
           <span class="field__label">自定义主题色 {{ src_of(site.sources.get('appearance_custom')) }}</span>
-          <input class="input" type="text" name="appearance_custom" value="{{ site_form_values.get('appearance_custom', site.appearance_custom) }}" placeholder="#B5533C，留空 = 不启用" spellcheck="false">
-          <span class="micro">#RRGGBB；启用后优先于上面的外观主题</span>
+          <span class="custom-color-row">
+            <input type="color" id="appearance-custom-picker" value="{{ site_form_values.get('appearance_custom', site.appearance_custom) or '#B5533C' }}" aria-label="自定义主题色取色器">
+            <input class="input" type="text" name="appearance_custom" id="appearance-custom-text" value="{{ site_form_values.get('appearance_custom', site.appearance_custom) }}" placeholder="#B5533C，留空 = 不启用" spellcheck="false">
+          </span>
+          <span class="micro">#RRGGBB；启用后优先于上面的外观主题；取色时全站实时预览</span>
         </label>
 
         <label class="field">
@@ -939,4 +942,44 @@
 
 {% block scripts %}
 <script src="/static/js/settings.js?v={{ asset_v }}" defer></script>
+<script nonce="{{ nonce }}">
+  (function () {
+    'use strict';
+    var picker = document.getElementById('appearance-custom-picker');
+    var text = document.getElementById('appearance-custom-text');
+    if (!picker || !text) { return; }
+    var HEX = /^#[0-9a-fA-F]{6}$/;
+    var root = document.documentElement;
+    function preview(hex) {
+      if (!HEX.test(hex)) {
+        root.style.removeProperty('--brand');
+        root.style.removeProperty('--brand-dark');
+        root.style.removeProperty('--brand-soft');
+        return;
+      }
+      var n = parseInt(hex.slice(1), 16);
+      var base = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+      function mix(o, t) {
+        return '#' + base.map(function (c, i) {
+          var v = Math.round(c + (o[i] - c) * t);
+          return ('0' + v.toString(16)).slice(-2);
+        }).join('');
+      }
+      root.style.setProperty('--brand', hex);
+      root.style.setProperty('--brand-dark', mix([24, 18, 14], .18));
+      root.style.setProperty('--brand-soft', mix([255, 255, 255], .82));
+    }
+    picker.addEventListener('input', function () {
+      text.value = picker.value;
+      preview(picker.value);
+    });
+    text.addEventListener('input', function () {
+      var v = text.value.trim();
+      if (HEX.test(v)) { picker.value = v; preview(v); }
+    });
+    text.addEventListener('change', function () {
+      preview(text.value.trim());
+    });
+  })();
+</script>
 {% endblock %}

@@ -7869,65 +7869,88 @@ html.js .local-graph__stage { display: block; }
 
 .batch-flow__chip-remove:hover { color: var(--danger, #b3413c); }
 
-/* ===== 补丁：专注阅读模式（2026-09-16，已合并） ===== */
+/* ===== 补丁：专注阅读模式（2026-09-16，已合并；本轮重做按钮与动画） ===== */
 
 .focus-toggle {
-  position: fixed; right: 24px; bottom: 24px; z-index: 60;
-  padding: 10px 18px; border: 1px solid var(--line-strong); border-radius: var(--radius-pill);
-  background: var(--surface); color: var(--ink);
-  box-shadow: var(--shadow-md); cursor: pointer;
-  font-family: var(--font-sans); font-size: 13.5px;
-  transition: color .15s ease, border-color .15s ease, transform .15s ease;
+  position: fixed; right: 20px; bottom: 20px; z-index: 60;
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 34px; padding: 0 13px;
+  border: 1px solid var(--line-strong); border-radius: var(--radius-pill);
+  background: var(--surface); color: var(--ink-2);
+  font-family: var(--font-sans); font-size: 13px;
+  box-shadow: var(--shadow-sm); cursor: pointer;
+  transition: color .18s ease, background-color .18s ease, border-color .18s ease,
+              transform .18s ease, box-shadow .18s ease;
 }
 
-.focus-toggle:hover, .focus-toggle:focus-visible { color: var(--brand); border-color: var(--brand); }
+.focus-toggle:hover, .focus-toggle:focus-visible {
+  color: var(--brand); border-color: var(--brand); transform: translateY(-1px);
+}
+
+.focus-toggle:active { transform: translateY(0); }
+
+/* 开启中：品牌浅底 + 深字，一眼能看出「正在专注」 */
+body.focus-reading .focus-toggle {
+  background: var(--brand-soft); border-color: var(--brand-soft); color: var(--brand-dark);
+}
 
 .focus-toggle svg { flex: none; }
 
 .focus-toggle__text { flex: none; }
 
-.focus-toggle:active { transform: scale(.95); }
-
-body.focus-reading .site-header,
-body.focus-reading .post-side,
-body.focus-reading .post-rail,
-body.focus-reading .post-after,
-body.focus-reading .post-nav,
-body.focus-reading .site-footer { display: none; }
-
-/* --- 切换动画：离场淡出/滑出 → display 收起；回场先摆好起始态再淡入 --- */
+/* 动画核心：不再 display 硬切（回流跳动是「卡」的根因）——
+   宽屏把三栏网格两侧列收拢为 0（轨道数不变，可平滑过渡），
+   页头原地淡出（sticky 占位保留，滚动位置零跳动），下方区块淡出
+   + visibility 延迟隐藏；关闭即全部反向过渡。 */
 body[data-page="post"] .site-header,
 body[data-page="post"] .site-footer,
 body[data-page="post"] .post-side,
 body[data-page="post"] .post-rail,
 body[data-page="post"] .post-after,
 body[data-page="post"] .post-nav {
-  transition: opacity .24s ease, transform .24s ease;
+  transition: opacity .3s ease, transform .3s ease, visibility .3s ease;
 }
 
-body[data-page="post"] .container { transition: max-width .28s ease; }
+body[data-page="post"] .post-layout {
+  transition: grid-template-columns .3s ease, gap .3s ease;
+}
 
-body[data-page="post"] .post-body { transition: font-size .28s ease; }
+body[data-page="post"] .container { transition: max-width .3s ease; }
 
-body.focus-leaving .site-header { opacity: 0; transform: translateY(-14px); }
+body[data-page="post"] .post-body { transition: font-size .3s ease; }
 
-body.focus-leaving .post-side { opacity: 0; transform: translateX(-16px); }
+body.focus-reading .site-header {
+  opacity: 0; visibility: hidden; pointer-events: none;
+}
 
-body.focus-leaving .post-rail { opacity: 0; transform: translateX(16px); }
+body.focus-reading .post-after,
+body.focus-reading .post-nav,
+body.focus-reading .site-footer { opacity: 0; visibility: hidden; }
 
-body.focus-leaving .post-after,
-body.focus-leaving .post-nav,
-body.focus-leaving .site-footer { opacity: 0; }
+body.focus-reading .post-side,
+body.focus-reading .post-rail { opacity: 0; }
 
-body.focus-entering .site-header { opacity: 0; transform: translateY(-14px); transition: none; }
+body.focus-reading .container { max-width: 860px; }
 
-body.focus-entering .post-side { opacity: 0; transform: translateX(-16px); transition: none; }
+body.focus-reading .post-body { max-width: none; font-size: 18px; }
 
-body.focus-entering .post-rail { opacity: 0; transform: translateX(16px); transition: none; }
+body.focus-reading .post-header { margin-bottom: 34px; }
 
-body.focus-entering .post-after,
-body.focus-entering .post-nav,
-body.focus-entering .site-footer { opacity: 0; transition: none; }
+@media (min-width: 1280px) {
+  body.focus-reading .post-layout {
+    grid-template-columns: 0px minmax(0, 1fr) 0px;
+    gap: 0;
+  }
+
+  body.focus-reading .post-side,
+  body.focus-reading .post-rail { min-width: 0; overflow: hidden; }
+}
+
+@media (max-width: 1279.98px) {
+  /* 窄屏侧栏竖向堆叠在正文之前，收拢网格不适用：淡出后直接隐藏 */
+  body.focus-reading .post-side,
+  body.focus-reading .post-rail { display: none; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   body[data-page="post"] .site-header,
@@ -7936,24 +7959,10 @@ body.focus-entering .site-footer { opacity: 0; transition: none; }
   body[data-page="post"] .post-rail,
   body[data-page="post"] .post-after,
   body[data-page="post"] .post-nav,
+  body[data-page="post"] .post-layout,
   body[data-page="post"] .container,
   body[data-page="post"] .post-body { transition: none; }
 }
-
-body.focus-reading .container { max-width: 860px; }
-
-/* 侧栏 display:none 后网格项消失，但显式列模板仍在——必须同时改回单列，
-   否则正文会被塞进 220px 的第一列（实测 220px 宽） */
-body.focus-reading .post-layout { grid-template-columns: minmax(0, 1fr); }
-
-body.focus-reading .post-body { max-width: none; font-size: 18px; }
-
-body.focus-reading .post-header { margin-bottom: 34px; }
-
-@media (prefers-reduced-motion: reduce) {
-  .focus-toggle { transition: none; }
-}
-
 
 /* ===== 补丁：主按钮底色调浅（2026-09-16，已合并） ===== */
 
@@ -8032,4 +8041,15 @@ fieldset.field legend.field__label { padding: 0; margin-bottom: 6px; }
     max-height: calc(100vh - var(--header-h) - 40px);
     overflow-y: auto;
   }
+}
+
+
+/* ===== 补丁：自定义主题色取色器（2026-09-16，已合并） ===== */
+
+.custom-color-row { display: flex; align-items: center; gap: 8px; }
+
+.custom-color-row input[type="color"] {
+  width: 42px; height: 36px; padding: 2px; flex: none;
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--surface); cursor: pointer;
 }
