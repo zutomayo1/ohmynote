@@ -131,51 +131,8 @@
     });
   }
 
-  /* ============ 3) TOC 滚动高亮（scroll-spy） ============ */
-  function setupTocSpy() {
-    var toc = document.querySelector('.toc[data-toc]');
-    var body = document.querySelector('.post-body');
-    if (!toc || !body) { return; }
-    var links = toc.querySelectorAll('.toc__link');
-    if (!links.length) { return; }
-
-    var map = {};
-    Array.prototype.forEach.call(links, function (link) {
-      var href = link.getAttribute('href') || '';
-      var id = href.charAt(0) === '#' ? href.slice(1) : '';
-      if (id) { map[id] = link; }
-    });
-
-    var current = null;
-    function setActive(id) {
-      var link = map[id];
-      if (!link || link === current) { return; }
-      if (current) { current.classList.remove('is-active'); }
-      link.classList.add('is-active');
-      current = link;
-    }
-
-    var headings = body.querySelectorAll('h1[id], h2[id], h3[id], h4[id]');
-    if (!headings.length) { return; }
-
-    if (typeof window.IntersectionObserver !== 'function') {
-      // 老浏览器退化：哪个小节的链接被点击就亮哪个
-      Array.prototype.forEach.call(links, function (link) {
-        link.addEventListener('click', function () {
-          setActive(decodeURIComponent((link.getAttribute('href') || '').slice(1)));
-        });
-      });
-      return;
-    }
-
-    // 视口上 1/5 到下 1/3 之间的小节视为「正在读」
-    var observer = new IntersectionObserver(function (entries) {
-      entries.forEach(function (entry) {
-        if (entry.isIntersecting) { setActive(entry.target.id); }
-      });
-    }, { rootMargin: '-15% 0px -65% 0px' });
-    Array.prototype.forEach.call(headings, function (h) { observer.observe(h); });
-  }
+  /* ============ 3) TOC 滚动高亮：app.js 的 initToc 已实现（阈值上方最靠下），
+        这里不重复做——两个 spy 会互相覆盖 is-active。 ============ */
 
   /* ============ 4) 文章卡入场动效（featured 渐显更慢更深） ============ */
   function setupReveal() {
@@ -207,7 +164,6 @@
   ready(function () {
     try { setupLike(); } catch (error) { /* 单功能失败不拖垮其它 */ }
     try { setupLightbox(); } catch (error) { /* 同上 */ }
-    try { setupTocSpy(); } catch (error) { /* 同上 */ }
     try { setupReveal(); } catch (error) { /* 同上 */ }
   });
 })();

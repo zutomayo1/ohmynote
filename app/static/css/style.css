@@ -7557,3 +7557,64 @@ html.js .local-graph__stage { display: block; }
   .js .blog-list .post-card, .js .blog-list .post-card--feature { opacity: 1; transform: none; transition: none; }
   .post-like__btn.is-liked .post-like__icon { animation: none; }
 }
+
+
+/* ===== 补丁：语言标签悬停 + TOC 轨道 + 导入文件列表（2026-09-16，已合并） ===== */
+
+/* 1) 语言标签：常驻会压住代码首行（用户截图实证），改为与复制按钮一致的悬停显示 */
+.code-lang { opacity: 0; }
+
+.codehilite:hover .code-lang, .codehilite:focus-within .code-lang { opacity: 1; }
+
+/* 3) TOC 吸顶失效根因：.post-layout 的 align-items:start 让侧栏只有内容高，
+   sticky 没有可粘的轨道。侧栏自己拉伸到整行高，.toc 的 sticky 才生效 */
+.post-rail { align-self: stretch; }
+
+/* 2) 导入：确认文件列表（JS 渲染在虚线框内；无 JS 时不出现，表单照常提交） */
+.backup-filelist {
+  margin: 10px 14px 12px; padding: 4px 0;
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.backup-filelist__item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 12px;
+}
+
+.backup-filelist__item + .backup-filelist__item { border-top: 1px solid var(--line); }
+
+.backup-filelist__type {
+  flex: none; padding: 1px 8px; border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill); color: var(--ink-3);
+  font-family: var(--font-mono); font-size: 11px; line-height: 1.6;
+}
+
+.backup-filelist__name {
+  flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--ink); font-family: var(--font-sans); font-size: 13.5px;
+}
+
+.backup-filelist__size { flex: none; color: var(--ink-3); font-size: 12px; }
+
+.backup-filelist__remove {
+  flex: none; width: 22px; height: 22px; padding: 0;
+  border: 1px solid var(--line-strong); border-radius: 50%;
+  background: var(--surface); color: var(--ink-3);
+  font-size: 14px; line-height: 1; cursor: pointer;
+  transition: color .15s ease, border-color .15s ease;
+}
+
+.backup-filelist__remove:hover { color: var(--danger, #b3413c); border-color: var(--danger, #b3413c); }
+
+.backup-filelist__foot {
+  padding: 8px 12px; border-top: 1px solid var(--line);
+  color: var(--ink-2); font-size: 12.5px;
+}
+
+/* 导入提交中：按钮锁定 */
+.btn.is-busy { opacity: .6; pointer-events: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .btn.is-busy { transition: none; }
+}

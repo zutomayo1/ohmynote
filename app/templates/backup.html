@@ -55,8 +55,9 @@
         <label class="backup-drop__label" for="backup-file">
           <span class="backup-drop__icon">{{ icon('upload', 26) }}</span>
           <span class="backup-drop__main">拖拽文件到这里，或<u>点击选择</u></span>
-          <span class="backup-drop__hint">支持 .zip / .json / .md，可以一次选多个 Markdown</span>
+          <span class="backup-drop__hint">支持 .zip / .json / .md，可一次选多个；选好后确认列表再导入</span>
         </label>
+        <div class="backup-filelist" data-filelist hidden></div>
       </div>
       <label class="checkbox backup-form__dry">
         <input type="checkbox" name="dry_run" value="1">
@@ -177,6 +178,10 @@
   if (!zone) return;
   var input = zone.querySelector('input[type="file"]');
   if (!input) return;
+  var list = document.querySelector('[data-filelist]');
+  var form = document.querySelector('.backup-form');
+  var submitBtn = form ? form.querySelector('button[type="submit"]') : null;
+
   ['dragenter', 'dragover'].forEach(function (evt) {
     zone.addEventListener(evt, function (event) {
       event.preventDefault();
@@ -189,8 +194,108 @@
   zone.addEventListener('drop', function (event) {
     event.preventDefault();
     var files = event.dataTransfer && event.dataTransfer.files;
-    if (files && files.length) { input.files = files; }
+    if (files && files.length) { setInputFiles(files); }
   });
+  input.addEventListener('change', function () { renderList(); });
+
+  var FILE_TYPES = {
+    zip: '压缩包', json: 'JSON 备份',
+    md: 'Markdown', markdown: 'Markdown', txt: '纯文本',
+  };
+
+  function setInputFiles(fileList) {
+    try {
+      var dt = new DataTransfer();
+      for (var i = 0; i < fileList.length; i++) { dt.items.add(fileList[i]); }
+      input.files = dt.files;
+    } catch (error) {
+      try { input.files = fileList; } catch (ignored) { /* 老浏览器放弃 */ }
+    }
+    renderList();
+  }
+
+  function removeAt(index) {
+    try {
+      var dt = new DataTransfer();
+      for (var i = 0; i < input.files.length; i++) {
+        if (i !== index) { dt.items.add(input.files[i]); }
+      }
+      input.files = dt.files;
+    } catch (error) {
+      input.value = '';   // 老浏览器构造不了 FileList：只能整体清空
+    }
+    renderList();
+  }
+
+  function fmtSize(bytes) {
+    if (bytes >= 1048576) { return (bytes / 1048576).toFixed(1) + ' MB'; }
+    if (bytes >= 1024) { return (bytes / 1024).toFixed(0) + ' KB'; }
+    return bytes + ' B';
+  }
+
+  function toggleSubmit(on) {
+    if (submitBtn) { submitBtn.disabled = !on; }
+  }
+
+  function renderList() {
+    var files = Array.prototype.slice.call(input.files || []);
+    if (!list) { toggleSubmit(files.length > 0); return; }
+    if (!files.length) {
+      list.hidden = true;
+      list.innerHTML = '';
+      toggleSubmit(false);
+      return;
+    }
+    list.hidden = false;
+    list.innerHTML = '';
+    var total = 0;
+    files.forEach(function (file, index) {
+      total += file.size;
+      var row = document.createElement('div');
+      row.className = 'backup-filelist__item';
+      var ext = (file.name.split('.').pop() || '').toLowerCase();
+      var badge = document.createElement('span');
+      badge.className = 'backup-filelist__type';
+      badge.textContent = FILE_TYPES[ext] || (ext ? ext.toUpperCase() : '文件');
+      var name = document.createElement('span');
+      name.className = 'backup-filelist__name';
+      name.textContent = file.name;
+      name.title = file.name;
+      var size = document.createElement('span');
+      size.className = 'backup-filelist__size';
+      size.textContent = fmtSize(file.size);
+      var remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'backup-filelist__remove';
+      remove.textContent = '×';
+      remove.setAttribute('aria-label', '移除 ' + file.name);
+      remove.addEventListener('click', function () { removeAt(index); });
+      row.appendChild(badge);
+      row.appendChild(name);
+      row.appendChild(size);
+      row.appendChild(remove);
+      list.appendChild(row);
+    });
+    var foot = document.createElement('div');
+    foot.className = 'backup-filelist__foot';
+    foot.textContent = '共 ' + files.length + ' 个文件 · ' + fmtSize(total)
+      + '。请确认列表无误，再点「开始导入」。';
+    list.appendChild(foot);
+    toggleSubmit(true);
+  }
+
+  // 无 JS 时不做任何禁用（表单照常提交）；有 JS 时：空列表禁用、提交中锁定
+  if (submitBtn) {
+    submitBtn.disabled = !(input.files && input.files.length);
+    if (form) {
+      form.addEventListener('submit', function () {
+        if (submitBtn.disabled) { return; }   // 空列表被浏览器拦下的话别叠加
+        submitBtn.disabled = true;
+        submitBtn.classList.add('is-busy');
+      });
+    }
+    if (input.files && input.files.length) { renderList(); }
+  }
 })();
 </script>
 {% endblock %}
