@@ -7672,10 +7672,13 @@ html.js .local-graph__stage { display: block; }
   }
 
   body[data-page="post"] .post-side {
-    display: block; align-self: start;
+    align-self: start;
     position: sticky; top: calc(var(--header-h) + 16px);
     display: flex; flex-direction: column; gap: 18px; min-width: 0;
     padding-right: 20px; border-right: 1px solid var(--line);
+    /* 与右侧目录一致：限高 + 内部滚动，分类树长了不超出视口 */
+    max-height: calc(100vh - var(--header-h) - 40px);
+    overflow-y: auto;
   }
 
   .post-side__list {
