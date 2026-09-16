@@ -70,6 +70,7 @@
     </div>
     <p class="graph-toolbar__hint micro muted">
       滚轮缩放 · 拖空白处平移 · 拖节点挪位置 · 悬停高亮邻居 ·
+      <strong>按住 Shift 从节点拖到另一节点 = 建立联系</strong> ·
       方向键移动、Enter 打开、<code>+</code> <code>-</code> <code>0</code> 缩放与适应
     </p>
 
@@ -100,22 +101,16 @@
     </details>
   </div>
 
-  <details class="graph-nodes">
-    <summary class="graph-nodes__summary">
-      节点目录<span class="graph-nodes__count">{{ node_links | length }}</span>
-      <span class="graph-nodes__hint micro muted">点标题在新标签打开笔记</span>
-      <span class="graph-params__chevron" aria-hidden="true">{{ icon('down', 13) }}</span>
-    </summary>
-    <ul class="graph-nodes__list">
-      {% for n in node_links %}
-      <li><a class="{{ 'is-current' if n.id == focus_id }}" href="/notes/{{ n.id }}" target="_blank" rel="noopener">{{ n.title }}</a></li>
-      {% endfor %}
-    </ul>
-  </details>
-
   <p class="graph-match micro" id="graph-match" role="status" aria-live="polite"></p>
 
   <p class="graph-match micro" id="graph-path-result" role="status" aria-live="polite"></p>
+
+  <div class="graph-path-actions is-hidden" id="graph-link-ask">
+    <span class="micro muted" id="graph-link-ask-text">在两篇笔记之间建立联系：</span>
+    <button class="btn btn--ghost btn--sm" id="graph-link-ask-fwd" type="button"></button>
+    <button class="btn btn--ghost btn--sm" id="graph-link-ask-rev" type="button"></button>
+    <button class="btn btn--ghost btn--sm" id="graph-link-ask-cancel" type="button">取消</button>
+  </div>
 
   <div class="graph-path-actions is-hidden" id="graph-path-actions">
     <span class="micro muted">建立联系</span>

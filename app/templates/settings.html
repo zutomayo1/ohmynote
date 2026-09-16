@@ -786,6 +786,50 @@
           <span class="micro">0~3650 天，超期自动清理；0 表示尽快清理</span>
         </label>
       </div>
+
+      {% set cur_palette = site_form_values.get('appearance_palette', site.appearance_palette) %}
+      {% set cur_mode = site_form_values.get('appearance_mode', site.appearance_mode) %}
+      {% set cur_radius = site_form_values.get('appearance_radius', site.appearance_radius) %}
+      <div class="field-grid">
+        <fieldset class="field field--wide appearance-picker">
+          <legend class="field__label">外观主题 {{ src_of(site.sources.get('appearance_palette')) }}</legend>
+          <div class="appearance-swatches">
+            <label class="appearance-swatch"><input type="radio" name="appearance_palette" value=""{% if cur_palette == '' %} checked{% endif %}><i style="background:#B5533C"></i>墨迹</label>
+            <label class="appearance-swatch"><input type="radio" name="appearance_palette" value="bamboo"{% if cur_palette == 'bamboo' %} checked{% endif %}><i style="background:#3D7A5F"></i>竹青</label>
+            <label class="appearance-swatch"><input type="radio" name="appearance_palette" value="ocean"{% if cur_palette == 'ocean' %} checked{% endif %}><i style="background:#3B5BA5"></i>墨蓝</label>
+            <label class="appearance-swatch"><input type="radio" name="appearance_palette" value="plum"{% if cur_palette == 'plum' %} checked{% endif %}><i style="background:#8E4A7E"></i>霞紫</label>
+            <label class="appearance-swatch"><input type="radio" name="appearance_palette" value="amber"{% if cur_palette == 'amber' %} checked{% endif %}><i style="background:#B8742E"></i>琥珀</label>
+            <label class="appearance-swatch"><input type="radio" name="appearance_palette" value="slate"{% if cur_palette == 'slate' %} checked{% endif %}><i style="background:#4E5D6C"></i>石墨</label>
+          </div>
+          <span class="micro">改的是全站默认；你在浏览器右上角下拉里选过的会覆盖它</span>
+        </fieldset>
+
+        <label class="field">
+          <span class="field__label">自定义主题色 {{ src_of(site.sources.get('appearance_custom')) }}</span>
+          <input class="input" type="text" name="appearance_custom" value="{{ site_form_values.get('appearance_custom', site.appearance_custom) }}" placeholder="#B5533C，留空 = 不启用" spellcheck="false">
+          <span class="micro">#RRGGBB；启用后优先于上面的外观主题</span>
+        </label>
+
+        <label class="field">
+          <span class="field__label">明暗模式 {{ src_of(site.sources.get('appearance_mode')) }}</span>
+          <select class="input" name="appearance_mode">
+            <option value="auto"{% if cur_mode == 'auto' %} selected{% endif %}>跟随系统</option>
+            <option value="light"{% if cur_mode == 'light' %} selected{% endif %}>默认浅色</option>
+            <option value="dark"{% if cur_mode == 'dark' %} selected{% endif %}>默认深色</option>
+          </select>
+          <span class="micro">访客没手动切换过时按这个来；页头的月亮按钮仍可随时切换</span>
+        </label>
+
+        <label class="field">
+          <span class="field__label">圆角 {{ src_of(site.sources.get('appearance_radius')) }}</span>
+          <select class="input" name="appearance_radius">
+            <option value="sm"{% if cur_radius == 'sm' %} selected{% endif %}>小圆角</option>
+            <option value="md"{% if cur_radius == 'md' %} selected{% endif %}>默认</option>
+            <option value="lg"{% if cur_radius == 'lg' %} selected{% endif %}>大圆角</option>
+          </select>
+          <span class="micro">卡片、按钮、输入框的整体圆角大小</span>
+        </label>
+      </div>
     </div>
     <div class="settings-form__actions">
       <button class="btn btn--primary" type="submit">保存站点信息</button>

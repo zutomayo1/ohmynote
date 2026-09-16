@@ -240,6 +240,39 @@ def absolute(path: str) -> str:
     return f"{settings.base_url}{path if path.startswith('/') else '/' + path}"
 
 
+_HEX_FULL = __import__("re").compile(r"#([0-9a-fA-F]{6})")
+
+
+def custom_brand_css(hex_color: str) -> str:
+    """自定义主题色 → 覆盖 --brand 三件套的 CSS（亮 / 暗各一组）。
+
+    作用域用 ``:root:not([data-palette])``：访客在页头下拉里显式选了调色板时，
+    让位给访客的选择；没选（或选回「墨迹」）就用站点设置的自定义色。
+    """
+    m = _HEX_FULL.fullmatch((hex_color or "").strip())
+    if not m:
+        return ""
+    n = int(m.group(1), 16)
+    rgb = ((n >> 16) & 255, (n >> 8) & 255, n & 255)
+
+    def mix(other, t):
+        return "#{:02X}{:02X}{:02X}".format(
+            *(round(a + (b - a) * t) for a, b in zip(rgb, other))
+        )
+
+    white, black = (255, 255, 255), (24, 18, 14)
+    return "\n".join(
+        (
+            ":root:not([data-palette]){{--brand:{b};--brand-dark:{bd};--brand-soft:{bs}}}".format(
+                b=hex_color.strip().upper(), bd=mix(black, 0.18), bs=mix(white, 0.82)
+            ),
+            ':root:not([data-palette])[data-theme="dark"]{{--brand:{b};--brand-dark:{bd};--brand-soft:{bs}}}'.format(
+                b=mix(white, 0.28), bd=mix(white, 0.44), bs=mix(black, 0.80)
+            ),
+        )
+    )
+
+
 templates.env.globals.update(
     {
         "page_url": page_url,
@@ -249,6 +282,7 @@ templates.env.globals.update(
         "total_pages": total_pages,
         "url_with_query": url_with_query,
         "urlencode": urlencode,
+        "custom_brand_css": custom_brand_css,
         "current_year": now().year,
     }
 )

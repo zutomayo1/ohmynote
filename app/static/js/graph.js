@@ -236,6 +236,8 @@
     var pan = null;
     var pointers = {};
     var pinch = null;
+    var linkDrag = null;        // Shift 拉线建联：{fromId, targetId, line}
+    var linkDragEndedAt = 0;    // 拉线刚结束的时间戳：吃掉随后的 click（否则会跳去笔记页）
 
     var edgeLayer = document.createElementNS(SVGNS, "g");
     var nodeLayer = document.createElementNS(SVGNS, "g");
@@ -876,6 +878,22 @@
       g.addEventListener("pointerdown", function (ev) {
         if (ev.button !== undefined && ev.button !== 0) { return; }
         ev.stopPropagation();
+        if (ev.shiftKey) {
+          // Shift + 按下：从这个节点拉一条虚线，拖到目标节点上松手 → 确认建联
+          linkDrag = { fromId: n.id, targetId: null, line: null };
+          var lstart = state.sim[n.id];
+          if (lstart) {
+            linkDrag.line = document.createElementNS(SVGNS, "line");
+            setClass(linkDrag.line, "graph-link-draw");
+            linkDrag.line.setAttribute("x1", lstart.x);
+            linkDrag.line.setAttribute("y1", lstart.y);
+            linkDrag.line.setAttribute("x2", lstart.x);
+            linkDrag.line.setAttribute("y2", lstart.y);
+            edgeLayer.appendChild(linkDrag.line);
+          }
+          ev.preventDefault();
+          return;
+        }
         var p = state.sim[n.id];
         drag = {
           id: n.id, moved: false,
@@ -892,6 +910,7 @@
         ev.preventDefault();
       });
       g.addEventListener("click", function (ev) {
+        if (Date.now() - linkDragEndedAt < 500) { ev.preventDefault(); return; }
         if (drag && drag.moved) { ev.preventDefault(); return; }
         if (state.pathMode) {
           // 路径模式：点节点 = 选起终点（打开笔记要先退出路径模式）
@@ -906,6 +925,25 @@
 
     function onPointerMove(ev) {
       if (pinch) { handlePinch(ev); return; }
+      if (linkDrag) {
+        var from = state.sim[linkDrag.fromId];
+        if (!from) { return; }
+        var gl = toGraph(ev.clientX, ev.clientY);
+        if (linkDrag.line) {
+          linkDrag.line.setAttribute("x2", gl.x);
+          linkDrag.line.setAttribute("y2", gl.y);
+        }
+        // 命中最近的其它节点（图坐标阈值 30，与缩放无关）
+        var best = null, bestD = 30 * 30;
+        for (var nid in state.sim) {
+          if (String(nid) === String(linkDrag.fromId)) { continue; }
+          var q = state.sim[nid];
+          var dd = (q.x - gl.x) * (q.x - gl.x) + (q.y - gl.y) * (q.y - gl.y);
+          if (dd < bestD) { bestD = dd; best = nid; }
+        }
+        linkDrag.targetId = best == null ? null : parseInt(best, 10);
+        return;
+      }
       if (drag) {
         var p = state.sim[drag.id];
         if (!p) { return; }
@@ -934,6 +972,17 @@
     function onPointerUp() {
       pointers = {};
       pinch = null;
+      if (linkDrag) {
+        var ld = linkDrag;
+        linkDrag = null;
+        linkDragEndedAt = Date.now();
+        if (ld.line && ld.line.parentNode) { ld.line.parentNode.removeChild(ld.line); }
+        if (ld.targetId != null && opts.onLinkAsk) {
+          var na = state.byId[ld.fromId], nb = state.byId[ld.targetId];
+          if (na && nb) { opts.onLinkAsk(na, nb); }
+        }
+        return;
+      }
       if (drag) {
         var wasMoved = drag.moved;
         var movedId = drag.id;
@@ -1481,6 +1530,7 @@
       colorMode: readSelect("graph-color", "community"),
       onlyLinked: true,
       exportName: "inknote-graph",
+      onLinkAsk: showLinkAsk,
       onPathChange: function (info) { onPath(info); }
     });
     if (!view) { return; }
@@ -1607,6 +1657,35 @@
         if (linkRev) { linkRev.disabled = false; }
       });
     }
+
+    /* ---- Shift 拉线建联：确认条 ---- */
+    var askBar = document.getElementById("graph-link-ask");
+    var askFwd = document.getElementById("graph-link-ask-fwd");
+    var askRev = document.getElementById("graph-link-ask-rev");
+    var askCancel = document.getElementById("graph-link-ask-cancel");
+    var askFrom = null, askTo = null;
+
+    function showLinkAsk(a, b) {
+      askFrom = a; askTo = b;
+      if (askFwd) { askFwd.textContent = "「" + a.title + "」→「" + b.title + "」"; }
+      if (askRev) { askRev.textContent = "「" + b.title + "」→「" + a.title + "」"; }
+      if (askBar) { askBar.classList.remove("is-hidden"); }
+    }
+    function hideLinkAsk() {
+      if (askBar) { askBar.classList.add("is-hidden"); }
+      askFrom = null; askTo = null;
+    }
+    if (askFwd) {
+      askFwd.addEventListener("click", function () {
+        if (askFrom && askTo) { makeLink(askFrom.id, askTo.id); hideLinkAsk(); }
+      });
+    }
+    if (askRev) {
+      askRev.addEventListener("click", function () {
+        if (askFrom && askTo) { makeLink(askTo.id, askFrom.id); hideLinkAsk(); }
+      });
+    }
+    if (askCancel) { askCancel.addEventListener("click", hideLinkAsk); }
 
     if (pathBtn) {
       pathBtn.addEventListener("click", function (ev) {

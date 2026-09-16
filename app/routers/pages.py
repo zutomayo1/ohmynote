@@ -597,8 +597,6 @@ def graph_page(
     linked_nodes = [n for n in nodes if n["has_links"]]
     linked_nodes.sort(key=lambda n: n["updated_at"], reverse=True)
     recent_linked = linked_nodes[:8]
-    # 节点目录：图谱会画所有笔记（含无链接的 degree=0 节点），目录也全量列出
-    node_links = sorted(nodes, key=lambda n: n["updated_at"], reverse=True)
     all_tags = sorted({t for n in nodes for t in n["tags"]})
 
     focus_id = None
@@ -624,7 +622,6 @@ def graph_page(
         focus_id=focus_id,
         focus_title=focus_title,
         recent_linked=recent_linked,
-        node_links=node_links,
         all_tags=all_tags,
         # 「按分类着色」只在真有分类时才有意义：没有就不给这个选项
         category_count=len({n["category"] for n in nodes if n.get("category")}),

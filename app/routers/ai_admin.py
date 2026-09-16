@@ -154,6 +154,10 @@ def save_site_settings(
     base_url: str = Form(""),
     per_page: str = Form("12"),
     trash_days: str = Form("30"),
+    appearance_palette: str = Form(""),
+    appearance_custom: str = Form(""),
+    appearance_mode: str = Form("auto"),
+    appearance_radius: str = Form("md"),
     reset: str | None = Form(None),
 ):
     """保存站点信息：页面 > .env > 默认，非法值 flash 报错并回显、不写库。"""
@@ -172,6 +176,10 @@ def save_site_settings(
         "base_url": base_url,
         "per_page": per_page,
         "trash_days": trash_days,
+        "appearance_palette": appearance_palette,
+        "appearance_custom": appearance_custom,
+        "appearance_mode": appearance_mode,
+        "appearance_radius": appearance_radius,
     }
     try:
         site_settings.save(conn, values)

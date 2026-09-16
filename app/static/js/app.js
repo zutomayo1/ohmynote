@@ -1090,7 +1090,11 @@
 
     function apply(palette) {
       if (palette) { root.setAttribute('data-palette', palette); }
-      else { root.removeAttribute('data-palette'); }
+      else {
+        var serverDefault = root.getAttribute('data-palette-default');
+        if (serverDefault) { root.setAttribute('data-palette', serverDefault); }
+        else { root.removeAttribute('data-palette'); }
+      }
       if (label) { label.textContent = NAMES[palette] || '墨迹'; }
       dd.querySelectorAll('.palette-dd__opt').forEach(function (opt) {
         var active = (opt.getAttribute('data-palette-opt') || '') === palette;

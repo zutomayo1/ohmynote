@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import sqlite3
 from typing import Any
 
@@ -40,6 +41,10 @@ FIELDS = (
     "base_url",
     "per_page",
     "trash_days",
+    "appearance_palette",
+    "appearance_custom",
+    "appearance_mode",
+    "appearance_radius",
 )
 
 # 代码默认值（没有 .env、也没在页面保存时的兜底）
@@ -51,6 +56,10 @@ DEFAULTS: dict[str, Any] = {
     "base_url": "http://127.0.0.1:8000",
     "per_page": 12,
     "trash_days": 30,
+    "appearance_palette": "",
+    "appearance_custom": "",
+    "appearance_mode": "auto",
+    "appearance_radius": "md",
 }
 
 # 需要按整数处理的字段，以及页面允许的范围
@@ -67,6 +76,10 @@ LABELS = {
     "base_url": "对外地址",
     "per_page": "每页条数",
     "trash_days": "回收站保留天数",
+    "appearance_palette": "外观主题",
+    "appearance_custom": "自定义主题色",
+    "appearance_mode": "明暗模式",
+    "appearance_radius": "圆角",
 }
 
 # 字段 → .env 变量名（用来在页面上标「来自 .env」）
@@ -78,9 +91,15 @@ ENV_KEYS = {
     "base_url": "INKNOTE_BASE_URL",
     "per_page": "INKNOTE_PER_PAGE",
     "trash_days": "INKNOTE_TRASH_DAYS",
+    "appearance_palette": "INKNOTE_APPEARANCE_PALETTE",
+    "appearance_custom": "INKNOTE_APPEARANCE_CUSTOM",
+    "appearance_mode": "INKNOTE_APPEARANCE_MODE",
+    "appearance_radius": "INKNOTE_APPEARANCE_RADIUS",
 }
 
 TITLE_MAX = 60
+
+_HEX_RE = re.compile(r"#[0-9a-fA-F]{6}")
 
 # 运行期状态：当前生效值、来源（db/env/default）
 _values: dict[str, Any] = {}
@@ -208,6 +227,30 @@ def validate(values: dict) -> tuple[dict, list[str]]:
                 errors.append("站点名不能为空")
             elif len(text) > TITLE_MAX:
                 errors.append(f"站点名最多 {TITLE_MAX} 个字")
+            else:
+                cleaned[field] = text
+        elif field == "appearance_palette":
+            text = str(raw if raw is not None else "").strip()
+            if text not in ("", "bamboo", "ocean", "plum", "amber", "slate"):
+                errors.append("外观主题不认识")
+            else:
+                cleaned[field] = text
+        elif field == "appearance_custom":
+            text = str(raw if raw is not None else "").strip()
+            if text and _HEX_RE.fullmatch(text) is None:
+                errors.append("自定义主题色要写成 #RRGGBB，例如 #B5533C")
+            else:
+                cleaned[field] = text
+        elif field == "appearance_mode":
+            text = str(raw if raw is not None else "").strip()
+            if text not in ("auto", "light", "dark"):
+                errors.append("明暗模式只能是 auto / light / dark")
+            else:
+                cleaned[field] = text
+        elif field == "appearance_radius":
+            text = str(raw if raw is not None else "").strip()
+            if text not in ("sm", "md", "lg"):
+                errors.append("圆角只能是 sm / md / lg")
             else:
                 cleaned[field] = text
         elif field in INT_FIELDS:

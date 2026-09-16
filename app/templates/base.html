@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN" data-theme="light">
+<html lang="zh-CN" data-theme="light"{% if settings.appearance_palette and not settings.appearance_custom %} data-palette="{{ settings.appearance_palette }}" data-palette-default="{{ settings.appearance_palette }}"{% endif %}{% if settings.appearance_radius != 'md' %} data-radius="{{ settings.appearance_radius }}"{% endif %}>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -20,13 +20,17 @@
   <link rel="alternate" type="application/rss+xml" href="/rss.xml" title="{{ settings.site_title }} · RSS">
   <link rel="stylesheet" href="/static/css/style.css?v={{ asset_v }}">
   <link rel="stylesheet" href="/static/css/highlight.css?v={{ asset_v }}">
+  {# 自定义主题色：紧跟样式表之后，权重刚好压过默认令牌、让位给访客显式选的调色板 #}
+  {% if settings.appearance_custom %}<style nonce="{{ nonce }}">{{ custom_brand_css(settings.appearance_custom) }}</style>{% endif %}
   <script nonce="{{ nonce }}">
     // 首屏之前就把主题定好，避免深色模式闪白
     (function () {
       try {
         var mode = localStorage.getItem('inknote-theme');
         if (mode !== 'light' && mode !== 'dark') {
-          mode = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+          var serverMode = '{{ settings.appearance_mode }}';
+          if (serverMode === 'light' || serverMode === 'dark') { mode = serverMode; }
+          else { mode = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light'; }
         }
         document.documentElement.setAttribute('data-theme', mode);
         var palette = localStorage.getItem('inknote-palette');
@@ -43,7 +47,7 @@
 <header class="site-header">
   <div class="site-header__inner container">
     <a class="brand" href="{{ '/' if not is_authed else '/notes' }}">
-      <span class="brand__mark">墨</span>
+      <span class="brand__mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true"><path d="M12 2.4C9.1 6.3 6.2 9.8 6.2 13.4a5.8 5.8 0 0 0 11.6 0C17.8 9.8 14.9 6.3 12 2.4Z" fill="currentColor"/><path d="M3.4 21.1c2.8-1.6 5.7-2.4 8.6-2.4s5.8.8 8.6 2.4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg></span>
       <span class="brand__text">{{ settings.site_title }}<small class="brand__sub">{{ settings.site_subtitle }}</small></span>
     </a>
 
