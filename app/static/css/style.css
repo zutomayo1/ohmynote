@@ -770,7 +770,13 @@ img { border-radius: var(--radius-sm); }
   display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 40px;
   align-items: start; margin-top: 24px; }
 
-.post-body { max-width: var(--measure); margin-inline: 0 auto; }
+.post-body {
+  /* grid item：margin auto 会吞富余空间、把元素缩成 fit-content（短段落实测
+     只剩文字宽）。要「限宽 + 居中」得用 width:100% + justify-self:center：
+     先填满列、被 max-width 截宽、再由网格居中，短长段落都稳定 */
+  width: 100%; max-width: var(--measure);
+  justify-self: center; margin-inline: 0;
+}
 
 .post-rail { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
 
@@ -7617,4 +7623,20 @@ html.js .local-graph__stage { display: block; }
 
 @media (prefers-reduced-motion: reduce) {
   .btn.is-busy { transition: none; }
+}
+
+/* ===== 补丁：文章页利用两侧空白（2026-09-16，已合并） ===== */
+
+/* 版心加宽 + 正文放宽 + 目录贴右。笔记详情页（data-page="detail"）同布局，一并在内。
+   阅读行宽放宽到 800/860px（中文约 42-46 字/行），仍低于双栏可读上限。 */
+@media (min-width: 1280px) {
+  body[data-page="post"] .container, body[data-page="detail"] .container { max-width: 1320px; }
+
+  body[data-page="post"] .post-body, body[data-page="detail"] .post-body { max-width: 800px; }
+}
+
+@media (min-width: 1536px) {
+  body[data-page="post"] .container, body[data-page="detail"] .container { max-width: 1440px; }
+
+  body[data-page="post"] .post-body, body[data-page="detail"] .post-body { max-width: 860px; }
 }
