@@ -162,7 +162,7 @@ def test_all_without_filters_processes_whole_library(auth_client, csrf, make_not
 # 4. 超过上限：用 monkeypatch 把 500 调成 3
 # ---------------------------------------------------------------------------
 def test_all_enforces_upper_limit(auth_client, csrf, make_note, monkeypatch):
-    from app.routers import notes as notes_router
+    from app.routers.notes import batch as notes_router
 
     monkeypatch.setattr(notes_router, "BATCH_ALL_LIMIT", 3)
     ids = [make_note(f"A5 上限 {i}", tags="A5上限标签") for i in range(5)]
