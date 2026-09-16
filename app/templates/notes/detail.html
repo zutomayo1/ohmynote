@@ -26,6 +26,8 @@
 </div>
 {% endif %}
 {% set _img_count = note.content | image_count %}
+<div class="post-layout">
+<div class="post-main">
 <div class="page-head page-head--article">
   <div>
     <h1 class="page-title">{{ note.title }}</h1>
@@ -122,7 +124,6 @@
   </div>
 </div>
 
-<div class="post-layout">
   <article class="post-body prose" id="post-body" data-task-note="{{ note.id }}">
     {% if not note.content.strip() %}
       <p class="muted">这篇笔记还是空的，<a href="{{ note.url }}/edit">去写点什么</a>。</p>
@@ -130,6 +131,7 @@
       {{ html | safe }}
     {% endif %}
   </article>
+</div>
 
   <aside class="post-rail">
     {{ toc_nav(toc) }}

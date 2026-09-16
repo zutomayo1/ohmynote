@@ -7652,11 +7652,11 @@ html.js .local-graph__stage { display: block; }
 .post-main > .post-body { width: 100%; max-width: var(--measure); margin-inline: auto; }
 
 @media (min-width: 1280px) {
-  body[data-page="post"] .post-main > * { max-width: 800px; }
+  body[data-page="post"] .post-main > *, body[data-page="detail"] .post-main > * { max-width: 800px; }
 }
 
 @media (min-width: 1536px) {
-  body[data-page="post"] .post-main > * { max-width: 860px; }
+  body[data-page="post"] .post-main > *, body[data-page="detail"] .post-main > * { max-width: 860px; }
 }
 
 
@@ -7736,4 +7736,12 @@ html.js .local-graph__stage { display: block; }
 
 .post-side__list--posts a.is-current {
   color: var(--brand); background: var(--surface-2); font-weight: 600;
+}
+
+/* ===== 补丁：详情页正文居中于屏幕（2026-09-16，已合并） ===== */
+
+/* 右侧目录 240+36 不对称，正文只会「列内居中」。左侧补等宽内边距，
+   正文列正好落在视口中心（两侧视觉平衡，均来自同一套居中） */
+@media (min-width: 1280px) {
+  body[data-page="detail"] .post-layout { padding-left: 276px; }
 }
