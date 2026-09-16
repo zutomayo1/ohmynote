@@ -94,7 +94,11 @@ CREATE TABLE IF NOT EXISTS templates (
 
 # 新版本若给已有表加字段，写在这里即可（启动时自动 ALTER TABLE）
 MIGRATIONS: dict[str, dict[str, str]] = {
-    "notes": {"is_archived": "INTEGER NOT NULL DEFAULT 0"},
+    # sort_order：置顶笔记之间的手工顺序（列表页拖拽写入；非置顶一律 0）
+    "notes": {
+        "is_archived": "INTEGER NOT NULL DEFAULT 0",
+        "sort_order": "INTEGER NOT NULL DEFAULT 0",
+    },
     "note_versions": {},
     "templates": {},
 }

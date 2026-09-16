@@ -38,7 +38,7 @@ def seeded(conn):
 def test_fts_is_enabled(conn):
     del conn
     assert search.FTS_ENABLED is True
-    assert search.FTS_TOKENIZER in {"trigram", "unicode61"}
+    assert search.FTS_TOKENIZER in {"bigram", "trigram", "unicode61"}
 
 
 def test_title_match_ranks_first(seeded):

@@ -28,11 +28,13 @@ from .utils import (
     sanitize_slug,
 )
 
+# 每条都以「置顶优先 + 置顶区内手工顺序（sort_order）」开头，主排序键在后。
+# 非置顶笔记的 sort_order 恒为 0，所以它们的主排序键不受影响。
 SORTS = {
-    "updated": ("n.is_pinned DESC, n.updated_at DESC, n.id DESC", "最近更新"),
-    "created": ("n.is_pinned DESC, n.created_at DESC, n.id DESC", "创建时间"),
-    "words": ("n.is_pinned DESC, n.word_count DESC, n.id DESC", "字数最多"),
-    "title": ("n.is_pinned DESC, n.title ASC", "标题"),
+    "updated": ("n.is_pinned DESC, n.sort_order ASC, n.updated_at DESC, n.id DESC", "最近更新"),
+    "created": ("n.is_pinned DESC, n.sort_order ASC, n.created_at DESC, n.id DESC", "创建时间"),
+    "words": ("n.is_pinned DESC, n.sort_order ASC, n.word_count DESC, n.id DESC", "字数最多"),
+    "title": ("n.is_pinned DESC, n.sort_order ASC, n.title ASC", "标题"),
 }
 
 FLAGS = ("is_public", "is_pinned", "is_starred")
@@ -578,10 +580,15 @@ def sort_notes(
     else:
         key = lambda note: (note.get(field) or "", note.get("id") or 0)  # noqa: E731
     ordered = sorted(notes, key=key, reverse=desc)
-    if pinned_first:
-        # sorted 是稳定排序，所以「置顶」这一步不会打乱上面排好的相对顺序
-        ordered.sort(key=lambda note: not note.get("is_pinned"))
-    return ordered
+    if not pinned_first:
+        return ordered
+    # 口径与 SORTS 一致：置顶在前，置顶区内部再按 sort_order（手工拖拽的顺序）。
+    # 必须分两组排——若把 sort_order 混进同一个 key，非置顶笔记的 0 会插在
+    # 置顶笔记中间（稳定排序只保证「同键」的相对顺序）。
+    pinned = [note for note in ordered if note.get("is_pinned")]
+    rest = [note for note in ordered if not note.get("is_pinned")]
+    pinned.sort(key=lambda note: int(note.get("sort_order") or 0))
+    return pinned + rest
 
 
 def list_notes(
@@ -692,7 +699,7 @@ def search_notes(
             continue
         note["score"] = score
         note["snippet"] = snippet
-        note["tokens"] = search_mod.tokenize(query)
+        note["tokens"] = search_mod.highlight_tokens(query)
         output.append(note)
     return output
 
@@ -1011,6 +1018,92 @@ def backlinks(conn: sqlite3.Connection, note_id: int, *, public_only: bool = Fal
         (note_id,),
     ).fetchall()
     return hydrate(conn, rows)
+
+
+def link_refs_to(
+    conn: sqlite3.Connection, note_id: int, old_title: str
+) -> list[tuple[dict[str, Any], int]]:
+    """反向链接里**正文还写着旧标题**的笔记（含处数）。
+
+    「改标题后一并更新链接」的数据源：``note_links`` 指向本篇（改名不丢），
+    但正文里的 ``[[旧标题]]`` 渲染时按标题解析，改完名就断了——这个函数
+    把「要改的正文」精确找出来（忽略大小写；代码块内的不算）。
+    """
+    import re
+
+    from .markdown_render import map_outside_code
+
+    old_title = (old_title or "").strip()
+    if not old_title:
+        return []
+    pattern = re.compile(
+        r"\[\[\s*" + re.escape(old_title) + r"\s*(\|[^\[\]]*)?\]\]",
+        re.IGNORECASE,
+    )
+    result: list[tuple[dict[str, Any], int]] = []
+    for note in backlinks(conn, note_id):
+        counter = {"hits": 0}
+
+        def count(chunk: str) -> str:   # 只数代码块外的正文
+            counter["hits"] += len(pattern.findall(chunk))
+            return chunk
+
+        map_outside_code(note["content"] or "", count)
+        if counter["hits"]:
+            result.append((note, counter["hits"]))
+    return result
+
+
+def rename_link_refs(
+    conn: sqlite3.Connection, note_id: int, old_title: str, new_title: str
+) -> tuple[int, int, int]:
+    """把所有 ``[[old_title]]`` / ``[[old_title|别名]]`` 改写成新标题（别名保留）。
+
+    - 每篇都走 :func:`update_note`，版本历史照记，反悔可回滚；
+    - 代码块内的 ``[[...]]`` 不动（复用 markdown_render.map_outside_code）；
+    - 单篇失败跳过、不拖垮整批，失败数单独返回让页面提示；
+    - 返回 (更新篇数, 更新处数, 失败篇数)。
+    """
+    import re
+
+    from .markdown_render import map_outside_code
+
+    old_title = (old_title or "").strip()
+    new_title = (new_title or "").strip()
+    if not old_title or not new_title or old_title.lower() == new_title.lower():
+        return (0, 0, 0)
+
+    pattern = re.compile(
+        r"\[\[\s*" + re.escape(old_title) + r"\s*(\|[^\[\]]*)?\]\]",
+        re.IGNORECASE,
+    )
+
+    def rewrite(chunk: str) -> str:
+        return pattern.sub(
+            lambda match: "[[" + new_title + (match.group(1) or "") + "]]", chunk
+        )
+
+    updated_notes = 0
+    updated_refs = 0
+    failed = 0
+    for note, hits in link_refs_to(conn, note_id, old_title):
+        content = note["content"] or ""
+        try:
+            new_content = map_outside_code(content, rewrite)
+        except Exception:
+            failed += 1
+            continue
+        if new_content == content:
+            continue
+        try:
+            if update_note(conn, note["id"], content=new_content, reason="rename") is not None:
+                updated_notes += 1
+                updated_refs += hits
+            else:
+                failed += 1
+        except Exception:
+            failed += 1
+    return (updated_notes, updated_refs, failed)
 
 
 def search_titles(
@@ -1461,6 +1554,43 @@ def save_template(
 
 def delete_template(conn: sqlite3.Connection, template_id: int) -> None:
     conn.execute("DELETE FROM templates WHERE id = ?", (template_id,))
+
+
+def reorder_pinned(conn: sqlite3.Connection, ids: list[int]) -> int:
+    """按传入顺序把**置顶笔记**的 ``notes.sort_order`` 写成 ``0..n-1``。
+
+    - 只更新 ``is_pinned = 1`` 的行：非置顶笔记的 sort_order 保持 0，
+      这样它们的时间/字数排序完全不受影响（sort_order 只当置顶区内的次序键）。
+    - id 校验与跳过规则同 :func:`reorder_templates`（防 OverflowError → 500）。
+    - 返回值 = 实际更新到的行数。
+    """
+    # 序号只分给**确实是置顶**的 id：非置顶 / 不存在的不能占号，
+    # 否则它们会让后面的置顶笔记整体后移（第一版就栽在这——WHERE 挡住了
+    # SQL，挡不住 enumerate 的计数）。
+    ordered: list[int] = []
+    for raw in ids:
+        if isinstance(raw, bool):        # bool 是 int 的子类，单独排除
+            continue
+        if not isinstance(raw, int):
+            continue
+        if not 1 <= raw <= MAX_SQLITE_INT:
+            continue
+        row = conn.execute(
+            "SELECT is_pinned FROM notes WHERE id = ?", (raw,)
+        ).fetchone()
+        if row is None or not row["is_pinned"]:
+            continue
+        ordered.append(raw)
+    if not ordered:
+        return 0
+    updated = 0
+    for index, note_id in enumerate(ordered):
+        cursor = conn.execute(
+            "UPDATE notes SET sort_order = ? WHERE id = ?", (index, note_id)
+        )
+        updated += cursor.rowcount or 0
+    conn.commit()
+    return updated
 
 
 def reorder_templates(conn: sqlite3.Connection, ids: list[int]) -> int:

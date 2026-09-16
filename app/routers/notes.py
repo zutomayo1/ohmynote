@@ -625,6 +625,12 @@ def note_detail(request: Request, note_id: NoteId, conn: sqlite3.Connection = De
 @router.get("/notes/{note_id}/edit")
 def edit_note(request: Request, note_id: NoteId, conn: sqlite3.Connection = Depends(db_conn)):
     note = _note_or_404(conn, note_id)
+    rename_from = (request.query_params.get("rename_from") or "").strip()
+    rename_ref_notes = (
+        [(n["title"], hits) for n, hits in repo.link_refs_to(conn, note_id, rename_from)]
+        if rename_from
+        else []
+    )
     return render(
         request,
         "notes/editor.html",
@@ -634,7 +640,23 @@ def edit_note(request: Request, note_id: NoteId, conn: sqlite3.Connection = Depe
         current_template=None,
         known_tags=[item["name"] for item in repo.list_tags(conn, limit=60)],
         categories=repo.list_categories(conn),
+        rename_from=rename_from if rename_ref_notes else "",
+        rename_ref_notes=rename_ref_notes,
     )
+
+
+@router.post("/notes/reorder")
+async def reorder_pinned_notes(request: Request, conn: sqlite3.Connection = Depends(db_conn)):
+    """列表页拖动置顶笔记后写回顺序（只影响置顶区，非置顶笔记不动）。"""
+    try:
+        payload = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "请求体必须是 JSON"}, status_code=400)
+    ids = payload.get("ids") if isinstance(payload, dict) else None
+    if not isinstance(ids, list):
+        return JSONResponse({"ok": False, "error": "ids 必须是数组"}, status_code=400)
+    updated = repo.reorder_pinned(conn, ids)
+    return JSONResponse({"ok": True, "updated": updated})
 
 
 @router.post("/notes/{note_id}")
@@ -675,10 +697,68 @@ def update_note(
     )
     if note is None:
         raise HTTPException(status_code=404, detail="这篇笔记不存在")
+
+    # 标题改了：正文里引用旧标题的 [[链接]] 不会自己跟上，带回去让用户一键更新
+    old_title = (existing["title"] or "").strip()
+    new_title = (note["title"] or "").strip()
+    rename_from = ""
+    if old_title and new_title and old_title != new_title:
+        if repo.link_refs_to(conn, note_id, old_title):
+            rename_from = old_title
+
     if action == "view":
-        return RedirectResponse(url_with_query(f"/notes/{note_id}", msg="已保存"), status_code=303)
+        return RedirectResponse(
+            url_with_query(f"/notes/{note_id}", msg="已保存", rename_from=rename_from),
+            status_code=303,
+        )
     return RedirectResponse(
-        url_with_query(f"/notes/{note_id}/edit", msg="已保存"), status_code=303
+        url_with_query(f"/notes/{note_id}/edit", msg="已保存", rename_from=rename_from),
+        status_code=303,
+    )
+
+
+@router.post("/notes/{note_id}/rename-links")
+def rename_note_links(
+    request: Request,
+    note_id: NoteId,
+    conn: sqlite3.Connection = Depends(db_conn),
+    old_title: str = Form(""),
+):
+    """把引用了旧标题的 [[链接]] 一并改写成新标题（别名保留、走版本历史）。"""
+    note = _note_or_404(conn, note_id)
+    old_title = (old_title or "").strip()
+    duplicate = conn.execute(
+        "SELECT id FROM notes WHERE title = ? AND id != ? AND deleted_at IS NULL",
+        (note["title"], note_id),
+    ).fetchone()
+    if duplicate:
+        return RedirectResponse(
+            url_with_query(
+                f"/notes/{note_id}/edit",
+                msg=f"已经有另一篇笔记也叫《{note['title']}》，先给它改个别的名字，"
+                    "否则更新链接会指到那边",
+                msg_kind="warn",
+            ),
+            status_code=303,
+        )
+    updated_notes, updated_refs, failed = repo.rename_link_refs(
+        conn, note_id, old_title, note["title"]
+    )
+    if failed:
+        return RedirectResponse(
+            url_with_query(
+                f"/notes/{note_id}/edit",
+                msg=f"更新了 {updated_notes} 篇，另有 {failed} 篇失败（可在它的历史版本里找回）",
+                msg_kind="warn",
+            ),
+            status_code=303,
+        )
+    return RedirectResponse(
+        url_with_query(
+            f"/notes/{note_id}/edit",
+            msg=f"已把 {updated_notes} 篇笔记里的 {updated_refs} 处链接更新为新标题",
+        ),
+        status_code=303,
     )
 
 

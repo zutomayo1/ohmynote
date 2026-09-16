@@ -180,11 +180,11 @@ def _print_banner() -> None:
         f"  公开博客：http://{settings.host}:{settings.port}/blog",
         f"  数据目录：{settings.data_dir}",
     ]
-    if search_mod.FTS_ENABLED and search_mod.FTS_TOKENIZER == "trigram":
-        lines.append("  全文搜索：FTS5（trigram 分词，中文子串可命中）")
+    if search_mod.FTS_ENABLED and search_mod.FTS_TOKENIZER == "bigram":
+        lines.append("  全文搜索：FTS5（中文二元索引，长短词全部走索引）")
     elif search_mod.FTS_ENABLED:
         lines.append(
-            f"  全文搜索：FTS5（{search_mod.FTS_TOKENIZER} 分词不适合中文，查询实际走 LIKE 兜底）"
+            f"  全文搜索：FTS5（{search_mod.FTS_TOKENIZER} 索引格式较旧，查询实际走 LIKE 兜底）"
         )
     else:
         lines.append("  全文搜索：当前 SQLite 没有 FTS5，查询全部走 LIKE 兜底")

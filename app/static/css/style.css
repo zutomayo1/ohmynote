@@ -7400,3 +7400,65 @@ html.js .local-graph__stage { display: block; }
   .graph-params__chevron { transition: none; }
   .graph-params::details-content { transition: none; }
 }
+
+/* ===== 补丁：置顶笔记拖拽排序（2026-09-16，已合并） ===== */
+
+/* 手柄：平时淡显，悬停卡片 / 手柄时明显；抓取点在置顶卡片的左上角 */
+.note-drag {
+  position: absolute; top: 8px; left: 6px; z-index: 2;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; padding: 0;
+  border: 1px solid transparent; border-radius: 6px;
+  background: transparent; color: var(--ink-3);
+  font-family: var(--font-mono); font-size: 13px; line-height: 1;
+  cursor: grab; opacity: .3;
+  transition: opacity .15s ease, color .15s ease, background-color .15s ease, border-color .15s ease;
+}
+
+.note-card:hover .note-drag, .note-drag:hover, .note-drag:focus-visible {
+  opacity: 1; color: var(--brand); border-color: var(--line-strong); background: var(--surface-2);
+}
+
+.note-drag:active { cursor: grabbing; }
+
+/* 给手柄让出左上角的空间（置顶卡片自身有 3px 品牌左边框 + 17px 左内边距） */
+.note-card.is-pinned .note-card__head { padding-left: 20px; }
+
+.note-card.is-dragging {
+  opacity: .55; transform: scale(.98);
+  box-shadow: var(--shadow-md); border-color: var(--brand);
+}
+
+.note-card.is-dragging .note-drag { cursor: grabbing; opacity: 1; }
+
+.note-order-hint { margin: 0 0 12px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .note-drag { transition: none; }
+}
+
+/* ===== 补丁：改标题联动更新链接（2026-09-16，已合并） ===== */
+
+.rename-links { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+.rename-links__text { margin: 0; flex: 1 1 auto; min-width: 0; }
+
+.rename-links__form { margin: 0; flex: none; }
+
+/* ===== 补丁：搜索语法提示（2026-09-16，已合并） ===== */
+
+.search-syntax { margin: 6px 0 0; }
+
+.search-syntax code {
+  padding: 1px 5px; border-radius: 4px;
+  background: var(--surface-2); font-family: var(--font-mono); font-size: 11px;
+}
+
+/* ===== 补丁：搜索语法提示（2026-09-16，已合并） ===== */
+
+.search-syntax { margin: 6px 0 0; }
+
+.search-syntax code {
+  padding: 1px 5px; border-radius: 4px;
+  background: var(--surface-2); font-family: var(--font-mono); font-size: 11px;
+}

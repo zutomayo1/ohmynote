@@ -51,11 +51,13 @@
 {% endmacro %}
 
 {# ---------------- 笔记卡片 ---------------- #}
-{% macro note_card(note, request, tokens=None, tag_base='/notes', actions=True, selectable=False, version_counts=None) %}
+{% macro note_card(note, request, tokens=None, tag_base='/notes', actions=True, selectable=False, version_counts=None, sortable=False) %}
   {% set back = request.url.path ~ ('?' ~ request.url.query if request.url.query else '') %}
   {% set tags = note.tags if note.tags else [] %}
     {% set vcount = version_counts.get(note.id) if version_counts else none %}
-  <article class="note-card{{ ' is-pinned' if note.is_pinned }}">
+  {% set orderable = sortable and note.is_pinned %}
+  <article class="note-card{{ ' is-pinned' if note.is_pinned }}" data-note-id="{{ note.id }}"{{ ' draggable="true"' if orderable }}>
+    {% if orderable %}<button class="note-drag" type="button" title="拖动调整置顶顺序" aria-label="拖动调整《{{ note.title }}》的置顶顺序（或聚焦后按 Alt+↑ / Alt+↓ 移动）"><span class="note-drag__icon" aria-hidden="true">⠿</span></button>{% endif %}
     <header class="note-card__head">
       <h2 class="card__title">
         {%- if selectable and actions %}<input type="checkbox" class="note-select" name="note_ids" value="{{ note.id }}" form="batch-form" aria-label="选择《{{ note.title }}》">{% endif %}

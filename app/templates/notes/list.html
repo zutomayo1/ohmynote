@@ -180,9 +180,13 @@
     <button class="btn btn--primary" type="submit">执行</button>
   </form>
 
+  {% set pinned_in_page = notes | selectattr('is_pinned') | list | length %}
+  {% if pinned_in_page > 1 %}
+    <p class="note-order-hint micro muted">置顶笔记可以拖动排序：抓住卡片左上角的 <span aria-hidden="true">⠿</span> 拖到新位置，或聚焦手柄后按 Alt+↑ / Alt+↓。</p>
+  {% endif %}
   <div class="note-grid">
     {% for note in notes %}
-      {{ note_card(note, request, tokens=tokens, tag_base='/notes', selectable=True, version_counts=version_counts) }}
+      {{ note_card(note, request, tokens=tokens, tag_base='/notes', selectable=True, version_counts=version_counts, sortable=(pinned_in_page > 1)) }}
     {% endfor %}
   </div>
   {{ pagination(request, page, pages) }}
@@ -198,4 +202,5 @@
 {% endblock %}
 {% block scripts %}
 <script src="/static/js/batch.js?v={{ asset_v }}" defer></script>
+<script src="/static/js/note-order.js?v={{ asset_v }}" defer></script>
 {% endblock %}

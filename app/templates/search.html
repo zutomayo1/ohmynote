@@ -26,8 +26,14 @@
   <div class="toolbar__row">
     <label class="field field--grow">
       <span class="sr-only">搜索</span>
-      <input class="input" type="search" name="q" value="{{ q }}" placeholder="多个关键词用空格分隔，需要同时命中" autofocus>
+      <input class="input" type="search" name="q" value="{{ q }}" placeholder="关键词、tag:标签、title:标题、&quot;短语&quot;、-排除、after:2026-01" autofocus>
     </label>
+    <p class="search-syntax micro muted">
+      语法：<code>tag:读书</code> 按标签 · <code>title:周报</code> 仅标题 ·
+      <code>cat:技术</code> 按分类 · <code>"精确短语"</code> ·
+      <code>-词</code> 排除 · <code>after:2026-01</code> / <code>before:2026-09</code> 时间 ·
+      <code>is:starred</code> 只看星标
+    </p>
     {% if mode == 'semantic' %}<input type="hidden" name="mode" value="semantic">{% endif %}
     <button class="btn btn--primary" type="submit">{{ icon('search', 16) }} 搜索</button>
     {% if q %}<a class="btn btn--ghost" href="/search">清空</a>{% endif %}

@@ -5,6 +5,21 @@
 {% block description %}Markdown 编辑器，支持实时预览、图片拖拽上传、自动保存。{% endblock %}
 
 {% block content %}
+{% if rename_from and rename_ref_notes %}
+  <div class="flash flash--warn rename-links" role="status">
+    <p class="rename-links__text">
+      有 {{ rename_ref_notes | length }} 篇笔记还引用着旧标题《{{ rename_from }}》
+      {% for title, hits in rename_ref_notes[:4] %}（《{{ title }}》×{{ hits }}）{% endfor %}——改标题不会自动更新它们。
+    </p>
+    <form class="rename-links__form" method="post" action="/notes/{{ note.id }}/rename-links">
+      <input type="hidden" name="_csrf" value="{{ csrf }}">
+      <input type="hidden" name="old_title" value="{{ rename_from }}">
+      <button class="btn btn--ghost btn--sm" type="submit">
+        把 {{ rename_ref_notes | length }} 篇笔记里的链接一并更新
+      </button>
+    </form>
+  </div>
+{% endif %}
 <form class="editor" id="editor-form" method="post"
       action="{{ '/notes' if is_new else '/notes/' ~ note.id }}"
       data-note-id="{{ note.id or '' }}"
