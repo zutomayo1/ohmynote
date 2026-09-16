@@ -198,26 +198,83 @@
     btn.className = 'focus-toggle';
     btn.setAttribute('aria-pressed', 'false');
     btn.title = '专注阅读（Esc 退出）';
+    // 自绘「取景框」符号：四角括号，表示进入沉浸画面
+    btn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">' +
+      '<path d="M8.5 3.5H5A1.5 1.5 0 0 0 3.5 5v3.5"/>' +
+      '<path d="M15.5 3.5H19A1.5 1.5 0 0 1 20.5 5v3.5"/>' +
+      '<path d="M8.5 20.5H5A1.5 1.5 0 0 1 3.5 19V15.5"/>' +
+      '<path d="M15.5 20.5H19a1.5 1.5 0 0 0 1.5-1.5V15.5"/>' +
+      '</svg><span class="focus-toggle__text">专注</span>';
+    var btnText = btn.querySelector('.focus-toggle__text');
 
     function paint() {
       var on = document.body.classList.contains('focus-reading');
-      btn.textContent = on ? '退出专注' : '专注';
+      if (btnText) { btnText.textContent = on ? '退出专注' : '专注'; }
       btn.setAttribute('aria-pressed', on ? 'true' : 'false');
     }
 
+    // 丝滑切换：开启 = 先让页头/侧栏淡出滑出，再 display 收起；
+    // 关闭 = 先移除 display，下一帧起播淡入。
+    var LEAVE_MS = 240;
+    var leaving = false;
+    function setFocus(on) {
+      if (leaving) { return; }
+      if (on) {
+        leaving = true;
+        document.body.classList.add('focus-leaving');
+        window.setTimeout(function () {
+          document.body.classList.remove('focus-leaving');
+          document.body.classList.add('focus-reading');
+          leaving = false;
+          paint();
+        }, LEAVE_MS);
+      } else {
+        document.body.classList.add('focus-entering');
+        document.body.classList.remove('focus-reading');
+        paint();
+        window.requestAnimationFrame(function () {
+          window.requestAnimationFrame(function () {
+            document.body.classList.remove('focus-entering');
+          });
+        });
+      }
+    }
+
     btn.addEventListener('click', function () {
-      document.body.classList.toggle('focus-reading');
-      paint();
+      setFocus(!document.body.classList.contains('focus-reading'));
     });
     document.addEventListener('keydown', function (event) {
       if (event.key === 'Escape' && document.body.classList.contains('focus-reading')) {
-        document.body.classList.remove('focus-reading');
-        paint();
+        setFocus(false);
       }
     });
 
     document.body.appendChild(btn);
     paint();
+  }
+
+  /* ============ 7) 博客左栏分类树：记住展开/折叠状态 ============ */
+  function setupSideTree() {
+    var cats = document.querySelectorAll('.post-side__cat[data-cat]');
+    if (!cats.length) { return; }
+    var KEY = 'inknote-side-tree';
+    var saved = null;
+    try { saved = JSON.parse(window.localStorage.getItem(KEY) || 'null'); } catch (error) { saved = null; }
+    if (saved && typeof saved === 'object') {
+      Array.prototype.forEach.call(cats, function (d) {
+        var name = d.getAttribute('data-cat');
+        if (name in saved) { d.open = !!saved[name]; }
+      });
+    }
+    Array.prototype.forEach.call(cats, function (d) {
+      d.addEventListener('toggle', function () {
+        var map = {};
+        Array.prototype.forEach.call(cats, function (x) {
+          map[x.getAttribute('data-cat')] = x.open;
+        });
+        try { window.localStorage.setItem(KEY, JSON.stringify(map)); } catch (error) { /* 忽略 */ }
+      });
+    });
   }
 
   ready(function () {
@@ -226,5 +283,6 @@
     try { setupReveal(); } catch (error) { /* 同上 */ }
     try { setupTimelineReveal(); } catch (error) { /* 同上 */ }
     try { setupFocusMode(); } catch (error) { /* 同上 */ }
+    try { setupSideTree(); } catch (error) { /* 同上 */ }
   });
 })();

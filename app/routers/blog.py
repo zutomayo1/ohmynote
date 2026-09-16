@@ -121,7 +121,11 @@ def blog_post(request: Request, slug: str, conn: sqlite3.Connection = Depends(db
     groups: dict[str, list] = {}
     for n in all_public:
         groups.setdefault(n.get("category") or "未分类", []).append(n)
-    side_tree = [{"name": k, "posts": v} for k, v in groups.items()]
+    # 树的默认展开态：只展开当前文章所在分组；用户手调后的状态由前端 localStorage 记住
+    side_tree = [
+        {"name": k, "posts": v, "open": any(p["id"] == note["id"] for p in v)}
+        for k, v in groups.items()
+    ]
     recent, _ = repo.list_notes(conn, public_only=True, per_page=8)
     return render(
         request, "blog/post.html",

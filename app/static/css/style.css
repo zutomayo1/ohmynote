@@ -7882,13 +7882,63 @@ html.js .local-graph__stage { display: block; }
 
 .focus-toggle:hover, .focus-toggle:focus-visible { color: var(--brand); border-color: var(--brand); }
 
+.focus-toggle svg { flex: none; }
+
+.focus-toggle__text { flex: none; }
+
 .focus-toggle:active { transform: scale(.95); }
 
+body.focus-reading .site-header,
 body.focus-reading .post-side,
 body.focus-reading .post-rail,
 body.focus-reading .post-after,
 body.focus-reading .post-nav,
 body.focus-reading .site-footer { display: none; }
+
+/* --- 切换动画：离场淡出/滑出 → display 收起；回场先摆好起始态再淡入 --- */
+body[data-page="post"] .site-header,
+body[data-page="post"] .site-footer,
+body[data-page="post"] .post-side,
+body[data-page="post"] .post-rail,
+body[data-page="post"] .post-after,
+body[data-page="post"] .post-nav {
+  transition: opacity .24s ease, transform .24s ease;
+}
+
+body[data-page="post"] .container { transition: max-width .28s ease; }
+
+body[data-page="post"] .post-body { transition: font-size .28s ease; }
+
+body.focus-leaving .site-header { opacity: 0; transform: translateY(-14px); }
+
+body.focus-leaving .post-side { opacity: 0; transform: translateX(-16px); }
+
+body.focus-leaving .post-rail { opacity: 0; transform: translateX(16px); }
+
+body.focus-leaving .post-after,
+body.focus-leaving .post-nav,
+body.focus-leaving .site-footer { opacity: 0; }
+
+body.focus-entering .site-header { opacity: 0; transform: translateY(-14px); transition: none; }
+
+body.focus-entering .post-side { opacity: 0; transform: translateX(-16px); transition: none; }
+
+body.focus-entering .post-rail { opacity: 0; transform: translateX(16px); transition: none; }
+
+body.focus-entering .post-after,
+body.focus-entering .post-nav,
+body.focus-entering .site-footer { opacity: 0; transition: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  body[data-page="post"] .site-header,
+  body[data-page="post"] .site-footer,
+  body[data-page="post"] .post-side,
+  body[data-page="post"] .post-rail,
+  body[data-page="post"] .post-after,
+  body[data-page="post"] .post-nav,
+  body[data-page="post"] .container,
+  body[data-page="post"] .post-body { transition: none; }
+}
 
 body.focus-reading .container { max-width: 860px; }
 
@@ -7969,4 +8019,17 @@ fieldset.field legend.field__label { padding: 0; margin-bottom: 6px; }
 .appearance-swatch i {
   width: 16px; height: 16px; border-radius: 50%; flex: none;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .08);
+}
+
+
+/* ===== 补丁：详情页局部关系图吸顶（2026-09-16，已合并） ===== */
+
+/* 左栏与右目录同一套约束：sticky + 限高内滚，长文下滚时关系图不再跟着滚走 */
+@media (min-width: 1280px) {
+  body[data-page="detail"] .post-rail--left {
+    align-self: start;
+    position: sticky; top: calc(var(--header-h) + 16px);
+    max-height: calc(100vh - var(--header-h) - 40px);
+    overflow-y: auto;
+  }
 }

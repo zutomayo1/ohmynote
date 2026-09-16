@@ -22,7 +22,7 @@
       </ul>
     </nav>
     {% for group in side_tree %}
-    <details class="post-side__cat" open>
+    <details class="post-side__cat" data-cat="{{ group.name }}"{% if group.open %} open{% endif %}>
       <summary class="post-side__cat-name">
         {{ group.name }}<span class="post-side__count">{{ group.posts | length }}</span>
       </summary>
