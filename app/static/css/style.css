@@ -7674,7 +7674,7 @@ html.js .local-graph__stage { display: block; }
   body[data-page="post"] .post-side {
     align-self: start;
     position: sticky; top: calc(var(--header-h) + 16px);
-    display: flex; flex-direction: column; gap: 18px; min-width: 0;
+    display: flex; flex-direction: column; gap: 12px; min-width: 0;
     padding-right: 20px; border-right: 1px solid var(--line);
     /* 与右侧目录一致：限高 + 内部滚动，分类树长了不超出视口 */
     max-height: calc(100vh - var(--header-h) - 40px);
@@ -7701,13 +7701,13 @@ html.js .local-graph__stage { display: block; }
 
 .post-side__block { border-bottom: 1px solid var(--line); }
 
-.post-side__cat { border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.post-side__cat { border-bottom: 1px solid var(--line); padding-bottom: 1px; }
 
-.post-side__cat + .post-side__cat { margin-top: 6px; }
+.post-side__cat + .post-side__cat { margin-top: 0; }
 
 .post-side__cat-name {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  padding: 7px 8px; border-radius: var(--radius-sm); cursor: pointer;
+  padding: 4px 6px; border-radius: var(--radius-sm); cursor: pointer;
   color: var(--ink); font-family: var(--font-sans); font-size: 13.5px; font-weight: 600;
   list-style: none; user-select: none;
   transition: color .15s ease, background-color .15s ease;
@@ -7903,3 +7903,75 @@ body.focus-reading .post-header { margin-bottom: 34px; }
 @media (prefers-reduced-motion: reduce) {
   .focus-toggle { transition: none; }
 }
+
+
+/* ===== 补丁：主按钮底色调浅（2026-09-16，已合并） ===== */
+
+/* 用户反馈主按钮底色过深。只调亮色主题的实底填充（暗色主题由
+   [data-theme="dark"] 更高优先级规则接管，不受影响）；文字仍是
+   .btn 继承的 --ink 深色，浅底上对比更清晰。 */
+.btn--primary {
+  background: linear-gradient(180deg,
+      color-mix(in srgb, var(--brand) 60%, #fff),
+      color-mix(in srgb, var(--brand) 80%, #fff));
+  border-color: color-mix(in srgb, var(--brand) 38%, transparent);
+  box-shadow: 0 1px 2px rgba(90, 70, 45, .12),
+              0 4px 10px -4px color-mix(in srgb, var(--brand) 22%, transparent);
+}
+
+.btn--primary:hover {
+  background: linear-gradient(180deg,
+      color-mix(in srgb, var(--brand) 70%, #fff),
+      color-mix(in srgb, var(--brand) 88%, #fff));
+  border-color: color-mix(in srgb, var(--brand) 62%, transparent);
+}
+
+
+/* ===== 补丁：图谱页节点目录（2026-09-16，已合并） ===== */
+
+.graph-nodes { margin: 10px 0 0; }
+
+.graph-nodes__summary {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 7px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--surface); cursor: pointer; user-select: none;
+  color: var(--ink); font-family: var(--font-sans); font-size: 13.5px; font-weight: 600;
+  list-style: none;
+  transition: border-color .15s ease, color .15s ease;
+}
+
+.graph-nodes__summary::-webkit-details-marker { display: none; }
+
+.graph-nodes__summary:hover { color: var(--brand); border-color: var(--line-strong); }
+
+.graph-nodes__count {
+  padding: 0 7px; border-radius: var(--radius-pill);
+  background: var(--surface-2); color: var(--ink-3);
+  font-size: 11px; line-height: 1.7; font-variant-numeric: tabular-nums;
+}
+
+.graph-nodes__hint { font-weight: 400; }
+
+.graph-nodes__list {
+  columns: 3; column-gap: 22px; max-height: 340px; overflow-y: auto;
+  list-style: none; margin: 10px 0 0; padding: 0;
+}
+
+.graph-nodes__list li {
+  break-inside: avoid; border-bottom: 1px dashed var(--line);
+}
+
+.graph-nodes__list a {
+  display: block; padding: 6px 8px; border-radius: var(--radius-sm);
+  color: var(--ink-2); font-family: var(--font-sans); font-size: 13.5px;
+  text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  transition: color .15s ease, background-color .15s ease;
+}
+
+.graph-nodes__list a:hover { color: var(--brand); background: var(--surface-2); }
+
+.graph-nodes__list a.is-current { color: var(--brand); font-weight: 600; }
+
+@media (max-width: 900px) { .graph-nodes__list { columns: 2; } }
+
+@media (max-width: 560px) { .graph-nodes__list { columns: 1; } }

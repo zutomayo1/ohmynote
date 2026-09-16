@@ -276,6 +276,6 @@
     initAiGenerate();
     initCopy();
     initListFold();
-    initDragSort();
+    // initDragSort();  // 拖拽排序暂时停用（模板页手柄已注释；恢复时一并放开）
   });
 })();
