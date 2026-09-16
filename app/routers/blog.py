@@ -110,7 +110,16 @@ def blog_post(request: Request, slug: str, conn: sqlite3.Connection = Depends(db
         "mainEntityOfPage": absolute(note["blog_url"]),
     }
     context = content_service.note_page_context(conn, note, public=True)
-    return render(request, "blog/post.html", jsonld=jsonld, stats=stats, **context)
+    all_public = repo.all_notes(conn, sort="updated", public_only=True)
+    groups: dict[str, list] = {}
+    for n in all_public:
+        groups.setdefault(n.get("category") or "未分类", []).append(n)
+    side_tree = [{"name": k, "posts": v} for k, v in groups.items()]
+    recent, _ = repo.list_notes(conn, public_only=True, per_page=8)
+    return render(
+        request, "blog/post.html",
+        jsonld=jsonld, stats=stats, recent=recent, side_tree=side_tree, **context
+    )
 
 
 @router.post("/blog/{slug}/like")
