@@ -1062,10 +1062,18 @@
       var url;
       try { url = new URL(link.href, window.location.href); } catch (e) { return; }
       if (url.origin !== window.location.origin) { return; }
-      if (!window.confirm(form.dataset.unsavedText || '有未保存的改动')) {
-        event.preventDefault();
-        event.stopPropagation();
-      }
+      // 自绘确认（原生 confirm 会整页冻住、且不跟站点主题）；确认后才自己跳转
+      event.preventDefault();
+      event.stopPropagation();
+      var message = form.dataset.unsavedText || '离开这个页面会丢掉未保存的改动。';
+      var dialog = window.InkNote && InkNote.dialog;
+      var ask = dialog
+        ? dialog.confirm({ title: '有未保存的改动', message: message, okText: '仍要离开',
+                           cancelText: '留在这里', danger: true })
+        : Promise.resolve(window.confirm(message));
+      ask.then(function (ok) {
+        if (ok) { window.location.href = link.href; }
+      });
     }, true);
     /* ===== 11. 初始化渲染 ===== */
     renderStats();

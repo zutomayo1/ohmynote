@@ -575,30 +575,66 @@
   // ===== 5. 危险操作确认（form[data-confirm] 或提交按钮上的 data-confirm）=====
   // 文案挂在按钮上很重要：站点设置那张表单里，「保存」和「恢复默认」是
   // 同一个 form 的两个 submit，只有后者需要确认，不能挂在 form 上。
+  function confirmAttributes(form, btn) {
+    // 文案与按钮词挂在 form 或提交按钮上都认（同一张表单里多个危险动作靠按钮区分）
+    var dialog = window.InkNote && InkNote.dialog;
+    var read = (dialog && dialog.textOf) || function (source, name, fallback) {
+      return (source && source.getAttribute && source.getAttribute(name)) || fallback;
+    };
+    var danger = read(btn, 'data-confirm-danger', '') !== '' ||
+      read(form, 'data-confirm-danger', '') !== '' ||
+      !!(btn && btn.classList && btn.classList.contains('btn--danger'));
+    return {
+      message: read(form, 'data-confirm', '') || read(btn, 'data-confirm', ''),
+      title: read(btn, 'data-confirm-title', '') || read(form, 'data-confirm-title', '') || '确认操作',
+      okText: read(btn, 'data-confirm-ok', '') || read(form, 'data-confirm-ok', '') || '确定',
+      cancelText: read(btn, 'data-confirm-cancel', '') || read(form, 'data-confirm-cancel', '') || '取消',
+      danger: danger
+    };
+  }
+
+  function submitAgain(form, btn) {
+    // 必须带上 submitter：同一张表单里多个 submit 靠 name/value 或 formaction 区分
+    if (form.requestSubmit) {
+      try {
+        if (btn) { form.requestSubmit(btn); } else { form.requestSubmit(); }
+        return;
+      } catch (err) { /* 落回下面的兜底 */ }
+    }
+    form.submit();          // 兜底：不带 submitter，但至少动作能出去
+  }
+
   function initConfirm() {
     document.addEventListener('submit', function (e) {
       var form = e.target;
       if (!form || !form.matches || !form.matches('form')) return;
-      var btn = e.submitter && e.submitter.getAttribute ? e.submitter : null;
-      var text = form.getAttribute('data-confirm') ||
-        (btn ? btn.getAttribute('data-confirm') : '') || '';
-      if (!text) return;
-      if (!window.confirm(text)) {
-        e.preventDefault();
-        e.stopPropagation();
+      var rawBtn = e.submitter && e.submitter.getAttribute ? e.submitter : null;
+      var attrs = confirmAttributes(form, rawBtn);
+      if (!attrs.message) return;
+      if (form.__confirmPassed) {          // 第二趟：用户已经点过确认，放行
+        form.__confirmPassed = false;
         return;
       }
-      // 确认通过：卡片式删除附带离场动画（data-leave-anim = 要动画的祖先选择器）
-      var leaveSel = form.getAttribute('data-leave-anim');
-      if (leaveSel) {
-        var card = form.closest(leaveSel);
+
+      // 异步确认：必须先同步拦下这次提交，确认后再重新提交
+      e.preventDefault();
+      e.stopPropagation();
+
+      var dialog = window.InkNote && InkNote.dialog;
+      var ask = dialog ? dialog.confirm(attrs) : Promise.resolve(window.confirm(attrs.message));
+      ask.then(function (ok) {
+        if (!ok) return;
+        // 卡片式删除附带离场动画（data-leave-anim = 要动画的祖先选择器）
+        var leaveSel = form.getAttribute('data-leave-anim');
+        var card = leaveSel ? form.closest(leaveSel) : null;
         if (card) {
-          e.preventDefault();
-          e.stopPropagation();
           card.classList.add('is-leaving');
-          setTimeout(function () { form.submit(); }, 280);  // 原生 submit 不再触发确认
+          setTimeout(function () { form.submit(); }, 280);   // 原生 submit 不再触发确认
+          return;
         }
-      }
+        form.__confirmPassed = true;
+        submitAgain(form, rawBtn);
+      });
     }, true);
   }
 

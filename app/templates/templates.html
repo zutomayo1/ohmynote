@@ -49,7 +49,7 @@
                   {{ '取消默认' if default_template_id == item.id else '设为默认' }}
                 </button>
               </form>
-              <form method="post" action="/templates/{{ item.id }}/delete" data-confirm="删除模板「{{ item.name }}」？已有的笔记不受影响。">
+              <form method="post" action="/templates/{{ item.id }}/delete" data-confirm="删除模板「{{ item.name }}」？已有的笔记不受影响。" data-confirm-ok="删除模板" data-confirm-danger>
                 <input type="hidden" name="_csrf" value="{{ csrf }}">
                 <button class="btn btn--ghost btn--danger btn--sm" type="submit">删除</button>
               </form>

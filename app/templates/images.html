@@ -23,14 +23,14 @@
     {% endif %}
     {% if stats.orphan_count %}
       <form method="post" action="/images/delete-orphans"
-            data-confirm="清理全部 {{ stats.orphan_count }} 张孤立图片？共 {{ stats.orphan_size | filesize }}，删除后无法恢复。">
+            data-confirm="清理全部 {{ stats.orphan_count }} 张孤立图片？共 {{ stats.orphan_size | filesize }}，删除后无法恢复。" data-confirm-ok="清理图片" data-confirm-danger>
         <input type="hidden" name="_csrf" value="{{ csrf }}">
         <button class="btn btn--danger btn--sm" type="submit">{{ icon('trash', 15) }} 清理全部孤立图片</button>
       </form>
     {% endif %}
     {% if stats.duplicate_removable %}
       <form method="post" action="/images/cleanup-duplicates"
-            data-confirm="清理 {{ stats.duplicate_removable }} 份未被引用的重复副本？共 {{ stats.duplicate_removable_bytes | filesize }}，删除后无法恢复。被笔记引用的副本会保留。">
+            data-confirm="清理 {{ stats.duplicate_removable }} 份未被引用的重复副本？共 {{ stats.duplicate_removable_bytes | filesize }}，删除后无法恢复。被笔记引用的副本会保留。" data-confirm-ok="清理副本" data-confirm-danger>
         <input type="hidden" name="_csrf" value="{{ csrf }}">
         <button class="btn btn--danger btn--sm" type="submit">{{ icon('trash', 15) }} 清理多余副本</button>
       </form>
@@ -79,7 +79,7 @@
             {{ icon('link', 14) }}<span class="media-copy__label">复制链接</span>
           </button>
           <form method="post" action="/images/delete"
-                data-confirm="删除 {{ item.name }}？{% if item.used_by %}这张图仍被 {{ item.used_by | length }} 篇笔记引用，删除后文章里的图片会失效。{% else %}文件会从磁盘上移除，无法恢复。{% endif %}">
+                data-confirm="删除 {{ item.name }}？{% if item.used_by %}这张图仍被 {{ item.used_by | length }} 篇笔记引用，删除后文章里的图片会失效。{% else %}文件会从磁盘上移除，无法恢复。{% endif %}" data-confirm-ok="删除图片" data-confirm-danger>
             <input type="hidden" name="_csrf" value="{{ csrf }}">
             <input type="hidden" name="rel" value="{{ item.rel }}">
             {% if item.used_by %}<input type="hidden" name="force" value="1">{% endif %}

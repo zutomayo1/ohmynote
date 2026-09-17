@@ -8066,3 +8066,39 @@ details.warning[open] > summary, details.danger[open] > summary, details.quote[o
   .admonition, details.note, details.tip, details.success,
   details.warning, details.danger, details.quote { break-inside: avoid; }
 }
+
+
+/* ===== 补丁：自绘确认对话框（2026-09-17） =====
+   替掉原生 window.confirm —— 它不跟站点主题、按钮永远只能写「确定/取消」。
+   用原生 <dialog> + showModal()，焦点陷阱 / Esc / 遮罩交给浏览器，
+   这里只管外观；遮罩沿用 --overlay（与编辑器里的插入表格对话框一致）。 */
+
+.dialog {
+  border: 1px solid var(--line-strong); border-radius: var(--radius);
+  background: var(--surface); color: var(--ink);
+  padding: 18px 20px; width: min(440px, 92vw);
+  box-shadow: var(--shadow-md); }
+
+.dialog::backdrop { background: var(--overlay); }
+
+.dialog__form { margin: 0; }
+
+.dialog__title {
+  margin: 0 0 8px; font-size: 16.5px; line-height: 1.5;
+  display: flex; align-items: center; gap: 8px; }
+
+.dialog__message {
+  margin: 0; color: var(--ink-2); font-size: 14px; line-height: 1.7;
+  white-space: pre-line; }        /* 文案里的换行照原样显示，别挤成一行 */
+
+.dialog__actions {
+  display: flex; flex-wrap: wrap; justify-content: flex-end;
+  gap: 10px; margin-top: 18px; }
+
+.dialog__actions .btn { min-height: 36px; }
+
+/* 弹窗里的主操作要「实心」：工具条上的 .btn--danger 是描边红（适合列表行内），
+   但在只有两个按钮的确认框里，破坏性动作必须一眼可辨、且比「取消」更显眼。 */
+.dialog__actions .btn--danger {
+  background: var(--danger); border-color: var(--danger); color: var(--surface); }
+.dialog__actions .btn--danger:hover { filter: brightness(1.08); }

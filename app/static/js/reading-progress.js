@@ -7,6 +7,11 @@
 (function () {
   'use strict';
 
+  // 幂等守卫：这个文件可能被加载两次（页面 defer 引用 + 动态注入），
+  // 第二次执行必须直接退出，否则会建出两条进度条、监听器也翻倍。
+  if (window.__inknoteReadingProgress) { return; }
+  window.__inknoteReadingProgress = true;
+
   var BAR_ID = 'reading-progress';
   var VISIBLE_CLASS = 'reading-progress--visible';
   var MIN_ARTICLE_RATIO = 0.9; // 正文不足一屏的 90% 时视为「太短」，不显示

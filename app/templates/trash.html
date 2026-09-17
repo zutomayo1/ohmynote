@@ -17,7 +17,7 @@
   </div>
   <div class="page-actions">
     {% if notes %}
-      <form method="post" action="/trash/empty" data-confirm="彻底删除回收站里的全部笔记？此操作不可恢复。">
+      <form method="post" action="/trash/empty" data-confirm="彻底删除回收站里的全部笔记？此操作不可恢复。" data-confirm-ok="清空回收站" data-confirm-danger>
         <input type="hidden" name="_csrf" value="{{ csrf }}">
         <button class="btn btn--danger" type="submit">{{ icon('trash', 16) }} 清空回收站</button>
       </form>
@@ -56,7 +56,7 @@
               <input type="hidden" name="next" value="{{ request.url.path }}">
               <button class="btn btn--ghost btn--sm" type="submit">{{ icon('restore', 15) }} 恢复</button>
             </form>
-            <form method="post" action="{{ note.url }}/purge" data-confirm="彻底删除《{{ note.title }}》？此操作不可恢复。">
+            <form method="post" action="{{ note.url }}/purge" data-confirm="彻底删除《{{ note.title }}》？此操作不可恢复。" data-confirm-ok="彻底删除" data-confirm-danger>
               <input type="hidden" name="_csrf" value="{{ csrf }}">
               <input type="hidden" name="next" value="{{ request.url.path }}">
               <button class="btn btn--danger btn--sm" type="submit">彻底删除</button>

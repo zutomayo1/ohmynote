@@ -302,7 +302,7 @@
     <button class="btn btn--primary" type="submit">保存配置</button>
     <button class="btn" type="submit" id="ai-probe" formaction="/settings/ai/test">{{ icon('sparkles', 16) }} 测试连接</button>
     <button class="btn btn--ghost btn--danger" type="submit" name="clear_all" value="1"
-            data-confirm="清除页面里保存的 AI 配置？会回到 .env 或未配置状态（不会删除你的笔记）。">
+            data-confirm="清除页面里保存的 AI 配置？会回到 .env 或未配置状态（不会删除你的笔记）。" data-confirm-ok="清除 AI 配置">
       清除本页配置
     </button>
   </div>
@@ -347,7 +347,7 @@
     <div class="settings-form__actions">
       <button class="btn btn--primary" type="submit">保存提示词</button>
       <button class="btn btn--ghost btn--danger" type="submit" name="reset" value="1"
-              data-confirm="恢复三套提示词为内置默认？已自定义的内容会被清除。">恢复默认</button>
+              data-confirm="恢复三套提示词为内置默认？已自定义的内容会被清除。" data-confirm-ok="恢复默认">恢复默认</button>
     </div>
   </details>
 </form>
@@ -652,7 +652,7 @@
     <div class="ai-usage-actions">
       <a class="btn btn--ghost btn--sm" href="/settings/ai/usage.csv">导出 CSV 明细</a>
       <form method="post" action="/settings/ai/usage/reset"
-            data-confirm="确定重置用量统计？只清空调用记录，不影响 AI 配置。">
+            data-confirm="确定重置用量统计？只清空调用记录，不影响 AI 配置。" data-confirm-ok="重置统计">
         <input type="hidden" name="_csrf" value="{{ csrf }}">
         <button class="btn btn--ghost btn--danger btn--sm" type="submit">重置用量统计</button>
       </form>
@@ -835,7 +835,7 @@
 
         <div class="field field--wide settings-form__actions">
           <button class="btn btn--ghost btn--danger" type="submit" name="reset_appearance" value="1"
-                  data-confirm="只恢复外观默认值（主题色 / 色板 / 明暗模式 / 圆角）？站点名、简介、每页条数等不会动。">只恢复外观默认值</button>
+                  data-confirm="只恢复外观默认值（主题色 / 色板 / 明暗模式 / 圆角）？站点名、简介、每页条数等不会动。" data-confirm-ok="恢复外观">只恢复外观默认值</button>
           <span class="micro">只清外观这一组；浏览器右上角下拉里选过的色板仍会覆盖站点默认</span>
         </div>
       </div>
@@ -843,7 +843,7 @@
     <div class="settings-form__actions">
       <button class="btn btn--primary" type="submit">保存站点信息</button>
       <button class="btn btn--ghost btn--danger" type="submit" name="reset" value="1"
-              data-confirm="清除本页保存的站点信息，恢复 .env / 默认值？（不会删除笔记）">恢复 .env 默认值</button>
+              data-confirm="清除本页保存的站点信息，恢复 .env / 默认值？（不会删除笔记）" data-confirm-ok="恢复默认值">恢复 .env 默认值</button>
     </div>
   </details>
 </form>
@@ -892,7 +892,7 @@
     <div class="settings-form__actions">
       <button class="btn btn--primary" type="submit">修改密码</button>
       <button class="btn btn--ghost btn--danger" type="submit" name="reset_password" value="1"
-              data-confirm="清除本页改的密码，登录回到 .env 里的口令？（不会影响已登录的设备）">清除本页改的密码</button>
+              data-confirm="清除本页改的密码，登录回到 .env 里的口令？（不会影响已登录的设备）" data-confirm-ok="清除密码">清除本页改的密码</button>
     </div>
   </details>
 </form>

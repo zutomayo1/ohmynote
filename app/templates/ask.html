@@ -128,7 +128,7 @@
             <li class="ask-recent__item{{ ' is-active' if conversation and conversation.id == item.id }}">
               <a class="ask-recent__link" href="/ask?c={{ item.id }}">{{ item.title }}</a>
               <span class="ask-recent__meta meta">{{ item.updated_at | rel }}{% if item.message_count %} · {{ item.message_count }} 条{% endif %}</span>
-              <form method="post" action="/ask/delete" data-confirm="删除这次对话？">
+              <form method="post" action="/ask/delete" data-confirm="删除这次对话？" data-confirm-ok="删除对话" data-confirm-danger>
                 <input type="hidden" name="_csrf" value="{{ csrf }}">
                 <input type="hidden" name="conversation_id" value="{{ item.id }}">
                 <button class="icon-btn icon-btn--sm icon-btn--danger" type="submit" title="删除这次对话" aria-label="删除这次对话">{{ icon('trash', 14) }}</button>

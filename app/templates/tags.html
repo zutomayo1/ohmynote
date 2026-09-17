@@ -76,7 +76,7 @@
             <input class="input tag-manage__input" id="tag-rename-{{ loop.index }}" type="text" name="new" value="{{ item.name }}" maxlength="40" required>
             <button class="btn btn--ghost btn--sm" type="submit">重命名</button>
           </form>
-          <form method="post" action="/tags/delete" data-confirm="删除标签《{{ item.name }}》？所有笔记上的这个标签都会被移除。">
+          <form method="post" action="/tags/delete" data-confirm="删除标签《{{ item.name }}》？所有笔记上的这个标签都会被移除。" data-confirm-ok="删除标签" data-confirm-danger>
             <input type="hidden" name="_csrf" value="{{ csrf }}">
             <input type="hidden" name="name" value="{{ item.name }}">
             <button class="btn btn--danger btn--sm" type="submit">🗑 删除</button>

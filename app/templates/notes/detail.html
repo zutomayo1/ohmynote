@@ -146,7 +146,7 @@
     </details>
 
     <form method="post" action="{{ note.url }}/delete"
-          data-confirm="把《{{ note.title }}》移入回收站？{% if _img_count %}正文引用了 {{ _img_count }} 张图片，删完可以去「图片」页清理。{% endif %}">
+          data-confirm="把《{{ note.title }}》移入回收站？{% if _img_count %}正文引用了 {{ _img_count }} 张图片，删完可以去「图片」页清理。{% endif %}" data-confirm-ok="移入回收站">
       <input type="hidden" name="_csrf" value="{{ csrf }}">
       <input type="hidden" name="next" value="/notes">
       <button class="btn btn--ghost btn--danger btn--icon" type="submit" title="移入回收站" aria-label="移入回收站">{{ icon('trash', 16) }}</button>
@@ -189,7 +189,7 @@
                 <span class="related__row">
                   <a href="{{ item.url }}">{{ item.title }}</a>
                   <form class="link-del" method="post" action="{{ note.url }}/unlink"
-                        data-confirm="取消指向《{{ item.title }}》的链接？正文里的 [[链接]] 文字会被删掉（可在历史版本里找回）">
+                        data-confirm="取消指向《{{ item.title }}》的链接？正文里的 [[链接]] 文字会被删掉（可在历史版本里找回）" data-confirm-ok="取消链接">
                     <input type="hidden" name="_csrf" value="{{ csrf }}">
                     <input type="hidden" name="next" value="{{ back }}">
                     <input type="hidden" name="target_id" value="{{ item.note_id }}">

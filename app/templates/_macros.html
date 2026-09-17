@@ -124,7 +124,7 @@
           </form>
           <form method="post" action="{{ note.url }}/delete"
               data-leave-anim=".note-card"
-              data-confirm="把《{{ note.title }}》移入回收站？{% set _imgs = note.content | image_count %}{% if _imgs %}正文引用了 {{ _imgs }} 张图片，删完可以去「图片」页清理。{% endif %}">
+              data-confirm="把《{{ note.title }}》移入回收站？{% set _imgs = note.content | image_count %}{% if _imgs %}正文引用了 {{ _imgs }} 张图片，删完可以去「图片」页清理。{% endif %}" data-confirm-ok="移入回收站">
             <input type="hidden" name="_csrf" value="{{ csrf }}">
             <input type="hidden" name="next" value="{{ back }}">
             <button class="icon-btn icon-btn--sm icon-btn--danger" type="submit" title="移入回收站">{{ icon('trash', 15) }}</button>
