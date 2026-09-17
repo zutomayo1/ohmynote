@@ -3629,8 +3629,6 @@ a.archive-month__label:hover { color: var(--brand); }
   .codehilite, .prose pre { border: 1px solid #ccc; box-shadow: none; }
   a { color: #000; text-decoration: none; } }
 
-@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; } }
-
 /* ===== 补丁：backup3（第四轮，已合并） ===== */
 /* ===== 补丁：backup3（D 组）=====
    备份页风险提示 + 脱敏徽章 + 「立即备份 / 脱敏备份」并排。
@@ -7920,15 +7918,6 @@ body.focus-reading .post-rail { opacity: 0; visibility: hidden; }
 body.focus-reading .post-after,
 body.focus-reading .post-nav,
 body.focus-reading .site-footer { opacity: 0; visibility: hidden; }
-
-@media (prefers-reduced-motion: reduce) {
-  body[data-page="post"] .site-header,
-  body[data-page="post"] .site-footer,
-  body[data-page="post"] .post-side,
-  body[data-page="post"] .post-rail,
-  body[data-page="post"] .post-after,
-  body[data-page="post"] .post-nav { transition: none; }
-}
 
 /* ===== 补丁：主按钮底色调浅（2026-09-16，已合并） ===== */
 

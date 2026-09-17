@@ -137,7 +137,7 @@
   /* ============ 4) 文章卡入场动效（featured 渐显更慢更深） ============ */
   function setupReveal() {
     var list = document.querySelector('.blog-list');
-    if (!list || reduceMotion) { return; }
+    if (!list) { return; }   /* 站主要求：入场动效无视系统「减少动态效果」 */
     var cards = list.querySelectorAll('.post-card');
     if (!cards.length) { return; }
 
@@ -164,7 +164,7 @@
   /* ============ 5) 归档时间轴条目入场 ============ */
   function setupTimelineReveal() {
     var timeline = document.querySelector('.timeline');
-    if (!timeline || reduceMotion) { return; }
+    if (!timeline) { return; }   /* 站主要求：时间轴入场无视系统设置 */
     var items = timeline.querySelectorAll('.timeline__item');
     if (!items.length) { return; }
 
@@ -251,7 +251,7 @@
       var animating = false;
       if (name && body) {
         name.addEventListener('click', function (event) {
-          if (reduceMotion || animating) { return; }   // 退化：原生瞬切
+          if (animating) { return; }   // 动画中连点忽略（reduceMotion 已按站主要求放开）
           event.preventDefault();                       // 自己播动画
           animating = true;
           if (!d.open) {
