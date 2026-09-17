@@ -244,35 +244,59 @@ _HEX_FULL = __import__("re").compile(r"#([0-9a-fA-F]{6})")
 
 
 def custom_brand_css(hex_color: str) -> str:
-    """自定义主题色 → 覆盖 --brand 三件套的 CSS（亮 / 暗各一组）。
+    """自定义主题色 → 从种子色推导**整套色板**（亮 / 暗各一组）。
 
-    作用域用 ``html:root``（特异性 0,1,1 / 0,2,1）：稳赢默认令牌与任何
-    ``[data-palette]`` 色板规则——否则浏览器 localStorage 里存过色板选择
-    （页头下拉点过一次就会存）时，自定义色会被它排除而「看起来没生效」。
-    自定义启用时页头色板下拉同时隐藏（见 base.html），不会出现死 UI。
+    与六套内置色板同级：背景纸色 / 文字 / 边框 / 品牌三件套 / 强调色全部
+    从种子色的色相衍生（近灰种子自动退化为纯灰中性色）。作用域
+    ``html:root``（特异性 0,1,1 / 0,2,1）稳赢默认令牌与 data-palette 规则，
+    浏览器 localStorage 里存过页头色板选择也不会盖掉它。
     """
+    import colorsys
+
     m = _HEX_FULL.fullmatch((hex_color or "").strip())
     if not m:
         return ""
     n = int(m.group(1), 16)
-    rgb = ((n >> 16) & 255, (n >> 8) & 255, n & 255)
+    r, g, b = ((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255
+    h, l_seed, s = colorsys.rgb_to_hls(r, g, b)
+    nf = min(1.0, s / 0.10)   # 近灰种子：衍生中性色退化为纯灰
 
-    def mix(other, t):
-        return "#{:02X}{:02X}{:02X}".format(
-            *(round(a + (b - a) * t) for a, b in zip(rgb, other))
-        )
+    def hx(hh, ss, ll):
+        rr, gg, bb = colorsys.hls_to_rgb(hh % 1.0, min(max(ll, 0.0), 1.0), min(max(ss, 0.0), 1.0))
+        return "#{:02X}{:02X}{:02X}".format(round(rr * 255), round(gg * 255), round(bb * 255))
 
-    white, black = (255, 255, 255), (24, 18, 14)
-    return "\n".join(
-        (
-            "html:root{{--brand:{b};--brand-dark:{bd};--brand-soft:{bs}}}".format(
-                b=hex_color.strip().upper(), bd=mix(black, 0.18), bs=mix(white, 0.82)
-            ),
-            'html:root[data-theme="dark"]{{--brand:{b};--brand-dark:{bd};--brand-soft:{bs}}}'.format(
-                b=mix(white, 0.28), bd=mix(white, 0.44), bs=mix(black, 0.80)
-            ),
-        )
+    def rgba(hh, ss, ll, a):
+        rr, gg, bb = colorsys.hls_to_rgb(hh % 1.0, min(max(ll, 0.0), 1.0), min(max(ss, 0.0), 1.0))
+        return "rgba({}, {}, {}, {})".format(round(rr * 255), round(gg * 255), round(bb * 255), a)
+
+    ah = (h + 0.5) % 1.0   # 强调色取补色相
+    light = (
+        "html:root{{--bg:{bg};--bg-soft:{bgs};--surface:{sf};--surface-2:{sf2};"
+        "--ink:{ink};--ink-2:{ink2};--ink-3:{ink3};--line:{ln};--line-strong:{lns};"
+        "--brand:{b};--brand-dark:{bd};--brand-soft:{bs};"
+        "--accent:{ac};--accent-soft:{acs};--header-bg:{hb};}}"
+    ).format(
+        bg=hx(h, .22 * nf, .955), bgs=hx(h, .24 * nf, .918), sf=hx(h, .20 * nf, .975),
+        sf2=hx(h, .22 * nf, .935), ink=hx(h, .16 * nf, .17), ink2=hx(h, .13 * nf, .34),
+        ink3=hx(h, .10 * nf, .52), ln=hx(h, .24 * nf, .865), lns=hx(h, .24 * nf, .80),
+        b=hex_color.strip().upper(), bd=hx(h, s, max(l_seed - .13, .18)),
+        bs=hx(h, min(s + .05, .5), .93), ac=hx(ah, .40 * nf + .02, .42),
+        acs=hx(ah, .30 * nf, .92), hb=rgba(h, .22 * nf, .955, .82),
     )
+    dark = (
+        'html:root[data-theme="dark"]{{--bg:{bg};--bg-soft:{bgs};--surface:{sf};--surface-2:{sf2};'
+        "--ink:{ink};--ink-2:{ink2};--ink-3:{ink3};--line:{ln};--line-strong:{lns};"
+        "--brand:{b};--brand-dark:{bd};--brand-soft:{bs};"
+        "--accent:{ac};--accent-soft:{acs};--header-bg:{hb};}}"
+    ).format(
+        bg=hx(h, .16 * nf, .105), bgs=hx(h, .15 * nf, .14), sf=hx(h, .16 * nf, .16),
+        sf2=hx(h, .15 * nf, .19), ink=hx(h, .12 * nf, .89), ink2=hx(h, .12 * nf, .71),
+        ink3=hx(h, .10 * nf, .55), ln=hx(h, .14 * nf, .22), lns=hx(h, .14 * nf, .27),
+        b=hx(h, min(s * .75, .5), .62), bd=hx(h, min(s * .7, .45), .72),
+        bs=hx(h, .20 * nf, .17), ac=hx(ah, .28 * nf, .62),
+        acs=hx(ah, .20 * nf, .17), hb=rgba(h, .16 * nf, .105, .82),
+    )
+    return light + "\n" + dark
 
 
 templates.env.globals.update(

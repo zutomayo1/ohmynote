@@ -21,7 +21,7 @@
   <link rel="stylesheet" href="/static/css/style.css?v={{ asset_v }}">
   <link rel="stylesheet" href="/static/css/highlight.css?v={{ asset_v }}">
   {# 自定义主题色：紧跟样式表之后，权重刚好压过默认令牌、让位给访客显式选的调色板 #}
-  {% if settings.appearance_custom %}<style nonce="{{ nonce }}">{{ custom_brand_css(settings.appearance_custom) }}</style>{% endif %}
+  {% if settings.appearance_custom %}<style nonce="{{ nonce }}">{{ custom_brand_css(settings.appearance_custom) | safe }}</style>{% endif %}
   <script nonce="{{ nonce }}">
     // 首屏之前就把主题定好，避免深色模式闪白
     (function () {

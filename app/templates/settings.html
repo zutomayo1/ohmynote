@@ -810,7 +810,7 @@
             <input type="color" id="appearance-custom-picker" value="{{ site_form_values.get('appearance_custom', site.appearance_custom) or '#B5533C' }}" aria-label="自定义主题色取色器">
             <input class="input" type="text" name="appearance_custom" id="appearance-custom-text" value="{{ site_form_values.get('appearance_custom', site.appearance_custom) }}" placeholder="#B5533C，留空 = 不启用" spellcheck="false">
           </span>
-          <span class="micro">#RRGGBB；启用后优先于外观主题，页头色板下拉会暂时隐藏；取色时全站实时预览</span>
+          <span class="micro">#RRGGBB；启用后生成整套配色（背景 / 文字 / 边框 / 强调色跟随，亮暗各一组），优先于外观主题，页头色板下拉暂时隐藏；取色时全站实时预览</span>
         </label>
 
         <label class="field">
@@ -950,24 +950,70 @@
     if (!picker || !text) { return; }
     var HEX = /^#[0-9a-fA-F]{6}$/;
     var root = document.documentElement;
+    var VARS = ['--bg', '--bg-soft', '--surface', '--surface-2', '--ink', '--ink-2',
+      '--ink-3', '--line', '--line-strong', '--brand', '--brand-dark', '--brand-soft',
+      '--accent', '--accent-soft', '--header-bg'];
     function preview(hex) {
-      if (!HEX.test(hex)) {
-        root.style.removeProperty('--brand');
-        root.style.removeProperty('--brand-dark');
-        root.style.removeProperty('--brand-soft');
+      var m = HEX.exec(hex || '');
+      if (!m) {
+        VARS.forEach(function (p) { root.style.removeProperty(p); });
         return;
       }
-      var n = parseInt(hex.slice(1), 16);
-      var base = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-      function mix(o, t) {
-        return '#' + base.map(function (c, i) {
-          var v = Math.round(c + (o[i] - c) * t);
-          return ('0' + v.toString(16)).slice(-2);
+      var n = parseInt(m[1], 16);
+      var r = ((n >> 16) & 255) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+      var max = Math.max(r, g, b), min = Math.min(r, g, b), h, s, l = (max + min) / 2;
+      if (max === min) { h = 0; s = 0; } else {
+        var d = max - min;
+        s = l > .5 ? d / (2 - max - min) : d / (max + min);
+        h = max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+        h /= 6;
+      }
+      var nf = Math.min(1, s / .10);
+      function t(hh, v) {
+        if (hh < 0) { hh += 1; } if (hh > 1) { hh -= 1; }
+        var q = v < .5 ? v * (1 + s2(v)) : 0;
+        return q;
+      }
+      function hx(hh, ss, ll) {
+        function chan(v) {
+          var q = ll < .5 ? ll * (1 + ss) : ll + ss - ll * ss, p = 2 * ll - q;
+          var kk = v; if (kk < 0) { kk += 1; } if (kk > 1) { kk -= 1; }
+          if (kk < 1 / 6) { return p + (q - p) * 6 * kk; }
+          if (kk < .5) { return q; }
+          if (kk < 2 / 3) { return p + (q - p) * (2 / 3 - kk) * 6; }
+          return p;
+        }
+        return '#' + [chan(hh + 1 / 3), chan(hh), chan(hh - 1 / 3)].map(function (c) {
+          var v = Math.round(c * 255).toString(16);
+          return v.length < 2 ? '0' + v : v;
         }).join('');
       }
-      root.style.setProperty('--brand', hex);
-      root.style.setProperty('--brand-dark', mix([24, 18, 14], .18));
-      root.style.setProperty('--brand-soft', mix([255, 255, 255], .82));
+      function rgba(hh, ss, ll, a) {
+        function chan(v) {
+          var q = ll < .5 ? ll * (1 + ss) : ll + ss - ll * ss, p = 2 * ll - q;
+          var kk = v; if (kk < 0) { kk += 1; } if (kk > 1) { kk -= 1; }
+          if (kk < 1 / 6) { return p + (q - p) * 6 * kk; }
+          if (kk < .5) { return q; }
+          if (kk < 2 / 3) { return p + (q - p) * (2 / 3 - kk) * 6; }
+          return p;
+        }
+        return 'rgba(' + [chan(hh + 1 / 3), chan(hh), chan(hh - 1 / 3)].map(function (c) {
+          return Math.round(c * 255);
+        }).join(', ') + ', ' + a + ')';
+      }
+      var ah = (h + .5) % 1;
+      var vars = {
+        '--bg': hx(h, .22 * nf, .955), '--bg-soft': hx(h, .24 * nf, .918),
+        '--surface': hx(h, .20 * nf, .975), '--surface-2': hx(h, .22 * nf, .935),
+        '--ink': hx(h, .16 * nf, .17), '--ink-2': hx(h, .13 * nf, .34),
+        '--ink-3': hx(h, .10 * nf, .52), '--line': hx(h, .24 * nf, .865),
+        '--line-strong': hx(h, .24 * nf, .80), '--brand': hex.toUpperCase(),
+        '--brand-dark': hx(h, s, Math.max(l - .13, .18)),
+        '--brand-soft': hx(h, Math.min(s + .05, .5), .93),
+        '--accent': hx(ah, .40 * nf + .02, .42), '--accent-soft': hx(ah, .30 * nf, .92),
+        '--header-bg': rgba(h, .22 * nf, .955, .82)
+      };
+      VARS.forEach(function (k) { root.style.setProperty(k, vars[k]); });
     }
     picker.addEventListener('input', function () {
       text.value = picker.value;
