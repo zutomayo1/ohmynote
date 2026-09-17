@@ -8134,3 +8134,58 @@ details.warning[open] > summary, details.danger[open] > summary, details.quote[o
 
 .link-like { color: var(--brand); text-decoration: underline; cursor: pointer; }
 .link-like:hover { filter: brightness(1.05); }
+
+/* ===== 补丁：内联 SVG 查看容器（2026-09-17） =====
+   mermaid/draw.io 粘进正文的 <svg> 往往比正文列宽：容器横向滚动（底部滚动条），
+   右上角悬浮「放大查看 / 下载」两个按钮；无 JS 时按钮隐藏、滚动仍可用。 */
+.svg-view {
+  position: relative;
+  margin: var(--sp-5) 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.svg-view__scroll {
+  overflow-x: auto;
+  padding: 10px 12px;
+  scrollbar-width: thin;
+}
+.svg-view__scroll::-webkit-scrollbar { height: 8px; }
+.svg-view__scroll::-webkit-scrollbar-track { background: transparent; }
+.svg-view__scroll::-webkit-scrollbar-thumb {
+  background: var(--brand-soft);
+  border-radius: 4px;
+}
+.svg-view__scroll::-webkit-scrollbar-thumb:hover { background: var(--brand); }
+.svg-view__scroll > svg { display: block; max-width: none; height: auto; }
+
+.svg-view__actions {
+  position: absolute; top: 8px; right: 8px; z-index: 2;
+  display: flex; gap: 6px;
+}
+.svg-view__btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; padding: 0;
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--ink-2); cursor: pointer;
+  box-shadow: var(--sh-1);
+}
+.svg-view__btn:hover { color: var(--brand); border-color: var(--brand); }
+.svg-view__btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+html:not(.js) .svg-view__actions { display: none; }
+
+/* 放大查看的灯箱 */
+.svg-lightbox {
+  border: none; border-radius: var(--radius); padding: 12px;
+  background: var(--surface); color: var(--ink);
+  /* 固定宽度：dialog 默认宽随内容、而 stage 里的 svg 是 width:100%，
+     会互相依赖收缩到很小（实测 194px）——必须给 dialog 定宽 */
+  width: min(1100px, 94vw);
+  max-height: 90vh;
+}
+.svg-lightbox::backdrop { background: var(--overlay); }
+.svg-lightbox__stage { overflow: auto; max-width: calc(94vw - 24px); max-height: calc(90vh - 24px); }
+.svg-lightbox__stage svg { display: block; width: 100%; height: auto; }
+.svg-lightbox__hint {
+  margin: 8px 0 0; text-align: center; color: var(--ink-3); font-size: 12.5px;
+}

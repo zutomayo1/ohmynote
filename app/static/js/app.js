@@ -1280,5 +1280,58 @@
     safe(initToc); safe(initOffline); safe(initTitleAutoSize); safe(initKbdNav); safe(initMenuGroup);
     safe(function () { enhanceContent(document); });
     safe(initToolbarAutoSubmit);
+    safe(initSvgView);
   });
+
+  // ===== 内联 SVG：放大查看（灯箱）与下载 =====
+  // 容器与按钮由渲染层输出（markdown_render._svg_view_markup），这里只接事件。
+  function initSvgView() {
+    var lightbox = null;
+
+    function ensureLightbox() {
+      if (lightbox) { return lightbox; }
+      lightbox = document.createElement('dialog');
+      lightbox.className = 'svg-lightbox';
+      lightbox.innerHTML =
+        '<div class="svg-lightbox__stage"></div>' +
+        '<p class="svg-lightbox__hint">Esc 或点击空白处关闭 · 图内可滚动</p>';
+      document.body.appendChild(lightbox);
+      // 点空白处关闭（点在 dialog 自身上 = 点到 padding/遮罩层）
+      lightbox.addEventListener('click', function (event) {
+        if (event.target === lightbox) { lightbox.close(); }
+      });
+      return lightbox;
+    }
+
+    document.addEventListener('click', function (event) {
+      var viewBtn = event.target.closest ? event.target.closest('[data-svg-view]') : null;
+      if (viewBtn) {
+        var fig = viewBtn.closest('.svg-view');
+        var svg = fig && fig.querySelector('svg');
+        if (!svg) { return; }
+        var box = ensureLightbox();
+        var stage = box.querySelector('.svg-lightbox__stage');
+        stage.innerHTML = '';
+        stage.appendChild(svg.cloneNode(true));
+        if (typeof box.showModal === 'function') { box.showModal(); }
+        return;
+      }
+      var dlBtn = event.target.closest ? event.target.closest('[data-svg-download]') : null;
+      if (dlBtn) {
+        var fig2 = dlBtn.closest('.svg-view');
+        var svg2 = fig2 && fig2.querySelector('svg');
+        if (!svg2) { return; }
+        var blob = new Blob([svg2.outerHTML], { type: 'image/svg+xml;charset=utf-8' });
+        var link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        var heading = document.querySelector('.post-title, .note-title, h1');
+        var name = (heading ? heading.textContent : 'diagram').trim().slice(0, 40) || 'diagram';
+        link.download = name.replace(/[\\/:*?"<>|]/g, '_') + '.svg';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(function () { URL.revokeObjectURL(link.href); }, 2000);
+      }
+    });
+  }
 })();

@@ -482,6 +482,135 @@ def make_excerpt(source: str, length: int = 110) -> str:
 _MERMAID_FENCE_RE = re.compile(r"^\s{0,3}(`{3,}|~{3,})\s*mermaid\s*$")
 
 
+# ---------------------------------------------------------------------------
+# 内联 SVG：<svg>...</svg> 清洗后放行（mermaid / draw.io 导出粘贴进正文的场景）
+# ---------------------------------------------------------------------------
+_SVG_OPEN_RE = re.compile(r"<svg\b", re.IGNORECASE)
+_SVG_CLOSE_RE = re.compile(r"</svg\s*>", re.IGNORECASE)
+_SVG_TOKEN_RE = re.compile(r"\{\{svg:(\d+)\}\}")
+# SVG 里的攻击面：脚本、外链可执行对象、事件属性、javascript: URL——全部剥掉
+_SVG_DROP_BLOCK_RE = re.compile(
+    r"<(script|iframe|object|embed|foreignObject)\b[^>]*>.*?</\1\s*>", re.IGNORECASE | re.DOTALL)
+_SVG_DROP_ALONE_RE = re.compile(r"<(script|iframe|object|embed)\b[^>]*/>", re.IGNORECASE)
+_SVG_ON_ATTR_RE = re.compile(r"\son\w+\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s>]+)", re.IGNORECASE)
+_SVG_JS_URL_RE = re.compile(
+    r"((?:xlink:)?href\s*=\s*|src\s*=\s*)(\"|')\s*javascript:[^\"']*(\2)", re.IGNORECASE)
+
+
+def _sanitize_svg_fragment(svg: str) -> str:
+    """清洗一段 SVG 源码，只去掉可执行的部分，图形内容原样保留。"""
+    cleaned = _SVG_DROP_BLOCK_RE.sub("", svg)
+    cleaned = _SVG_DROP_ALONE_RE.sub("", cleaned)
+    cleaned = _SVG_ON_ATTR_RE.sub("", cleaned)
+    cleaned = _SVG_JS_URL_RE.sub(r"\1\2\3", cleaned)
+    return cleaned
+
+
+def _extract_inline_svgs(source: str) -> tuple[str, list[str]]:
+    """把围栏代码块外的 ``<svg>...</svg>`` 整块抽走，换成 ``{{svg:N}}`` 占位符。
+
+    必须在 escape_raw_html 之前做；栈式配对容忍嵌套，占位符不含 ``<``，
+    后面的转义与 Markdown 语法都碰不到它。
+    """
+    if "<svg" not in (source or "").lower():
+        return source or "", []
+    lines = (source or "").split("\n")
+    out: list[str] = []
+    blocks: list[str] = []
+    fence: str | None = None
+    depth = 0
+    current: list[str] = []
+    for line in lines:
+        if depth == 0:
+            fence_match = _FENCE_RE.match(line)
+            if fence is not None:
+                # mermaid 抽取之后才进来，这里仍要跳过残余的普通围栏
+                if fence_match and fence_match.group(1)[0] * 3 == fence and not fence_match.group(2).strip():
+                    fence = None
+                out.append(line)
+                continue
+            if fence_match:
+                fence = fence_match.group(1)[0] * 3
+                out.append(line)
+                continue
+            if "<svg" in line.lower():
+                opens = len(_SVG_OPEN_RE.findall(line))
+                closes = len(_SVG_CLOSE_RE.findall(line))
+                prefix = line[: line.lower().index("<svg")]
+                if opens > closes:
+                    depth = opens - closes
+                    # current[0] 必须含开标签——闭合时 blocks[-1] 会被 join(current) 覆盖，
+                    # 开标签只在这一行出现，丢了整张图就只剩内容没有 <svg>
+                    current = [line[line.lower().index("<svg"):]]
+                    out.append(prefix)
+                    out.append(f"{{{{svg:{len(blocks)}}}}}")
+                    blocks.append("")
+                    continue
+                # 自闭合 / 同行闭合：整行可能是 <svg…></svg>，也整块抽走
+                out.append(prefix)
+                out.append(f"{{{{svg:{len(blocks)}}}}}")
+                blocks.append(line[line.lower().index("<svg"):])
+                continue
+            out.append(line)
+            continue
+        # svg 收集中
+        depth += len(_SVG_OPEN_RE.findall(line)) - len(_SVG_CLOSE_RE.findall(line))
+        if depth <= 0:
+            close_index = line.lower().rfind("</svg")
+            close_end = line.index(">", close_index) + 1 if close_index >= 0 else len(line)
+            current.append(line[:close_end])
+            blocks[-1] = "\n".join(current)
+            depth = 0
+            out.append(line[close_end:])
+            continue
+        current.append(line)
+    return "\n".join(out), blocks
+
+
+_SVG_VIEW_ICONS = {
+    # 内联图标（currentColor，跟随主题）：眼睛 = 放大查看，托盘箭头 = 下载
+    "view": '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">'
+            '<path fill="currentColor" d="M12 5C6.5 5 2.6 9.6 1.6 11.4a1 1 0 0 0 0 1.2C2.6 14.4 6.5 19 12 19'
+            's9.4-4.6 10.4-6.4a1 1 0 0 0 0-1.2C21.4 9.6 17.5 5 12 5zm0 11.2a4.2 4.2 0 1 1 0-8.4 4.2 4.2 0 0 1 0 8.4z"/>'
+            '<circle cx="12" cy="12" r="2.1" fill="currentColor"/></svg>',
+    "download": '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">'
+                '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" '
+                'stroke-linejoin="round" d="M12 3v11m0 0-4.2-4.2M12 14l4.2-4.2M4 17.5V19a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1.5"/>'
+                "</svg>",
+}
+
+
+def _svg_view_markup(svg: str) -> str:
+    """SVG 的查看容器：右上角「放大 / 下载」按钮 + 可横向滚动的图区。
+
+    容器在渲染层输出（无 JS 也有横向滚动条，按钮在无 JS 环境由 CSS 隐藏）；
+    放大与下载的行为由 app.js 的事件委托接管。
+    """
+    return (
+        '<figure class="svg-view">'
+        '<div class="svg-view__actions">'
+        '<button type="button" class="svg-view__btn" data-svg-view title="放大查看" '
+        'aria-label="放大查看这张图">' + _SVG_VIEW_ICONS["view"] + "</button>"
+        '<button type="button" class="svg-view__btn" data-svg-download title="下载 SVG" '
+        'aria-label="下载这张 SVG 图">' + _SVG_VIEW_ICONS["download"] + "</button>"
+        "</div>"
+        '<div class="svg-view__scroll">' + svg + "</div>"
+        "</figure>"
+    )
+
+
+def _restore_inline_svgs(rendered: str, blocks: list[str]) -> str:
+    """把 ``{{svg:N}}`` 占位符换回「清洗后的 SVG + 查看容器」。"""
+
+    def swap(match: re.Match[str]) -> str:
+        index = int(match.group(1))
+        code = blocks[index] if 0 <= index < len(blocks) else ""
+        return _svg_view_markup(_sanitize_svg_fragment(code))
+
+    rendered = re.sub(r"<p>\s*\{\{svg:(\d+)\}\}\s*</p>", swap, rendered)
+    return _SVG_TOKEN_RE.sub(swap, rendered)
+
+
 def _extract_mermaid_blocks(source: str) -> tuple[str, list[str]]:
     """把 ```` ```mermaid ```` 围栏抽出来换成 ``{{mm:N}}`` 占位符。
 
@@ -717,6 +846,9 @@ def render(
     map_outside_code(body, _probe_math)
     has_math = bool(_math_hits)
 
+    # 0.7) 内联 SVG 抽走（清洗后最后原样放回；其余裸 HTML 照旧转义）
+    body, svg_blocks = _extract_inline_svgs(body)
+
     # 1) 禁用裸 HTML + 把 `#标签` 这类写法从「标题」里救出来
     body = map_outside_code(body, lambda chunk: normalise_headings(escape_raw_html(chunk)))
     # 1b) `> [!NOTE]` → admonition 语法（跳过代码块，见 rewrite_callouts 注释）
@@ -743,6 +875,10 @@ def render(
         # 放在危险标签清洗之后：我们自己构造的 div 是唯一允许出现的原始节点
         rendered = _restore_mermaid(rendered, mermaid_blocks)
     rendered = _sanitize_urls(rendered)
+    if svg_blocks:
+        # 放在 _neutralise_dangerous_tags / _sanitize_urls 之后：SVG 已自行清洗，
+        # 原样放回不再过其它清洗（避免嵌套语义被二次处理）
+        rendered = _restore_inline_svgs(rendered, svg_blocks)
     rendered = _mark_task_checkboxes(rendered)
     rendered = _externalize_links(rendered)
     rendered = _lazy_images(rendered)

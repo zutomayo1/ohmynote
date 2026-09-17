@@ -50,12 +50,15 @@ def test_closed_inline_code_still_works():
 
 
 def test_safety_net_neutralises_dangerous_tags():
-    """兜底防线：即便某处漏了转义，也不允许 script / iframe / style / svg 出现在正文里。"""
-    for source in ["<iframe src=x></iframe>", "<style>body{}</style>", "<svg onload=alert(1)></svg>"]:
+    """兜底防线：script / iframe / style 一律不出现在正文里；svg 放行但必须被清洗
+    （内联 SVG 支持后，事件属性由 _sanitize_svg_fragment 剥掉，图形本体保留）。"""
+    for source in ["<iframe src=x></iframe>", "<style>body{}</style>"]:
         html = render(source).html
         assert "<iframe" not in html
         assert "<style" not in html
-        assert "<svg" not in html
+    html = render("<svg onload=alert(1)></svg>").html
+    assert "onload" not in html, "SVG 的事件属性必须被剥掉"
+    assert "<script" not in html
 
 
 def test_raw_html_with_handler_is_escaped_not_executed():
