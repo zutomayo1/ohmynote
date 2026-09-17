@@ -35,6 +35,7 @@ class _FakeWebDAV(http.server.BaseHTTPRequestHandler):
     uploads: list
     deletes: list
     mkcols: list
+    missing_parent: int = 409      # 父目录不存在时回什么（坚果云实测回 404）
 
     def log_message(self, *args):  # 静音
         pass
@@ -81,7 +82,7 @@ class _FakeWebDAV(http.server.BaseHTTPRequestHandler):
         payload = self._body()
         target = self._target()
         if not target.parent.is_dir():
-            return self._respond(409)          # 父目录不存在 → 触发客户端 MKCOL
+            return self._respond(type(self).missing_parent)   # 409 = Apache，404 = 坚果云
         target.write_bytes(payload)
         type(self).uploads.append(target.name)
         self._respond(201)
@@ -139,26 +140,45 @@ class _FakeWebDAV(http.server.BaseHTTPRequestHandler):
         self._respond(200, target.read_bytes(), "application/octet-stream")
 
 
-@pytest.fixture()
-def dav(tmp_path):
-    """起一个假 WebDAV：用户名 alice / 密码 s3cret。"""
-    root = tmp_path / "dav"
-    root.mkdir()
+def _start_dav(root: Path, **attrs):
+    root.mkdir(parents=True, exist_ok=True)
     handler = type(
         "Handler", (_FakeWebDAV,),
-        {"root": root, "user": "alice", "password": "s3cret", "uploads": [], "deletes": [], "mkcols": []},
+        {"root": root, "user": "alice", "password": "s3cret",
+         "uploads": [], "deletes": [], "mkcols": [], **attrs},
     )
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, {
+        "url": f"http://127.0.0.1:{server.server_address[1]}/",
+        "dir": root,
+        "handler": handler,
+    }
+
+
+def _stop_dav(server):
+    server.shutdown()
+    server.server_close()
+
+
+@pytest.fixture()
+def dav(tmp_path):
+    """假 WebDAV（Apache 风格：父目录缺失回 409）。用户名 alice / 密码 s3cret。"""
+    server, info = _start_dav(tmp_path / "dav")
     try:
-        yield {
-            "url": f"http://127.0.0.1:{server.server_address[1]}/",
-            "dir": root,
-            "handler": handler,
-        }
+        yield info
     finally:
-        server.shutdown()
-        server.server_close()
+        _stop_dav(server)
+
+
+@pytest.fixture()
+def dav404(tmp_path):
+    """假 WebDAV（**坚果云风格：父目录缺失回 404**）—— 实测踩到的口径差异。"""
+    server, info = _start_dav(tmp_path / "dav404", missing_parent=404)
+    try:
+        yield info
+    finally:
+        _stop_dav(server)
 
 
 def _cfg(dav, **over) -> dict:
@@ -321,11 +341,71 @@ def test_upload_creates_missing_directory(auth_client, dav):
         remote_backup.reset(conn)
         _save(conn, dav, url=dav["url"] + "sub/dir/")
         result = remote_backup.run_upload(conn, trigger="manual")
-        # 一级目录不存在时自动建；这里是两级，第二次 MKCOL 仍然只建一级 → 明确报错即可
-        if not result["ok"]:
-            assert "409" in result["message"] or "目录" in result["message"], result["message"]
-        else:
-            assert (dav["dir"] / "sub").is_dir()
+        assert result["ok"], result["message"]
+        assert (dav["dir"] / "sub" / "dir" / result["name"]).is_file()
+
+
+def test_upload_self_heals_when_server_returns_404(auth_client, dav404):
+    """坚果云对「目录不存在」回 404（不是 409）—— 也必须自动建目录后重试。
+
+    这是真实故障：用户填了 …/dav/inknote/，库里/网盘上都没有这个目录，
+    之前只认 409 → 直接报「地址不存在（404）」，看起来像密码或地址错了。
+    """
+    with db_mod.db() as conn:
+        remote_backup.reset(conn)
+        _save(conn, dav404, url=dav404["url"] + "inknote/")
+        result = remote_backup.run_upload(conn, trigger="manual")
+        assert result["ok"], result["message"]
+        assert (dav404["dir"] / "inknote" / result["name"]).is_file(), "目录没建出来或文件没传上"
+        assert "inknote" in dav404["handler"].mkcols
+
+
+def test_upload_creates_nested_levels(auth_client, dav):
+    """多级目录一次建出来（a/b/c）：用户往往直接填深层路径。"""
+    with db_mod.db() as conn:
+        remote_backup.reset(conn)
+        _save(conn, dav, url=dav["url"] + "a/b/c/")
+        result = remote_backup.run_upload(conn, trigger="manual")
+        assert result["ok"], result["message"]
+        assert (dav["dir"] / "a" / "b" / "c" / result["name"]).is_file()
+        listing = sorted(str(p.relative_to(dav["dir"])) for p in dav["dir"].rglob("*"))
+        walked = dav["dir"]
+        for level in ("a", "b", "c"):
+            walked = walked / level          # 逐级往下走（写成 root/<level> 是错的）
+            assert walked.is_dir(), f"{level} 没建出来；实际目录：{listing}"
+
+
+def test_chinese_directory_is_percent_encoded(auth_client, dav):
+    """中文目录名要转成 %XX：坚果云的根目录就叫「我的坚果云」，且官方明说不支持中文。"""
+    with db_mod.db() as conn:
+        remote_backup.reset(conn)
+        saved = remote_backup.save(conn, _cfg(dav, url=dav["url"] + "我的坚果云/inknote/"))
+        assert "%E6%88%91%E7%9A%84%E5%9D%9A%E6%9E%9C%E4%BA%91" in saved["url"], saved["url"]
+        result = remote_backup.run_upload(conn, trigger="manual")
+        assert result["ok"], result["message"]
+        landed = dav["dir"] / "我的坚果云" / "inknote" / result["name"]
+        assert landed.is_file(), "中文目录里的文件没落地"
+
+
+def test_probe_tells_you_which_side_is_missing(auth_client, dav):
+    """404 的诊断要能区分「目标目录没建」和「父目录都不存在」。"""
+    with db_mod.db() as conn:
+        remote_backup.reset(conn)
+        # 父目录存在、目标不存在 → 提示可以自动创建
+        missing = remote_backup.probe(_cfg(dav, url=dav["url"] + "missing/"))
+        assert not missing["ok"]
+        assert "父目录是存在的" in missing["message"] and "自动创建" in missing["message"]
+        # 父目录也不存在 → 明确说地址写错了
+        deep = remote_backup.probe(_cfg(dav, url=dav["url"] + "nope/deep/"))
+        assert not deep["ok"]
+        assert "父目录也不存在" in deep["message"]
+
+
+def test_jianguoyun_hint_only_for_jianguoyun():
+    """坚果云的目录结构提示只对坚果云地址给，别污染别的服务端。"""
+    assert remote_backup._host_hint({"url": "https://dav.jianguoyun.com/dav/x/"})
+    assert remote_backup._host_hint({"url": "http://192.168.1.5/dav/"}) == ""
+    assert remote_backup._host_hint({"url": "https://cloud.example.com/remote.php/dav/"}) == ""
 
 
 def test_prune_only_removes_our_own_backups(auth_client, dav):

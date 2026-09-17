@@ -125,6 +125,7 @@ def validate(values: dict) -> dict:
             raise RemoteError("地址里缺少主机名")
         if not url.endswith("/"):
             url += "/"          # 统一当成「目录」，拼文件名时才不会吃掉最后一段
+        url = _encode_path(url)   # 中文目录名 → %XX（坚果云「我的坚果云」这类）
 
     # 注意用 `is None` 判空而不是 `or`：0 是合法值（= 只手动上传），
     # 写 `values.get(...) or ""` 会把 0 当成没填、静默回落到 24 小时（被测试抓过）。
@@ -272,14 +273,61 @@ def _explain(status_code: int, what: str) -> str:
     return f"{what}失败（HTTP {status_code}）"
 
 
+def _encode_path(url: str) -> str:
+    """把 URL 路径里的非 ASCII（中文目录名）转成 ``%XX``。
+
+    urllib 发不出含中文的请求行，而坚果云的主目录就叫「我的坚果云」——用户直接粘
+    中文地址必须能work。已经写好的 ``%XX``（坚果云官方示例就是让人手填）保持原样。
+    """
+    parsed = urllib.parse.urlsplit(url)
+    if not parsed.path:
+        return url
+    encoded = urllib.parse.quote(parsed.path, safe="/%:@!$&'()*+,;=~-._")
+    return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, encoded, parsed.query, parsed.fragment))
+
+
+def _host_hint(cfg: dict) -> str:
+    """坚果云特有的地址结构提示（只在确实是坚果云时给，别给别的服务端添乱）。"""
+    host = (urllib.parse.urlsplit(cfg.get("url") or "").hostname or "").lower()
+    if "jianguoyun" not in host:
+        return ""
+    return ("。坚果云的 WebDAV 根目录列的是你的同步文件夹（通常是「我的坚果云」），"
+            "建议把地址填成 …/dav/我的坚果云/inknote/，或在客户端里先建好目录")
+
+
 def _file_url(cfg: dict, name: str) -> str:
     return urllib.parse.urljoin(cfg["url"], urllib.parse.quote(name))
 
 
-def _mkcol(cfg: dict) -> bool:
-    """建目录（已存在返回 True）。只建 URL 指的那一级，不做递归。"""
-    response = _request("MKCOL", cfg["url"], cfg)
-    return response["status"] in (200, 201, 204, 405)   # 405 = 已存在
+def _mkcol(cfg: dict, target: str) -> bool:
+    """建一级目录；已存在返回 True（不同服务端用 405 / 重定向表示已存在）。"""
+    response = _request("MKCOL", target, cfg)
+    return response["status"] in (200, 201, 204, 301, 302, 307, 308, 405)
+
+
+def _ensure_collection(cfg: dict) -> list[str]:
+    """逐级把目标目录建出来（从最外层往里），返回新建成功的路径。
+
+    用户往往只填了地址、没在网盘里先建目录；而「目录不存在」这个错误各服务端口径
+    不一 —— 坚果云回 **404**，Apache/Nextcloud 回 **409**。两种情况都要能自愈，
+    否则就成了「明明密码对、却一直报地址不存在」（实测踩到过）。
+    """
+    parsed = urllib.parse.urlsplit(cfg["url"])
+    segments = [seg for seg in parsed.path.split("/") if seg]
+    created: list[str] = []
+    for index in range(1, len(segments) + 1):
+        prefix = "/" + "/".join(segments[:index]) + "/"
+        target = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, prefix, "", ""))
+        response = _request("MKCOL", target, cfg)
+        if response["status"] in (200, 201, 204):
+            created.append(prefix)
+        elif response["status"] in (301, 302, 307, 308, 405):
+            continue                      # 已存在
+        else:
+            raise RemoteError(
+                _explain(response["status"], f"创建目录 {prefix}") + _host_hint(cfg)
+            )
+    return created
 
 
 def _put(cfg: dict, path: Path, name: str) -> None:
@@ -291,8 +339,9 @@ def _put(cfg: dict, path: Path, name: str) -> None:
     )
     if response["status"] in (200, 201, 204):
         return
-    # 目录不存在时先建一次再重试（用户往往只填了地址，没在网盘里先建目录）
-    if response["status"] == 409 and _mkcol(cfg):
+    # 目录不存在：404（坚果云）或 409（Apache/Nextcloud）都先建出来再重试一次
+    if response["status"] in (404, 409):
+        _ensure_collection(cfg)
         retry = _request(
             "PUT", _file_url(cfg, name), cfg, data=payload,
             headers={"Content-Type": "application/octet-stream"},
@@ -300,8 +349,8 @@ def _put(cfg: dict, path: Path, name: str) -> None:
         )
         if retry["status"] in (200, 201, 204):
             return
-        raise RemoteError(_explain(retry["status"], "上传"))
-    raise RemoteError(_explain(response["status"], "上传"))
+        raise RemoteError(_explain(retry["status"], "上传") + _host_hint(cfg))
+    raise RemoteError(_explain(response["status"], "上传") + _host_hint(cfg))
 
 
 def list_remote(cfg: dict) -> list[dict]:
@@ -444,12 +493,31 @@ def probe(cfg: dict) -> dict:
     try:
         entries = list_remote(cfg)
     except RemoteError as exc:
-        return {"ok": False, "message": str(exc)}
+        return {"ok": False, "message": str(exc) + _parent_hint(cfg)}
     ours = [e["name"] for e in entries if OUR_NAME.match(e["name"])]
     return {
         "ok": True,
         "message": f"连接正常，目录里有 {len(entries)} 个条目（其中 {len(ours)} 份是我们的备份）",
     }
+
+
+def _parent_hint(cfg: dict) -> str:
+    """目标目录不存在时，看一眼父目录在不在 —— 直接告诉用户是「没建」还是「写错了」。"""
+    parsed = urllib.parse.urlsplit(cfg.get("url") or "")
+    parent = parsed.path.rstrip("/").rsplit("/", 1)[0] + "/"
+    # 注意：父目录就是根目录（`/missing/` → `/`）时**不能跳过** —— 根目录的
+    # PROPFIND 恰恰是最能说明问题的：根在、目标不在 = 目录没建。
+    if parent == parsed.path or parent == "":
+        return ""
+    parent_url = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, parent, "", ""))
+    response = _request("PROPFIND", parent_url, cfg, data=PROPFIND_BODY,
+                        headers={"Depth": "0", "Content-Type": "application/xml; charset=utf-8"})
+    status = response["status"]
+    if status in (200, 207):
+        return "。父目录是存在的 —— 目标目录还没建：点「立即上传」我们会自动创建，或在网盘里手动新建"
+    if status == 404:
+        return "。父目录也不存在，地址多半写错了" + _host_hint(cfg)
+    return ""
 
 
 def test_connection(conn: sqlite3.Connection) -> dict:
