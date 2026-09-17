@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import secrets
 import sys
 import threading
@@ -197,6 +198,35 @@ def _print_banner() -> None:
     _safe_print("\n".join(lines))
 
 
+_CONTENT_HASH_NAME = re.compile(r"^[0-9a-f]{16}\.[A-Za-z0-9]{1,8}$")
+
+
+def static_cache_control(path: str, query: str) -> str | None:
+    """静态资源的 Cache-Control 值；不是静态资源返回 None。
+
+    Starlette 的 StaticFiles 只发 ETag / Last-Modified，**没有 Cache-Control**，
+    于是浏览器每次翻页都要为每个资源发一次条件请求等 304 —— 一页 9 个资源
+    就是 9 个来回（弱网下每个来回都是实打实的等待）。
+
+    这里能发长缓存，是因为两处 URL 都是**内容寻址**的：
+    - `/static/...?v=<asset_v>`：asset_v 是所有静态文件 mtime 的 md5（进程启动
+      时算），文件改了版本号就变；改完资源要重启服务，用户按 Ctrl+F5 也会强制
+      绕过缓存，所以标 immutable 不会把旧样式钉死；
+    - `/media/<年>/<月>/<内容哈希><.ext>`：文件名就是上传内容 sha256 的前 16 位，
+      重复上传会去重，内容变了文件名也变。
+
+    没指纹的路径（手写的 /static/xxx 或历史遗留文件）退回 1 小时，仍走 ETag 协商。
+    """
+    if path.startswith("/static/"):
+        versioned = "v=" in query
+        return "public, max-age=31536000, immutable" if versioned else "public, max-age=3600"
+    if path.startswith("/media/"):
+        if _CONTENT_HASH_NAME.match(path.rsplit("/", 1)[-1]):
+            return "public, max-age=31536000, immutable"
+        return "public, max-age=3600"
+    return None
+
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title=f"{settings.site_title} · InkNote",
@@ -236,6 +266,11 @@ def create_app() -> FastAPI:
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        # 静态资源长缓存（内容寻址，详见 static_cache_control 的说明）；
+        # 动态页面不加 Cache-Control，保持原有语义。
+        cache = static_cache_control(request.url.path, request.url.query)
+        if cache:
+            response.headers.setdefault("Cache-Control", cache)
         csp = (
             "default-src 'self'; "
             "img-src 'self' data: https:; "

@@ -6,7 +6,12 @@
   <script src="/static/vendor/katex/auto-render.min.js?v={{ asset_v }}" defer></script>
 {% endif %}
 {% if rendered.has_mermaid %}
-  <script src="/static/vendor/mermaid/mermaid.min.js?v={{ asset_v }}" defer></script>
+  {# mermaid 是 2.7MB 的大件（压缩后也有 800 多 KB），直接放 <script src> 会和
+     首屏关键资源抢带宽、还把 load 事件拖到它下完为止。这里只把地址交给
+     enrich.js，由它在首屏画完之后按需拉取（见 static/js/enrich.js）。
+     注：.mermaid 的 line-height:0 让源码在渲染前不会露出来，所以延后渲染
+     观感与原来一致（都是一片空白等图）。 #}
+  <script nonce="{{ nonce }}">window.__inknoteMermaidSrc = "/static/vendor/mermaid/mermaid.min.js?v={{ asset_v }}";</script>
 {% endif %}
 {% if rendered.has_math or rendered.has_mermaid %}
   <script src="/static/js/enrich.js?v={{ asset_v }}" defer></script>
