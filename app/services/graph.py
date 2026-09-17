@@ -35,11 +35,8 @@ _MAX_PASSES = 50
 # 取图
 # ---------------------------------------------------------------------------
 def _load(conn: sqlite3.Connection) -> tuple[list[dict[str, Any]], list[tuple[int, int, str]]]:
-    """读出全部笔记与「两端都还在」的双链。直接读 note_links，不重解析正文。
-
-    锁定笔记不参与图谱（与「不参与搜索 / AI」一致）：标题也不该出现在节点里。
-    """
-    notes = [n for n in repo.all_notes(conn) if not n.get("locked")]
+    """读出全部笔记与「两端都还在」的双链。直接读 note_links，不重解析正文。"""
+    notes = repo.all_notes(conn)
     by_id = {n["id"]: n for n in notes}
     rows = conn.execute(
         "SELECT source_id, target_id, target_title FROM note_links"

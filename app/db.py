@@ -104,9 +104,6 @@ MIGRATIONS: dict[str, dict[str, str]] = {
     "notes": {
         "is_archived": "INTEGER NOT NULL DEFAULT 0",
         "sort_order": "INTEGER NOT NULL DEFAULT 0",
-        # 锁定笔记：locked=1 时正文要输密码才看；lock_hash 是 pbkdf2 派生值（绝不存明文）
-        "locked": "INTEGER NOT NULL DEFAULT 0",
-        "lock_hash": "TEXT NOT NULL DEFAULT ''",
     },
     "note_versions": {},
     "templates": {},

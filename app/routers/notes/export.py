@@ -34,8 +34,6 @@ from starlette.concurrency import run_in_threadpool
 from ...services import ai, ai_related, note_templates
 from ...markdown_render import toggle_task_item
 from ...services import note_export
-from ...services import note_lock
-from .lock import locked_page
 from ...services import content as content_service
 from ...services import export as export_service
 from ...templating import render
@@ -165,10 +163,8 @@ router = APIRouter()
 # 单篇导出
 # ---------------------------------------------------------------------------
 @router.get("/notes/{note_id}/export.md")
-def export_note(request: Request, note_id: NoteId, conn: sqlite3.Connection = Depends(db_conn)):
+def export_note(note_id: NoteId, conn: sqlite3.Connection = Depends(db_conn)):
     note = _note_or_404(conn, note_id)
-    if not note_lock.is_open(request, note):   # 导出的是正文，同样要解锁
-        return locked_page(request, note, f"/notes/{note_id}")
     body = export_service.note_markdown(note)
     filename = export_service.note_filename(note)
     ascii_name = f"note-{note_id}.md"
