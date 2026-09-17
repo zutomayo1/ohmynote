@@ -158,6 +158,8 @@ def save_site_settings(
     appearance_custom: str = Form(""),
     appearance_mode: str = Form("auto"),
     appearance_radius: str = Form("md"),
+    appearance_prose_size: str = Form("md"),
+    appearance_prose_font: str = Form("serif"),
     reset: str | None = Form(None),
     reset_appearance: str | None = Form(None),
 ):
@@ -188,6 +190,8 @@ def save_site_settings(
         "appearance_custom": appearance_custom,
         "appearance_mode": appearance_mode,
         "appearance_radius": appearance_radius,
+        "appearance_prose_size": appearance_prose_size,
+        "appearance_prose_font": appearance_prose_font,
     }
     try:
         site_settings.save(conn, values)

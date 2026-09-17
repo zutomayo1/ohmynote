@@ -579,7 +579,7 @@ img { border-radius: var(--radius-sm); }
 .editor__textarea {
   flex: 1; width: 100%; min-height: 440px; padding: 18px 20px;
   border: none; background: var(--surface); color: var(--ink); font-family: var(--font-mono);
-  font-size: 14.5px; line-height: 1.7; resize: none; tab-size: 2; }
+  font-size: calc(var(--prose-size) - 2.5px); line-height: 1.7; resize: none; tab-size: 2; }
 
 .editor__textarea:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
 
@@ -3874,6 +3874,9 @@ a.archive-month__label:hover { color: var(--brand); }
   /* 字阶（语义化，改整体比例只改这里） */
   --fs-h1: 38px;   --fs-h2: 26px;   --fs-h3: 19px;
   --fs-lead: 18px; --fs-body: 16.5px; --fs-meta: 13px; --fs-micro: 12.5px;
+  /* 正文（读/写）字号与字体：设置页「正文字号/字体」改 data-prose-* 档位覆盖；
+     默认 = 跟随全局字阶与衬线栈。编辑器 textarea 只跟字号、字体保持 mono */
+  --prose-size: 17px; --prose-lead: var(--fs-lead); --prose-font: var(--font-serif);
 
   /* 阴影：三档就够（贴地 / 悬浮 / 浮层） */
   --sh-1: 0 1px 2px rgba(60, 42, 30, .04);
@@ -3970,7 +3973,7 @@ body { transition: background-color .12s ease, color .12s ease; }
 /* ---------- 7. 文章页：去掉标题横线，改用留白分层；首段做导语 ---------- */
 .prose h2, .post-body h2 { border-bottom: 0; padding-bottom: 0; margin-top: 2.1em; letter-spacing: -.01em; }
 .prose h3, .post-body h3 { margin-top: 1.6em; }
-.prose > p:first-of-type, .post-body > p:first-of-type { font-size: var(--fs-lead); color: var(--ink-2); }
+.prose > p:first-of-type, .post-body > p:first-of-type { font-size: var(--prose-lead); color: var(--ink-2); }
 .prose blockquote, .post-body blockquote {
   border-left: 3px solid var(--brand-200);
   background: var(--brand-50);
@@ -8102,3 +8105,19 @@ details.warning[open] > summary, details.danger[open] > summary, details.quote[o
 .dialog__actions .btn--danger {
   background: var(--danger); border-color: var(--danger); color: var(--surface); }
 .dialog__actions .btn--danger:hover { filter: brightness(1.08); }
+
+/* ===== 补丁：正文字号/字体档位（2026-09-17） =====
+   挂在 html 的 data-prose-size / data-prose-font 上（settings 页选，默认档不出属性）。
+   只作用于「读和写的正文」：.prose（阅读页/预览/说明/AI 气泡）与 .post-body；
+   卡片、按钮、表单等 UI 不跟随。编辑器 textarea 字体保持 mono（源码编辑刻意为之）。 */
+[data-prose-size="sm"] { --prose-size: 16px;   --prose-lead: 17px; }
+[data-prose-size="lg"] { --prose-size: 18.5px; --prose-lead: 19.5px; }
+[data-prose-size="xl"] { --prose-size: 20px;   --prose-lead: 21px; }
+
+[data-prose-font="sans"] { --prose-font: var(--font-sans); }
+
+.prose,
+.post-body {
+  font-size: var(--prose-size);
+  font-family: var(--prose-font);
+}

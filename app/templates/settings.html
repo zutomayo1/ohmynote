@@ -790,6 +790,8 @@
       {% set cur_palette = site_form_values.get('appearance_palette', site.appearance_palette) %}
       {% set cur_mode = site_form_values.get('appearance_mode', site.appearance_mode) %}
       {% set cur_radius = site_form_values.get('appearance_radius', site.appearance_radius) %}
+      {% set cur_prose_size = site_form_values.get('appearance_prose_size', site.appearance_prose_size) %}
+      {% set cur_prose_font = site_form_values.get('appearance_prose_font', site.appearance_prose_font) %}
       <div class="field-grid">
         <fieldset class="field field--wide appearance-picker">
           <legend class="field__label">外观主题 {{ src_of(site.sources.get('appearance_palette')) }}</legend>
@@ -831,6 +833,26 @@
             <option value="lg"{% if cur_radius == 'lg' %} selected{% endif %}>大圆角</option>
           </select>
           <span class="micro">卡片、按钮、输入框的整体圆角大小</span>
+        </label>
+
+        <label class="field">
+          <span class="field__label">正文字号 {{ src_of(site.sources.get('appearance_prose_size')) }}</span>
+          <select class="input" name="appearance_prose_size" data-prose-preview="size">
+            <option value="sm"{% if cur_prose_size == 'sm' %} selected{% endif %}>小 16px</option>
+            <option value="md"{% if cur_prose_size == 'md' %} selected{% endif %}>默认 17px</option>
+            <option value="lg"{% if cur_prose_size == 'lg' %} selected{% endif %}>大 18.5px</option>
+            <option value="xl"{% if cur_prose_size == 'xl' %} selected{% endif %}>特大 20px</option>
+          </select>
+          <span class="micro">阅读页与编辑器正文的字号（选完这里就能预览）</span>
+        </label>
+
+        <label class="field">
+          <span class="field__label">正文字体 {{ src_of(site.sources.get('appearance_prose_font')) }}</span>
+          <select class="input" name="appearance_prose_font" data-prose-preview="font">
+            <option value="serif"{% if cur_prose_font == 'serif' %} selected{% endif %}>衬线（默认）</option>
+            <option value="sans"{% if cur_prose_font == 'sans' %} selected{% endif %}>无衬线</option>
+          </select>
+          <span class="micro">衬线适合长文阅读；无衬线更「屏幕感」。编辑器源码保持等宽</span>
         </label>
 
         <div class="field field--wide settings-form__actions">
@@ -952,6 +974,23 @@
 <script nonce="{{ nonce }}">
   (function () {
     'use strict';
+
+    // ---- 外观：正文字号/字体（选完立即预览；保存后由服务端渲染固化） ----
+    (function () {
+      var root = document.documentElement;
+      var confs = [
+        { key: 'size', attr: 'data-prose-size', name: 'appearance_prose_size', off: 'md' },
+        { key: 'font', attr: 'data-prose-font', name: 'appearance_prose_font', off: 'serif' },
+      ];
+      confs.forEach(function (conf) {
+        var el = document.querySelector('[data-prose-preview="' + conf.key + '"]');
+        if (!el) { return; }
+        el.addEventListener('change', function () {
+          if (el.value === conf.off) { root.removeAttribute(conf.attr); }
+          else { root.setAttribute(conf.attr, el.value); }
+        });
+      });
+    })();
     var picker = document.getElementById('appearance-custom-picker');
     var text = document.getElementById('appearance-custom-text');
     var styleEl = document.getElementById('appearance-preview');

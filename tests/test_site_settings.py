@@ -274,7 +274,93 @@ def test_appearance_reset_button_rendered(auth_client):
 
 
 def test_reset_rejects_unknown_field():
-    """未知字段宁可报错，也不静默清掉一堆配置。"""
+    """未知字段宁可报错，也不静默清掉别的配置。"""
     with db_mod.db() as conn:
         with pytest.raises(site_settings.SiteSettingsError):
             site_settings.reset(conn, ("appearance_custom", "site_titel"))
+
+
+# ---------------------------------------------------------------------------
+# 正文字号 / 字体（data-prose-size / data-prose-font）
+# ---------------------------------------------------------------------------
+def test_prose_settings_save_render_and_reject(auth_client, csrf):
+    # 合法值：保存后 current() 生效。注意路由的 values 是全字段 dict（Form 默认兜底），
+    # 必须像页面表单一样把所有字段都带上——只发两个字段会让 site_title 为空而 400。
+    save_site(
+        auth_client,
+        csrf,
+        site_title="墨痕",
+        site_subtitle="",
+        site_description="",
+        author="",
+        base_url="",
+        per_page="12",
+        trash_days="30",
+        appearance_prose_size="lg",
+        appearance_prose_font="sans",
+    )
+    assert settings.appearance_prose_size == "lg"
+    assert settings.appearance_prose_font == "sans"
+
+    # 页面渲染：非默认档输出 data 属性（任意页都挂，用 /notes 查）
+    page = auth_client.get("/notes").text
+    assert 'data-prose-size="lg"' in page
+    assert 'data-prose-font="sans"' in page
+
+    # 默认档不输出属性（保持 html 干净、与 data-radius 模式一致）
+    save_site(
+        auth_client,
+        csrf,
+        site_title="墨痕",
+        site_subtitle="",
+        site_description="",
+        author="",
+        base_url="",
+        per_page="12",
+        trash_days="30",
+        appearance_prose_size="md",
+        appearance_prose_font="serif",
+    )
+    page = auth_client.get("/notes").text
+    assert "data-prose-size" not in page
+    assert "data-prose-font" not in page
+
+    # 非法值：validate 报 errors、save 抛 SiteSettingsError
+    _, errors = site_settings.validate({"appearance_prose_size": "huge"})
+    assert errors and "正文字号" in errors[0]
+    _, errors = site_settings.validate({"appearance_prose_font": "comic"})
+    assert errors and "正文字体" in errors[0]
+    with db_mod.db() as conn, pytest.raises(site_settings.SiteSettingsError):
+        site_settings.save(conn, {"appearance_prose_size": "huge"})
+
+
+def test_prose_settings_cleared_by_appearance_reset(auth_client, csrf):
+    save_site(
+        auth_client,
+        csrf,
+        site_title="墨痕",
+        site_subtitle="",
+        site_description="",
+        author="",
+        base_url="",
+        per_page="12",
+        trash_days="30",
+        appearance_prose_size="xl",
+        appearance_prose_font="sans",
+    )
+    assert settings.appearance_prose_size == "xl"
+
+    response = auth_client.post(
+        "/settings/site", data={"_csrf": csrf, "reset_appearance": "1"}, follow_redirects=False
+    )
+    assert response.status_code == 303
+    assert settings.appearance_prose_size == "md"
+    assert settings.appearance_prose_font == "serif"
+
+
+def test_prose_selects_rendered_on_settings_page(auth_client):
+    page = auth_client.get("/settings").text
+    assert 'name="appearance_prose_size"' in page
+    assert 'name="appearance_prose_font"' in page
+    assert 'data-prose-preview="size"' in page   # 实时预览接线存在
+    assert "正文字号" in page and "正文字体" in page

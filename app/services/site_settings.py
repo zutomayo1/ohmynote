@@ -45,6 +45,8 @@ FIELDS = (
     "appearance_custom",
     "appearance_mode",
     "appearance_radius",
+    "appearance_prose_size",
+    "appearance_prose_font",
 )
 
 # 外观这一组字段：「只恢复外观」按钮清它，站点名 / 简介 / 每页条数等保持不动
@@ -53,6 +55,8 @@ APPEARANCE_FIELDS = (
     "appearance_custom",
     "appearance_mode",
     "appearance_radius",
+    "appearance_prose_size",
+    "appearance_prose_font",
 )
 
 # 代码默认值（没有 .env、也没在页面保存时的兜底）
@@ -68,6 +72,8 @@ DEFAULTS: dict[str, Any] = {
     "appearance_custom": "",
     "appearance_mode": "auto",
     "appearance_radius": "md",
+    "appearance_prose_size": "md",
+    "appearance_prose_font": "serif",
 }
 
 # 需要按整数处理的字段，以及页面允许的范围
@@ -103,6 +109,8 @@ ENV_KEYS = {
     "appearance_custom": "INKNOTE_APPEARANCE_CUSTOM",
     "appearance_mode": "INKNOTE_APPEARANCE_MODE",
     "appearance_radius": "INKNOTE_APPEARANCE_RADIUS",
+    "appearance_prose_size": "INKNOTE_APPEARANCE_PROSE_SIZE",
+    "appearance_prose_font": "INKNOTE_APPEARANCE_PROSE_FONT",
 }
 
 TITLE_MAX = 60
@@ -279,6 +287,18 @@ def validate(values: dict) -> tuple[dict, list[str]]:
             text = str(raw if raw is not None else "").strip()
             if text not in ("sm", "md", "lg"):
                 errors.append("圆角只能是 sm / md / lg")
+            else:
+                cleaned[field] = text
+        elif field == "appearance_prose_size":
+            text = str(raw if raw is not None else "").strip()
+            if text not in ("sm", "md", "lg", "xl"):
+                errors.append("正文字号只能是 sm / md / lg / xl")
+            else:
+                cleaned[field] = text
+        elif field == "appearance_prose_font":
+            text = str(raw if raw is not None else "").strip()
+            if text not in ("serif", "sans"):
+                errors.append("正文字体只能是 serif / sans")
             else:
                 cleaned[field] = text
         elif field in INT_FIELDS:
