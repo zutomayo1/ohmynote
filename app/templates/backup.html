@@ -56,6 +56,12 @@
           <span class="backup-drop__icon">{{ icon('upload', 26) }}</span>
           <span class="backup-drop__main">拖拽文件到这里，或<u>点击选择</u></span>
           <span class="backup-drop__hint">支持 .zip / .json / .md，可一次选多个；选好后确认列表再导入</span>
+          <span class="backup-drop__hint">
+            也可以
+            <label class="link-like" for="backup-folder">选整个文件夹</label>
+            <input class="backup-drop__folder" id="backup-folder" type="file" webkitdirectory hidden>
+            （只收 .md / .markdown / .txt，图片等其它文件会忽略）
+          </span>
         </label>
         <div class="backup-filelist" data-filelist hidden></div>
       </div>
@@ -63,6 +69,31 @@
         <input type="checkbox" name="dry_run" value="1">
         先预览（dry run）：只统计会新建 / 更新多少，不写入数据库
       </label>
+
+      <details class="backup-batch">
+        <summary>批量设置（可选，只作用于 .md 文件）</summary>
+        <div class="field-grid">
+          <label class="field">
+            <span class="field__label">统一分类</span>
+            <input class="input" type="text" name="default_category" placeholder="如：导入" spellcheck="false">
+            <span class="micro">文件里写了分类的以文件为准</span>
+          </label>
+          <label class="field">
+            <span class="field__label">统一标签</span>
+            <input class="input" type="text" name="default_tags" placeholder="如：迁移, 博客" spellcheck="false">
+            <span class="micro">逗号分隔；会与文件里的标签合并</span>
+          </label>
+          <label class="field">
+            <span class="field__label">公开状态</span>
+            <select class="input" name="default_public">
+              <option value="">不改（默认私密草稿）</option>
+              <option value="public">设为公开（已保存）</option>
+              <option value="private">保持私密</option>
+            </select>
+            <span class="micro">文件里显式写了公开性的以文件为准</span>
+          </label>
+        </div>
+      </details>
       <button class="btn btn--primary" type="submit">{{ icon('upload', 16) }} 开始导入</button>
     </form>
     <ul class="backup-notes">
@@ -269,6 +300,30 @@
     if (files && files.length) { setInputFiles(files); }
   });
   input.addEventListener('change', function () { renderList(); });
+
+  // 整个文件夹：webkitdirectory 会带出夹里所有文件，过滤只留文本类，追加进主列表
+  var folder = document.getElementById('backup-folder');
+  if (folder) {
+    folder.addEventListener('change', function () {
+      var kept = [];
+      Array.prototype.slice.call(folder.files || []).forEach(function (file) {
+        var ext = (file.name.split('.').pop() || '').toLowerCase();
+        if (ext === 'md' || ext === 'markdown' || ext === 'txt') { kept.push(file); }
+      });
+      if (kept.length) { appendFiles(kept); }
+      folder.value = '';
+    });
+  }
+
+  function appendFiles(fileList) {
+    try {
+      var dt = new DataTransfer();
+      for (var i = 0; i < input.files.length; i++) { dt.items.add(input.files[i]); }
+      for (var j = 0; j < fileList.length; j++) { dt.items.add(fileList[j]); }
+      input.files = dt.files;
+    } catch (error) { return; }
+    renderList();
+  }
 
   var FILE_TYPES = {
     zip: '压缩包', json: 'JSON 备份',

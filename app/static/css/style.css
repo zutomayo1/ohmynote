@@ -8121,3 +8121,16 @@ details.warning[open] > summary, details.danger[open] > summary, details.quote[o
   font-size: var(--prose-size);
   font-family: var(--prose-font);
 }
+
+/* ===== 补丁：批量导入（2026-09-17） =====
+   导入表单的「批量设置」折叠区 + drop 区里「选整个文件夹」的链接样式。 */
+.backup-batch {
+  margin: 12px 0 0; padding: 8px 14px;
+  border: 1px dashed var(--line); border-radius: var(--radius-sm);
+}
+.backup-batch > summary { cursor: pointer; color: var(--ink-2); font-size: 13.5px; }
+.backup-batch[open] > summary { margin-bottom: 10px; }
+.backup-batch .field-grid { margin-top: 4px; }
+
+.link-like { color: var(--brand); text-decoration: underline; cursor: pointer; }
+.link-like:hover { filter: brightness(1.05); }

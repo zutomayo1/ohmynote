@@ -76,14 +76,35 @@ def _dry(kw: dict[str, Any]) -> bool:
 # ---------------------------------------------------------------------------
 # 入口分派
 # ---------------------------------------------------------------------------
+def normalize_defaults(category: str = "", tags: str = "", public: str = "") -> dict[str, Any]:
+    """整理「批量设置」表单值。空值返回 {}（不干预任何字段的默认行为）。
+
+    只有 markdown 导入吃这套（zip / json 是我们自己导出的结构化备份，
+    自带完整元数据，不应该被表单值覆盖）。
+    """
+    clean: dict[str, Any] = {}
+    if (category or "").strip():
+        clean["category"] = category.strip()
+    tag_list = [t.strip() for t in (tags or "").replace("，", ",").split(",") if t.strip()]
+    if tag_list:
+        clean["tags"] = tag_list
+    if (public or "").strip() in ("public", "private"):
+        clean["public"] = public.strip() == "public"
+    return clean
+
+
 def sniff_and_import(
     conn: sqlite3.Connection,
     filename: str,
     data: bytes,
     *,
     dry_run: bool = False,
+    defaults: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """按扩展名 / 内容分派到 zip / json / markdown 导入。"""
+    """按扩展名 / 内容分派到 zip / json / markdown 导入。
+
+    ``defaults`` 是「批量设置」（见 normalize_defaults），只作用于 markdown。
+    """
     name = (filename or "").strip()
     raw = data or b""
     suffix = Path(name.lower()).suffix
@@ -106,7 +127,8 @@ def sniff_and_import(
             return import_zip(conn, raw, dry_run=dry_run)
         if source == "json":
             return import_json(conn, raw, dry_run=dry_run)
-        return _import_markdown_bytes(conn, raw, filename=name, dry_run=dry_run)
+        return _import_markdown_bytes(conn, raw, filename=name, dry_run=dry_run,
+                                      defaults=defaults or {})
     except Exception as exc:  # 解析层兜底：坏文件不能把整个页面带成 500
         # 错误同时返回给用户；服务端也留一条，方便统计是哪些文件/哪类异常导致导入失败
         logger.debug(
@@ -137,7 +159,8 @@ def _sniff_source(data: bytes) -> str:
 
 
 def _import_markdown_bytes(
-    conn: sqlite3.Connection, data: bytes, *, filename: str, dry_run: bool
+    conn: sqlite3.Connection, data: bytes, *, filename: str, dry_run: bool,
+    defaults: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     result = _empty_result("markdown", dry_run)
     try:
@@ -153,7 +176,8 @@ def _import_markdown_bytes(
             f"{filename or '上传的文件'}：不是有效的 UTF-8 文本，无法解析（请另存为 UTF-8 后重试）"
         )
         return result
-    return import_markdown(conn, text, filename=filename, dry_run=dry_run)
+    return import_markdown(conn, text, filename=filename, dry_run=dry_run,
+                           defaults=defaults or {})
 
 
 # ---------------------------------------------------------------------------
@@ -478,9 +502,14 @@ def import_markdown(
     text: str,
     *,
     filename: str,
+    defaults: dict[str, Any] | None = None,
     **kw: Any,
 ) -> dict[str, Any]:
-    """导入单篇 Markdown；标题依次取 front matter → 正文 ``# 标题`` → 文件名。"""
+    """导入单篇 Markdown；标题依次取 front matter → 正文 ``# 标题`` → 文件名。
+
+    ``defaults`` 是「批量设置」（normalize_defaults 的产物）：front matter 里
+    写了的字段以文件为准，没写的用表单值兜底；标签两边合并去重。
+    """
     dry_run = _dry(kw)
     result = _empty_result("markdown", dry_run)
     if not (text or "").strip():
@@ -488,7 +517,7 @@ def import_markdown(
         return result
     try:
         meta, body = _parse_front_matter(text or "")
-        record = _note_from_markdown(meta, body, filename)
+        record = _note_from_markdown(meta, body, filename, defaults or {})
     except Exception as exc:
         # 解析失败只拒绝这一篇，errors 里已经告诉用户；服务端留痕便于定位是哪类文件
         logger.debug("Markdown 解析失败（file=%s）：%s", filename or "-", exc, exc_info=True)
@@ -499,19 +528,33 @@ def import_markdown(
     return result
 
 
-def _note_from_markdown(meta: dict[str, Any], body: str, filename: str) -> dict[str, Any]:
+def _note_from_markdown(meta: dict[str, Any], body: str, filename: str,
+                        defaults: dict[str, Any] | None = None) -> dict[str, Any]:
+    defaults = defaults or {}
     title = _as_text(meta.get("title")) or _first_heading(body)
     if not title:
         title = Path(str(filename or "")).stem.strip()
-    is_public = _as_bool(meta.get("public", meta.get("is_public", meta.get("published"))))
+
+    # 公开性：文件里**显式**写了（public/is_public/published 任一）以文件为准；
+    # 没写才用「批量设置」。status 的推导保持旧行为（公开→saved，否则 draft）
+    has_public = any(key in meta for key in ("public", "is_public", "published"))
+    is_public = (_as_bool(meta.get("public", meta.get("is_public", meta.get("published"))))
+                 if has_public else bool(defaults.get("public")))
     status = _as_text(meta.get("status")).lower()
     if status not in _STATUSES:
         status = "saved" if is_public else "draft"
+
+    # 标签：文件与批量设置合并去重（批量打标签是最常见诉求，直接覆盖会丢信息）
+    tags = _as_tag_list(meta.get("tags"))
+    for tag in defaults.get("tags") or []:
+        if tag not in tags:
+            tags.append(tag)
+
     return {
         "title": title,
         "content": (body or "").rstrip(),
-        "tags": _as_tag_list(meta.get("tags")),
-        "category": _as_text(meta.get("category")),
+        "tags": tags,
+        "category": _as_text(meta.get("category")) or defaults.get("category", ""),
         "summary": _as_text(meta.get("summary")),
         "status": status,
         "is_public": is_public,
@@ -641,7 +684,12 @@ def _as_tag_list(value: Any) -> list[str]:
     if isinstance(value, dict):
         return []
     if isinstance(value, str):
-        return parse_tags(value)
+        text = value.strip()
+        # YAML 流式列表：front matter 里常见的 `tags: [a, b]`——轻量解析器把它
+        # 整个读成字符串，剥掉方括号再按逗号拆（Obsidian / Hexo 迁移必踩）
+        if text.startswith("[") and text.endswith("]"):
+            text = text[1:-1]
+        return parse_tags(text)
     if isinstance(value, (list, tuple, set)):
         return parse_tags([_as_text(item) for item in value])
     return parse_tags([_as_text(value)])

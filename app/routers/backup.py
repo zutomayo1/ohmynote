@@ -252,9 +252,14 @@ async def backup_import(
     # 允许一次选多个文件（multiple）：字段名仍是 file，单个文件的老调用方不受影响
     files: list[UploadFile] = File(..., alias="file"),
     dry_run: str = Form(""),
+    default_category: str = Form(""),
+    default_tags: str = Form(""),
+    default_public: str = Form(""),
 ):
     del request
     preview = as_bool(dry_run)
+    # 「批量设置」：只作用于 .md 导入（front matter 优先、标签合并），见 normalize_defaults
+    defaults = importer.normalize_defaults(default_category, default_tags, default_public)
 
     merged: dict | None = None
     for upload in files:
@@ -268,7 +273,8 @@ async def backup_import(
                 dry_run=preview,
             )
         else:
-            result = importer.sniff_and_import(conn, filename, raw, dry_run=preview)
+            result = importer.sniff_and_import(conn, filename, raw, dry_run=preview,
+                                               defaults=defaults)
         if merged is None:
             merged = result
             continue

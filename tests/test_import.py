@@ -378,3 +378,94 @@ def _all_titles(auth_client):
     data = json.loads(auth_client.get("/export/json").text)
     notes = data["notes"] if isinstance(data, dict) else data
     return [{"title": n.get("title", "")} for n in notes]
+
+
+def _note_by_title(auth_client, title):
+    """从导出 JSON 里按标题取完整笔记 dict（含 tags / category / is_public）。"""
+    import json
+    data = json.loads(auth_client.get("/export/json").text)
+    notes = data["notes"] if isinstance(data, dict) else data
+    for note in notes:
+        if note.get("title") == title:
+            return note
+    return None
+
+
+# ---------------------------------------------------------------------------
+# 批量设置（defaults）：只作用于 .md；front matter 优先、标签合并
+# ---------------------------------------------------------------------------
+def test_normalize_defaults():
+    assert importer.normalize_defaults() == {}
+    assert importer.normalize_defaults("", "", "") == {}
+    assert importer.normalize_defaults("  导入 ", "迁移， 博客,日记", "public") == {
+        "category": "导入", "tags": ["迁移", "博客", "日记"], "public": True,
+    }
+    # 非法的公开值不干预
+    assert importer.normalize_defaults("", "", "maybe") == {}
+
+
+def test_defaults_apply_to_plain_markdown(auth_client, csrf):
+    files = [("file", ("批量甲.md", "批量甲的正文".encode("utf-8"), "text/markdown"))]
+    response = auth_client.post(
+        "/backup/import",
+        data={"_csrf": csrf, "default_category": "导入", "default_tags": "迁移, 博客",
+              "default_public": "public"},
+        files=files,
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    note = _note_by_title(auth_client, "批量甲")
+    assert note is not None
+    assert note["category"] == "导入"
+    assert set(note["tags"] or []) >= {"迁移", "博客"}
+    assert note["is_public"] == 1 and note["status"] == "saved"
+
+
+def test_defaults_lose_to_front_matter_but_tags_merge(auth_client, csrf):
+    body = "---\ntitle: 批量乙\ncategory: 自带分类\ntags: [自带]\npublic: false\n---\n\n乙的正文"
+    files = [("file", ("批量乙.md", body.encode("utf-8"), "text/markdown"))]
+    response = auth_client.post(
+        "/backup/import",
+        data={"_csrf": csrf, "default_category": "导入", "default_tags": "迁移",
+              "default_public": "public"},
+        files=files,
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    note = _note_by_title(auth_client, "批量乙")
+    assert note is not None
+    # 文件写了的字段以文件为准
+    assert note["category"] == "自带分类"
+    assert note["is_public"] == 0
+    # 标签合并去重
+    assert set(note["tags"] or []) == {"自带", "迁移"}
+
+
+def test_defaults_do_not_touch_zip_or_json(auth_client, csrf):
+    """zip / json 是结构化备份，自带完整元数据，不被批量设置覆盖。"""
+    import io
+    import zipfile as zf
+    buf = io.BytesIO()
+    with zf.ZipFile(buf, "w") as z:
+        z.writestr("notes/批量丙.md", "批量丙的正文")
+        z.writestr("index.md", "# 墨痕导出")
+    files = [("file", ("批量.zip", buf.getvalue(), "application/zip"))]
+    response = auth_client.post(
+        "/backup/import",
+        data={"_csrf": csrf, "default_category": "不该出现", "default_public": "public"},
+        files=files,
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    note = _note_by_title(auth_client, "批量丙")
+    assert note is not None
+    assert (note["category"] or "") != "不该出现"
+
+
+def test_batch_settings_rendered(auth_client):
+    page = auth_client.get("/backup").text
+    assert 'name="default_category"' in page
+    assert 'name="default_tags"' in page
+    assert 'name="default_public"' in page
+    assert "批量设置" in page
+    assert "选整个文件夹" in page and "webkitdirectory" in page
