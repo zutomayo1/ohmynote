@@ -215,3 +215,23 @@ def test_css_fallbacks_do_not_hardcode_light_colors():
         if sum(rgb) / 3 > 200:
             offenders.append(f"{name} → {fallback}")
     assert not offenders, "未定义令牌的兜底是硬编码浅色（暗色主题会露馅）：" + "、".join(offenders[:8])
+
+
+def test_theme_switch_has_no_universal_transition():
+    """切换深色/浅色不得给「所有元素」挂过渡（防复发）。
+
+    `html.theme-anim *{transition:...}` 会让全站每个元素（含 ::before/::after）
+    各跑一条色彩过渡，切主题时逐帧重算上千个元素的样式。实测（4 倍 CPU 降速、
+    DOM ~1200、真实点击路径）：最长帧 333ms、4 个长任务、总阻塞 617ms，正文
+    帧间隔 p95 224ms —— 这就是「切换很卡」的来源。收窄到主要表面后开销降了，
+    但亮暗互切时正文与底色一起走中间灰（过渡中点实测对比度 1.3:1，文字短暂
+    「消失」），所以现在是瞬切：只剩一次样式重算（最长帧 ~109ms、总阻塞 ~104ms）。
+    """
+    rule = r"([^{}]*)\{([^}]*)\}"
+    offenders = [
+        sel.strip()
+        for sel, body in re.findall(rule, CSS)
+        if "theme-anim" in sel and "*" in sel and "transition" in body
+    ]
+    assert not offenders, "主题切换又给通配选择器挂了过渡：" + "；".join(offenders[:3])
+    assert "theme-moon-flip" in CSS, "月亮图标的动画不该被顺手删掉"

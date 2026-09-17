@@ -40,6 +40,7 @@
   // localStorage['inknote-theme'] 缺省时跟随系统；用户点击后写入 light/dark，此后不再跟随系统。
   var THEME_KEY = 'inknote-theme';
   var darkMedia = null;
+  var themeAnimTimer = null;   // 月亮图标动画的收尾计时器（连点时不叠加定时器）
 
   function getDarkMedia() {
     if (!darkMedia && window.matchMedia) darkMedia = window.matchMedia('(prefers-color-scheme: dark)');
@@ -87,11 +88,25 @@
   }
   // 只有用户没有显式选择过时才跟随系统
   function onSystemThemeChange() { if (!hasExplicitTheme()) applyTheme(systemTheme(), false); }
-  function onThemeToggleClick() { // 显式选择 → 持久化；切换瞬间给全站颜色一个柔和过渡
+  // 切换主题：**直接瞬切**，只让月亮图标「转一下」。
+  //
+  // 曾经用 `html.theme-anim *` 通配过渡做「全站柔和变色」，实测（4 倍 CPU
+  // 降速 / DOM ~1200 / 真实点击路径）最长帧 333ms、4 个长任务、总阻塞 617ms
+  // —— 每个元素（含伪元素）都各自跑一条色彩过渡，逐帧重算上千个元素的样式。
+  //
+  // 收窄到「主要表面」后开销降到总阻塞 0ms，但亮暗互切时正文与底色一起往
+  // 中间灰走：过渡中点实测对比度只有 1.3:1，文字会短暂「消失」；换成 View
+  // Transition 整体交叉淡入也一样（两层快照在几何同一位置叠加同样洗白），
+  // 还要多付一次整页快照。瞬切只剩一次样式重算（最长帧 55ms、零长任务），
+  // 也没有中间灰问题——主流产品（VS Code / GitHub）切换主题也是瞬切。
+  function onThemeToggleClick() {
     var root = document.documentElement;
+    // 顺序要紧：先挂动画类、再切主题属性。反过来的话类名变化会在主题重算
+    // 之后再插一次样式失效，多出一轮全页重算（实测最长帧 55ms → 127ms）。
     root.classList.add('theme-anim');
     applyTheme(theme() === 'dark' ? 'light' : 'dark');
-    setTimeout(function () { root.classList.remove('theme-anim'); }, 340);
+    clearTimeout(themeAnimTimer);
+    themeAnimTimer = setTimeout(function () { root.classList.remove('theme-anim'); }, 520);
   }
 
   function initTheme() {

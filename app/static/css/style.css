@@ -6316,11 +6316,8 @@ body.split-dragging .editor__textarea { pointer-events: none; }
 
 @keyframes theme-moon-wag { from { transform: rotate(-110deg); } to { transform: rotate(0deg); } }
 
-html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *::after {
-  transition: background-color .28s ease, border-color .28s ease, color .28s ease,
-    fill .25s ease, stroke .25s ease !important;
-}
-
+/* 切换瞬间**不做色彩过渡**：主题色变化靠瞬切（详见 app.js onThemeToggleClick
+   的实测数据）。这里只保留月亮图标的「转一下」。 */
 html.theme-anim .theme-toggle svg { animation: theme-moon-flip .45s cubic-bezier(.3, .8, .3, 1); }
 
 @keyframes theme-moon-flip { to { transform: rotate(360deg); } }
