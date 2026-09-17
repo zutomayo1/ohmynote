@@ -47,6 +47,14 @@ FIELDS = (
     "appearance_radius",
 )
 
+# 外观这一组字段：「只恢复外观」按钮清它，站点名 / 简介 / 每页条数等保持不动
+APPEARANCE_FIELDS = (
+    "appearance_palette",
+    "appearance_custom",
+    "appearance_mode",
+    "appearance_radius",
+)
+
 # 代码默认值（没有 .env、也没在页面保存时的兜底）
 DEFAULTS: dict[str, Any] = {
     "site_title": "墨痕",
@@ -286,9 +294,17 @@ def save(conn: sqlite3.Connection, values: dict) -> dict:
     return current()
 
 
-def reset(conn: sqlite3.Connection) -> None:
-    """清掉页面保存的站点配置，回到 .env / 默认值。"""
+def reset(conn: sqlite3.Connection, fields: tuple[str, ...] | None = None) -> None:
+    """清掉页面保存的站点配置，回到 .env / 默认值。
+
+    ``fields`` 只清指定的一组字段（如 ``APPEARANCE_FIELDS`` = 只恢复外观），
+    留空则清全部。未知字段直接报错——宁可不动作，也不要静默清掉别的配置。
+    """
     from .. import repo
 
-    repo.delete_meta(conn, [f"{META_PREFIX}{field}" for field in FIELDS])
+    targets = FIELDS if fields is None else tuple(fields)
+    unknown = [field for field in targets if field not in FIELDS]
+    if unknown:
+        raise SiteSettingsError("未知的站点配置字段：%s" % "、".join(unknown))
+    repo.delete_meta(conn, [f"{META_PREFIX}{field}" for field in targets])
     bootstrap(conn)

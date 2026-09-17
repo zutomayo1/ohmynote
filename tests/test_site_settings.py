@@ -223,3 +223,58 @@ def test_public_pages_render_for_anonymous():
             assert resp.status_code == 200, f"{path} 渲染失败"
         # 访客导航里没有回收站入口，自然也没有角标
         assert 'class="nav-badge"' not in anon.get("/blog").text
+
+
+# ---------------------------------------------------------------------------
+# 7. 只恢复外观（reset_appearance）：外观回默认，站点信息保持不动
+# ---------------------------------------------------------------------------
+def test_reset_appearance_keeps_site_info(auth_client, csrf):
+    save_site(
+        auth_client,
+        csrf,
+        site_title="别被清掉",
+        site_subtitle="",
+        site_description="",
+        author="",
+        base_url="",
+        per_page="24",
+        trash_days="7",
+        appearance_palette="ocean",
+        appearance_custom="#3B5BA5",
+        appearance_mode="dark",
+        appearance_radius="lg",
+    )
+    assert settings.appearance_custom == "#3B5BA5"
+    assert settings.appearance_radius == "lg"
+
+    response = auth_client.post(
+        "/settings/site", data={"_csrf": csrf, "reset_appearance": "1"}, follow_redirects=False
+    )
+    assert response.status_code == 303
+
+    # 外观整组回到 .env / 默认
+    assert settings.appearance_custom == ""
+    assert settings.appearance_radius == "md"
+    assert settings.appearance_mode == "auto"
+    # 站点信息一项都没被动
+    assert settings.site_title == "别被清掉"
+    assert settings.per_page == 24
+    assert settings.trash_days == 7
+    # 重新 bootstrap（模拟重启）后依旧如此
+    with db_mod.db() as conn:
+        site_settings.bootstrap(conn)
+    assert settings.site_title == "别被清掉"
+    assert settings.appearance_custom == ""
+
+
+def test_appearance_reset_button_rendered(auth_client):
+    page = auth_client.get("/settings")
+    assert 'name="reset_appearance"' in page.text
+    assert "只恢复外观默认值" in page.text
+
+
+def test_reset_rejects_unknown_field():
+    """未知字段宁可报错，也不静默清掉一堆配置。"""
+    with db_mod.db() as conn:
+        with pytest.raises(site_settings.SiteSettingsError):
+            site_settings.reset(conn, ("appearance_custom", "site_titel"))

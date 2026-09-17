@@ -553,12 +553,18 @@
     }
   }
 
-  // ===== 5. 危险操作确认（form[data-confirm]）=====
+  // ===== 5. 危险操作确认（form[data-confirm] 或提交按钮上的 data-confirm）=====
+  // 文案挂在按钮上很重要：站点设置那张表单里，「保存」和「恢复默认」是
+  // 同一个 form 的两个 submit，只有后者需要确认，不能挂在 form 上。
   function initConfirm() {
     document.addEventListener('submit', function (e) {
       var form = e.target;
-      if (!form || !form.matches || !form.matches('form[data-confirm]')) return;
-      if (!window.confirm(form.getAttribute('data-confirm') || '')) {
+      if (!form || !form.matches || !form.matches('form')) return;
+      var btn = e.submitter && e.submitter.getAttribute ? e.submitter : null;
+      var text = form.getAttribute('data-confirm') ||
+        (btn ? btn.getAttribute('data-confirm') : '') || '';
+      if (!text) return;
+      if (!window.confirm(text)) {
         e.preventDefault();
         e.stopPropagation();
         return;

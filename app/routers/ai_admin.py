@@ -159,12 +159,20 @@ def save_site_settings(
     appearance_mode: str = Form("auto"),
     appearance_radius: str = Form("md"),
     reset: str | None = Form(None),
+    reset_appearance: str | None = Form(None),
 ):
     """保存站点信息：页面 > .env > 默认，非法值 flash 报错并回显、不写库。"""
     if reset:
         site_settings.reset(conn)
         return RedirectResponse(
             url_with_query("/settings", msg="已清除本页保存的站点信息，回到 .env / 默认值"),
+            status_code=303,
+        )
+    if reset_appearance:
+        # 只清外观这一组：站点名 / 简介 / 每页条数等保持页面里存的值
+        site_settings.reset(conn, site_settings.APPEARANCE_FIELDS)
+        return RedirectResponse(
+            url_with_query("/settings", msg="外观已恢复 .env / 默认值（站点名等信息保持不变）"),
             status_code=303,
         )
 
