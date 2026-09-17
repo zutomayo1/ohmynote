@@ -218,6 +218,7 @@
     template:'<rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M3.5 9h17"/><path d="M9.5 21V9"/>',
     trash:   '<path d="M4 7h16"/><path d="M9 7V5h6v2"/><path d="M7 7l1 13h8l1-13"/>',
     moon:    '<path d="M20 14.5A8 8 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/>',
+    download:'<path d="M12 4v10"/><path d="M8 11l4 3.5 4-3.5"/><path d="M5 19h14"/>',
     gear:    '<circle cx="12" cy="12" r="3"/><path d="M12 3.2v2.1M12 18.7v2.1M3.2 12h2.1M18.7 12h2.1M5.7 5.7l1.5 1.5M16.8 16.8l1.5 1.5M18.3 5.7l-1.5 1.5M7.2 16.8l-1.5 1.5"/>'
   };
   function iconSvg(name, size) {
@@ -544,6 +545,9 @@
   }
   function runCommandAction(action) {
     if (action === 'theme') onThemeToggleClick(); // 复用现成的主题切换逻辑
+    if (action === 'install-app') {               // PWA 安装（pwa.js 在可安装时注册本命令）
+      if (window.InkNote && window.InkNote.promptInstall) { window.InkNote.promptInstall(); }
+    }
   }
   function onPaletteKeydown(e) {
     if (!PALETTE.isOpen) return;

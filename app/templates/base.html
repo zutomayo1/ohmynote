@@ -16,6 +16,13 @@
   <meta name="twitter:card" content="summary">
   <meta name="csrf-token" content="{{ csrf }}">
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/apple-touch-icon-180.png">
+  {# PWA：装到手机主屏 / 桌面后离线可读（service worker 在 pwa.js 里注册）。
+     theme-color 跟随站点配色与明暗，让状态栏和页面底色连成一片。 #}
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="{{ pwa.light }}" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="{{ pwa.dark }}" media="(prefers-color-scheme: dark)">
+  <meta name="color-scheme" content="light dark">
   <link rel="alternate" type="application/atom+xml" href="/feed.xml" title="{{ settings.site_title }} · Atom">
   <link rel="alternate" type="application/rss+xml" href="/rss.xml" title="{{ settings.site_title }} · RSS">
   <link rel="stylesheet" href="/static/css/style.css?v={{ asset_v }}">
@@ -204,6 +211,7 @@
 <script src="/static/js/reading-progress.js?v={{ asset_v }}" defer></script>
 <script src="/static/js/blog.js?v={{ asset_v }}" defer></script>
 <script src="/static/js/onboarding.js?v={{ asset_v }}" defer></script>
+<script src="/static/js/pwa.js?v={{ asset_v }}" defer></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

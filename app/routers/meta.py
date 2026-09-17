@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 
 from fastapi import APIRouter, Depends, Request
@@ -13,6 +14,7 @@ from ..deps import db_conn
 from ..services import content as content_service
 from ..services import ai
 from ..services import feeds
+from ..services import pwa
 
 router = APIRouter(tags=["meta"])
 
@@ -62,6 +64,34 @@ def robots():
 @router.get("/favicon.ico")
 def favicon():
     return RedirectResponse("/static/favicon.svg", status_code=301)
+
+
+@router.get("/manifest.webmanifest")
+def webmanifest():
+    """PWA manifest：安装到桌面 / 手机主屏。
+
+    必须 no-cache：站点名 / 配色改了要立刻反映（浏览器重取 manifest 很便宜）。
+    """
+    payload = json.dumps(pwa.manifest_payload(), ensure_ascii=False, indent=2)
+    return Response(
+        payload,
+        media_type="application/manifest+json",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
+@router.get("/sw.js")
+def service_worker():
+    """Service Worker 脚本（离线阅读）。
+
+    同样 no-cache：SW 内容变化才会触发浏览器安装新版本、清掉旧缓存；
+    浏览器本身对 SW 脚本的缓存上限是 24 小时，显式 no-cache 更可控。
+    """
+    return Response(
+        pwa.service_worker_js(),
+        media_type="application/javascript; charset=utf-8",
+        headers={"Cache-Control": "no-cache"},
+    )
 
 
 @router.get("/health")

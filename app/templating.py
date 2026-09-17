@@ -368,6 +368,8 @@ def _nav_trash_count() -> int:
 
 
 def base_context(request: Request) -> dict[str, Any]:
+    from .services import pwa  # 延迟导入：pwa 服务要用本模块的 custom_brand_css
+
     session = current_session(request)
     return {
         "request": request,
@@ -376,6 +378,7 @@ def base_context(request: Request) -> dict[str, Any]:
         "csrf": csrf_token(request),
         "is_authed": bool(session),
         "asset_v": ASSET_VERSION,
+        "pwa": pwa.theme_colors(),
         "current_path": request.url.path,
         "query_params": request.query_params,
         "ai_enabled": ai.is_enabled(),
