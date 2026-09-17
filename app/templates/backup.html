@@ -144,6 +144,74 @@
     {% endif %}
   </section>
 
+  <section class="backup-card" id="remote-backup">
+    <h2 class="backup-card__title">{{ icon('archive', 18) }} 远端备份（WebDAV）</h2>
+    <p class="backup-card__text">
+      把本地最新的一份快照自动传到 WebDAV 目录 —— Nextcloud、坚果云、群晖、NAS 都支持。
+      这样<strong>这台电脑坏了 / 丢了，笔记还在别处</strong>。地址填到目录为止（目录不存在时我们会尝试建一级）。
+    </p>
+
+    {# 状态行常驻（JS 测试连接时就地更新），没记录时先隐藏 #}
+    <div class="flash flash--{{ 'ok' if remote_status and remote_status.ok else 'warn' }}"
+         id="remote-status"{% if not remote_status %} hidden{% endif %}>
+      {% if remote_status %}上次{{ '上传成功' if remote_status.ok else '上传失败' }}：{{ remote_status.at }}
+      · {{ remote_status.message }}{% if remote_status.removed %} · 清理了 {{ remote_status.removed | length }} 份旧副本{% endif %}{% endif %}
+    </div>
+
+    <form class="backup-form" method="post" action="/backup/remote/save">
+      <input type="hidden" name="_csrf" value="{{ csrf }}">
+      <div class="field-grid">
+        <label class="field field--wide">
+          <span class="field__label">WebDAV 目录地址</span>
+          <input class="input" type="text" name="url" value="{{ remote.url }}" spellcheck="false"
+                 placeholder="例如 https://dav.jianguoyun.com/dav/inknote/">
+        </label>
+        <label class="field">
+          <span class="field__label">用户名</span>
+          <input class="input" type="text" name="user" value="{{ remote.user }}"
+                 autocomplete="username" spellcheck="false">
+        </label>
+        <label class="field">
+          <span class="field__label">密码 / 应用密码</span>
+          <input class="input" type="password" name="password" value=""
+                 placeholder="{{ ('已保存：' ~ remote.password_mask ~ '，留空表示不修改') if remote.has_password else '留空表示不需要认证' }}"
+                 autocomplete="new-password">
+        </label>
+        <label class="field">
+          <span class="field__label">自动上传间隔（小时）</span>
+          <input class="input" type="number" name="interval_hours" min="0" max="720"
+                 value="{{ remote.interval_hours }}">
+          <span class="micro">0 = 不自动传，只在你点「立即上传」时传</span>
+        </label>
+        <label class="field">
+          <span class="field__label">远端保留份数</span>
+          <input class="input" type="number" name="keep" min="1" max="100" value="{{ remote.keep }}">
+          <span class="micro">只清理我们自己传上去的旧副本，别的文件一律不动</span>
+        </label>
+        <label class="field field--wide">
+          <span class="field__label">
+            <input type="checkbox" name="full" value="1"{% if remote.full %} checked{% endif %}>
+            上传完整备份（含 AI 密钥、登录口令哈希、以及这里的 WebDAV 口令）
+          </span>
+          <span class="micro">
+            默认关闭：远端副本会先抹掉这些密钥 —— 更安全，但万一要用远端副本恢复，
+            需要重新填 AI 密钥与登录口令。
+          </span>
+        </label>
+      </div>
+      <div class="settings-form__actions">
+        <button class="btn btn--primary" type="submit">保存</button>
+        <button class="btn btn--ghost" type="button" data-remote-test>测试连接</button>
+        <button class="btn btn--ghost" type="submit" formaction="/backup/remote/run">立即上传</button>
+        <button class="btn btn--ghost btn--danger" type="submit" formaction="/backup/remote/reset"
+                data-confirm="清空远端备份配置？远端已上传的文件不会被删除。">清空配置</button>
+      </div>
+    </form>
+    <p class="backup-card__note micro">
+      「测试连接」只读目录、不做任何写入；「清空配置」只清本机保存的地址与口令，远端文件不动。
+    </p>
+  </section>
+
 {% if result %}
 <section class="backup-result{{ ' backup-result--warn' if result.errors }}" id="backup-result">
   <h2 class="backup-result__title">最近一次导入</h2>
@@ -296,6 +364,54 @@
     }
     if (input.files && input.files.length) { renderList(); }
   }
+})();
+
+// ---- 远端备份：测试连接走 fetch，不刷新页面，刚填的地址与口令都留着 ----
+// 注意：这段是 body 里的**内联**脚本，比 defer 的 app.js 先执行 ——
+// 所以不能在这里判断 window.InkNote（那时还不存在，处理器会静默不接）。
+// 用自包含的 fetch + CSRF meta，和页面里导入那段脚本同一套路。
+(function () {
+  var button = document.querySelector('[data-remote-test]');
+  var status = document.getElementById('remote-status');
+  if (!button || !status) { return; }
+
+  function csrfToken() {
+    var meta = document.querySelector('meta[name="csrf-token"]');
+    return meta ? meta.getAttribute('content') : '';
+  }
+
+  function show(ok, message) {
+    status.textContent = message;
+    status.hidden = false;
+    status.classList.toggle('flash--ok', !!ok);
+    status.classList.toggle('flash--warn', !ok);
+    // 有 app.js 的 toast 就用一下（点击时它肯定已经就绪了）
+    if (window.InkNote && InkNote.toast) { InkNote.toast(message, ok ? 'ok' : 'warn'); }
+  }
+
+  button.addEventListener('click', function () {
+    var form = button.form;
+    if (!form) { return; }
+    var label = button.textContent;
+    button.disabled = true;
+    button.textContent = '测试中…';
+    fetch('/backup/remote/test', {
+      method: 'POST',
+      body: new FormData(form),
+      credentials: 'same-origin',
+      headers: { 'X-CSRF-Token': csrfToken(), 'X-Requested-With': 'fetch' },
+    })
+      .then(function (res) { return res.json().catch(function () { return null; }).then(function (data) {
+        if (!res.ok || !data) { throw new Error('测试失败（HTTP ' + res.status + '）'); }
+        return data;
+      }); })
+      .then(function (data) { show(!!data.ok, data.message || '已测试'); })
+      .catch(function (err) { show(false, (err && err.message) || '测试失败'); })
+      .then(function () {   // 不用 finally：老 Safari 没有
+        button.disabled = false;
+        button.textContent = label;
+      });
+  });
 })();
 </script>
 {% endblock %}

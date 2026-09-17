@@ -369,7 +369,10 @@ def _nav_trash_count() -> int:
 
 def base_context(request: Request) -> dict[str, Any]:
     from .services import pwa  # 延迟导入：pwa 服务要用本模块的 custom_brand_css
+    from .services import site_settings
 
+    # 兜底：没有跑过 lifespan 也要能渲染（错误页、测试里的裸 TestClient）
+    site_settings.ensure_ready()
     session = current_session(request)
     return {
         "request": request,

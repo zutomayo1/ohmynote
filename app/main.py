@@ -27,7 +27,7 @@ from . import repo
 from .config import STATIC_DIR, settings
 from .deps import SAFE_METHODS, RedirectException, current_session, db_conn
 from .services import ai
-from .services import account, db_backup, site_settings
+from .services import account, db_backup, remote_backup, site_settings
 from .services import tidy as tidy_service
 from .services import ai_embed as ai_embed_service
 from .routers import (ai_admin, ai_embed, api, ask, auth, backup, blog, media, meta,
@@ -125,6 +125,14 @@ def _tick_backup() -> None:
         logger.info("已自动备份数据库：%s", snapshot.get("name"))
 
 
+def _tick_remote_backup() -> None:
+    """看一眼该不该往远端传一份（是否该做由 remote_backup 内部按间隔判断，幂等）。"""
+    with db_mod.db() as conn:
+        result = remote_backup.maybe_remote_backup(conn)
+    if result:
+        logger.info("远端备份：%s", result.get("message"))
+
+
 def _tick_tidy() -> None:
     """看一眼该不该跑夜间整理（是否该做由 tidy.maybe_tidy 内部按时间 / 开关判断，幂等）。"""
     with db_mod.db() as conn:
@@ -145,6 +153,8 @@ def _start_workers() -> None:
     _spawn_worker("inknote-index", 1800, _tick_index, run_immediately=True)
     _spawn_worker("inknote-backup", 3600, _tick_backup, run_immediately=False)
     _spawn_worker("inknote-tidy", 3600, _tick_tidy, run_immediately=False)
+    # 远端备份：每半小时看一眼（真正是否上传由配置的间隔决定，默认 24 小时）
+    _spawn_worker("inknote-remote-backup", 1800, _tick_remote_backup, run_immediately=False)
 
 
 def _safe_print(text: str) -> None:

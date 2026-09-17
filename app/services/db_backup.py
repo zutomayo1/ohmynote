@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import logging
 import re
+import shutil
 import sqlite3
 import threading
 from datetime import datetime
@@ -47,7 +48,8 @@ REASON_LABELS = {
 }
 
 # 脱敏备份要清空的 meta 键（存在才清；其余键一个不动）。
-SANITIZED_META_KEYS = ("ai.api_key", "account.password_hash")
+SANITIZED_META_KEYS = ("ai.api_key", "account.password_hash",
+                       "backup.remote.password", "backup.remote.user")
 
 # 同一进程内串行化「生成 / 回滚 / 删除」，避免两个自动备份同时滚动删除。
 _LOCK = threading.RLock()
@@ -262,6 +264,17 @@ def _sanitize_snapshot_file(path: Path) -> None:
             )
     finally:
         conn.close()
+
+
+def export_sanitized_copy(source: Path, dest: Path) -> None:
+    """把 ``source`` 快照复制到 ``dest`` 并抹掉敏感 meta 键（复用同一份键清单）。
+
+    远端备份默认走这条：上传出去的是「不含 AI 密钥 / 登录口令哈希 / WebDAV 口令」
+    的副本。注意它是**文件级复制 + 就地把敏感键置空**，只动 dest，绝不碰源文件。
+    """
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, dest)
+    _sanitize_snapshot_file(dest)
 
 
 def create_snapshot(

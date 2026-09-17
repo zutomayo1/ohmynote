@@ -63,7 +63,13 @@ def theme_colors() -> dict[str, str]:
     """当前站点的品牌色 / 亮底 / 暗底（给 manifest 与 <meta theme-color> 用）。
 
     自定义主题色优先：直接读它推导出来的背景色，手机状态栏才会和页面底色一致。
+
+    先 ``ensure_ready()``：这个函数在渲染早期就被调用，可能早于 lifespan 的
+    bootstrap —— 那时读 ``settings.appearance_custom`` 会直接 AttributeError。
     """
+    from . import site_settings
+
+    site_settings.ensure_ready()
     custom = (settings.appearance_custom or "").strip()
     if custom:
         css = custom_brand_css(custom)

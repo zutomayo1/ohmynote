@@ -178,6 +178,26 @@ def _ensure() -> None:
         bootstrap(None)
 
 
+def ensure_ready() -> None:
+    """公开版：任何「可能在 bootstrap 之前就被执行」的读取点都该先调它。
+
+    实例：没跑 lifespan 就直接渲染页面（``TestClient(create_app())`` 不带 with、
+    启动过程中撞上 404/500 错误页）——那时 ``settings`` 上还没有 ``appearance_*``
+    这些字段，模板一读就 AttributeError，把 404 变成 500。
+    """
+    _ensure()
+
+
+def ensure_ready() -> None:
+    """公开版：任何「可能在 bootstrap 之前就被执行」的读取点都该先调它。
+
+    实例：没跑 lifespan 就直接渲染页面（``TestClient(create_app())`` 不带 with、
+    启动过程中撞上 404/500 错误页）——那时 ``settings`` 上还没有 ``appearance_*``
+    这些字段，模板一读就 AttributeError，把 404 变成 500。
+    """
+    _ensure()
+
+
 def bootstrap(conn: sqlite3.Connection | None = None) -> None:
     """启动时调用：先取 .env / 默认值，再用「设置页」保存的值覆盖。"""
     stored: dict[str, str] = {}

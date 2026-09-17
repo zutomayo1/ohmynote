@@ -10,6 +10,11 @@
     POST /backup/restore/{name}   回滚（先自动保护现场，再写回当前连接）
     POST /backup/delete/{name}    删除某份快照
     GET  /export/json             JSON 全量导出（zip 之外的结构化入口）
+    POST /backup/remote/save      保存远端备份（WebDAV）配置
+    POST /backup/remote/test      按表单值试连一次（只读，不写任何东西；
+                                  fetch 请求回 JSON，表单请求回 303）
+    POST /backup/remote/run       立即上传一份到远端
+    POST /backup/remote/reset     清空远端配置（含口令）
 
 合并逻辑在 ``app/services/importer.py``；快照逻辑在 ``app/services/db_backup.py``。
 """
@@ -22,12 +27,12 @@ import threading
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 
 from .. import repo
 from ..config import settings
 from ..deps import csrf_protect, db_conn, require_login
-from ..services import db_backup, importer
+from ..services import db_backup, importer, remote_backup
 from ..templating import render
 from ..utils import as_bool, human_size, now, now_iso, url_with_query
 
@@ -72,7 +77,8 @@ def _source_for(filename: str) -> str:
 
 
 @router.get("/backup")
-def backup_page(request: Request):
+def backup_page(request: Request, conn: sqlite3.Connection = Depends(db_conn)):
+    cfg = remote_backup.config(conn)
     return render(
         request,
         "backup.html",
@@ -80,7 +86,94 @@ def backup_page(request: Request):
         snapshots=db_backup.list_snapshots(),
         backups_dir=str(db_backup.backup_dir()),
         reason_labels=db_backup.REASON_LABELS,
+        remote={
+            "url": cfg["url"],
+            "user": cfg["user"],
+            "interval_hours": cfg["interval_hours"],
+            "keep": cfg["keep"],
+            "full": cfg["full"],
+            # 口令绝不回显：只给一个「已保存」的掩码
+            "has_password": bool(cfg["password"]),
+            "password_mask": remote_backup.mask(cfg["password"]),
+        },
+        remote_status=remote_backup.status(conn),
     )
+
+
+# ---------------------------------------------------------------------------
+# 远端备份（WebDAV）：配置 / 试连 / 立即上传 / 清空
+# ---------------------------------------------------------------------------
+
+
+def _back(msg: str, kind: str = "ok") -> RedirectResponse:
+    return RedirectResponse(url_with_query("/backup", msg=msg, kind=kind), status_code=303)
+
+
+@router.post("/backup/remote/save")
+def backup_remote_save(
+    url: str = Form(""),
+    user: str = Form(""),
+    password: str = Form(""),
+    interval_hours: str = Form("24"),
+    keep: str = Form("7"),
+    full: str | None = Form(None),
+    conn: sqlite3.Connection = Depends(db_conn),
+):
+    try:
+        cfg = remote_backup.save(conn, {
+            "url": url, "user": user, "password": password,
+            "interval_hours": interval_hours, "keep": keep, "full": as_bool(full),
+        })
+    except remote_backup.RemoteError as exc:
+        return _back(f"保存失败：{exc}", kind="warn")
+
+    if not cfg["url"]:
+        return _back("已清空远端地址（不再自动上传）")
+    if cfg["interval_hours"] <= 0:
+        return _back("已保存；间隔为 0 —— 只在点「立即上传」时才传")
+    return _back(f"已保存；每 {cfg['interval_hours']} 小时自动上传一份，远端保留 {cfg['keep']} 份")
+
+
+@router.post("/backup/remote/test")
+def backup_remote_test(
+    request: Request,
+    url: str = Form(""),
+    user: str = Form(""),
+    password: str = Form(""),
+    interval_hours: str = Form("24"),
+    keep: str = Form("7"),
+    full: str | None = Form(None),
+    conn: sqlite3.Connection = Depends(db_conn),
+):
+    """按页面上的值试连（口令留空就用已保存的那个），只读不写。"""
+    try:
+        cfg = remote_backup.validate({
+            "url": url, "user": user, "password": password,
+            "interval_hours": interval_hours, "keep": keep, "full": as_bool(full),
+        })
+    except remote_backup.RemoteError as exc:
+        return _back(f"配置有误：{exc}", kind="warn")
+    if not cfg["password"]:
+        cfg["password"] = remote_backup.config(conn)["password"]
+    result = remote_backup.probe(cfg)
+
+    # 页面里的「测试连接」走 fetch：**不能整页刷新**，否则刚填的地址/口令全没了
+    # （用户得重新输一遍密码，等于惩罚他先测试再保存）。无 JS 时仍走 303 回退。
+    if (request.headers.get("x-requested-with") or "").lower() == "fetch":
+        return JSONResponse({"ok": bool(result["ok"]), "message": result["message"]})
+    return _back(result["message"], kind="ok" if result["ok"] else "warn")
+
+
+@router.post("/backup/remote/run")
+def backup_remote_run(conn: sqlite3.Connection = Depends(db_conn)):
+    result = remote_backup.run_upload(conn, trigger="manual")
+    return _back(result["message"], kind="ok" if result["ok"] else "warn")
+
+
+@router.post("/backup/remote/reset")
+def backup_remote_reset(conn: sqlite3.Connection = Depends(db_conn)):
+    remote_backup.reset(conn)
+    return _back("已清空远端备份配置（口令一并删除）")
 
 
 # ---------------------------------------------------------------------------
