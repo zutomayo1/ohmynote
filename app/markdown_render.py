@@ -490,7 +490,10 @@ _SVG_CLOSE_RE = re.compile(r"</svg\s*>", re.IGNORECASE)
 _SVG_TOKEN_RE = re.compile(r"\{\{svg:(\d+)\}\}")
 # SVG 里的攻击面：脚本、外链可执行对象、事件属性、javascript: URL——全部剥掉
 _SVG_DROP_BLOCK_RE = re.compile(
-    r"<(script|iframe|object|embed|foreignObject)\b[^>]*>.*?</\1\s*>", re.IGNORECASE | re.DOTALL)
+    # 注意 foreignObject **不能删**：mermaid 导出的文字全放在它的内嵌 div/span 里
+    # （htmlLabels）。安全性没有缺口——本函数的正则对整段 svg 生效，foreignObject
+    # 内嵌的 script / 事件属性 / javascript: 一样会被下面的规则剥掉。
+    r"<(script|iframe|object|embed)\b[^>]*>.*?</\1\s*>", re.IGNORECASE | re.DOTALL)
 _SVG_DROP_ALONE_RE = re.compile(r"<(script|iframe|object|embed)\b[^>]*/>", re.IGNORECASE)
 _SVG_ON_ATTR_RE = re.compile(r"\son\w+\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s>]+)", re.IGNORECASE)
 _SVG_JS_URL_RE = re.compile(

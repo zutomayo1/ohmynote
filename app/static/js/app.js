@@ -1285,6 +1285,8 @@
 
   // ===== 内联 SVG：放大查看（灯箱）与下载 =====
   // 容器与按钮由渲染层输出（markdown_render._svg_view_markup），这里只接事件。
+  // 注意：按钮自己也是 <svg> 图标，取图必须限定 .svg-view__scroll——
+  // fig.querySelector('svg') 拿到的是 DOM 里第一个 svg（恰是按钮上的眼睛）。
   function initSvgView() {
     var lightbox = null;
 
@@ -1303,11 +1305,67 @@
       return lightbox;
     }
 
+    function figureSvg(button) {
+      var fig = button.closest('.svg-view');
+      return fig ? fig.querySelector('.svg-view__scroll svg') : null;
+    }
+
+    function baseName() {
+      var heading = document.querySelector('.post-title, .note-title, h1');
+      return (heading ? heading.textContent : 'diagram').trim().slice(0, 40).replace(/[\\/:*?"<>|]/g, '_') || 'diagram';
+    }
+
+    function saveBlob(blob, filename) {
+      var link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(function () { URL.revokeObjectURL(link.href); }, 2000);
+    }
+
+    function saveSvgFallback(svg) {
+      saveBlob(new Blob([svg.outerHTML], { type: 'image/svg+xml;charset=utf-8' }), baseName() + '.svg');
+    }
+
+    function downloadAsPng(svg) {
+      // 画 PNG： foreignObject（mermaid 文字容器）在部分浏览器会污染画布，
+      // toBlob 抛错时自动回退下载 .svg 源文件
+      var serialized = new XMLSerializer().serializeToString(svg);
+      if (serialized.indexOf('xmlns=') === -1) {
+        serialized = serialized.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+      }
+      var viewBox = svg.viewBox && svg.viewBox.baseVal;
+      var width = (viewBox && viewBox.width) || svg.clientWidth || 800;
+      var height = (viewBox && viewBox.height) || svg.clientHeight || 400;
+      var scale = 2;   // 2 倍清晰度
+      var image = new Image();
+      image.onload = function () {
+        var canvas = document.createElement('canvas');
+        canvas.width = Math.round(width * scale);
+        canvas.height = Math.round(height * scale);
+        var context = canvas.getContext('2d');
+        context.fillStyle = getComputedStyle(document.body).backgroundColor || '#ffffff';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        try {
+          canvas.toBlob(function (blob) {
+            if (blob) { saveBlob(blob, baseName() + '.png'); }
+            else { saveSvgFallback(svg); }
+          }, 'image/png');
+        } catch (error) {
+          saveSvgFallback(svg);   // 画布被污染：退回 SVG 源文件
+        }
+      };
+      image.onerror = function () { saveSvgFallback(svg); };
+      image.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(serialized);
+    }
+
     document.addEventListener('click', function (event) {
       var viewBtn = event.target.closest ? event.target.closest('[data-svg-view]') : null;
       if (viewBtn) {
-        var fig = viewBtn.closest('.svg-view');
-        var svg = fig && fig.querySelector('svg');
+        var svg = figureSvg(viewBtn);
         if (!svg) { return; }
         var box = ensureLightbox();
         var stage = box.querySelector('.svg-lightbox__stage');
@@ -1318,19 +1376,9 @@
       }
       var dlBtn = event.target.closest ? event.target.closest('[data-svg-download]') : null;
       if (dlBtn) {
-        var fig2 = dlBtn.closest('.svg-view');
-        var svg2 = fig2 && fig2.querySelector('svg');
+        var svg2 = figureSvg(dlBtn);
         if (!svg2) { return; }
-        var blob = new Blob([svg2.outerHTML], { type: 'image/svg+xml;charset=utf-8' });
-        var link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        var heading = document.querySelector('.post-title, .note-title, h1');
-        var name = (heading ? heading.textContent : 'diagram').trim().slice(0, 40) || 'diagram';
-        link.download = name.replace(/[\\/:*?"<>|]/g, '_') + '.svg';
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        setTimeout(function () { URL.revokeObjectURL(link.href); }, 2000);
+        downloadAsPng(svg2);
       }
     });
   }

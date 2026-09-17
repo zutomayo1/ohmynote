@@ -8189,3 +8189,26 @@ html:not(.js) .svg-view__actions { display: none; }
 .svg-lightbox__hint {
   margin: 8px 0 0; text-align: center; color: var(--ink-3); font-size: 12.5px;
 }
+
+/* ===== 补丁：SVG 文字度量锁定（2026-09-17） =====
+   mermaid 导出的节点尺寸按「无衬线 16px、行高 ~1.3」度量。页面正文的
+   衬线字体 / 行高 / 可调字号会继承进 foreignObject 的 div，把内容撑高后
+   被 foreignObject 的固定高度裁掉（文字显示不全）。这里统一锁定度量，
+   并允许轻微溢出（不裁剪），保证多行标签完整。 */
+.svg-view svg,
+.svg-lightbox svg {
+  font-family: var(--font-sans);
+  font-size: 16px;
+}
+.svg-view svg foreignObject div,
+.svg-view svg foreignObject span,
+.svg-view svg foreignObject p,
+.svg-lightbox svg foreignObject div,
+.svg-lightbox svg foreignObject span,
+.svg-lightbox svg foreignObject p {
+  line-height: 1.35;
+}
+.svg-view svg foreignObject,
+.svg-lightbox svg foreignObject {
+  overflow: visible;
+}
