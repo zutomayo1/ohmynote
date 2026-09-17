@@ -155,7 +155,7 @@ def rebuild(conn: sqlite3.Connection) -> int:
         return 0
     conn.execute(f"DELETE FROM {FTS_TABLE}")
     rows = conn.execute(
-        "SELECT id, title, content FROM notes WHERE deleted_at IS NULL"
+        "SELECT id, title, content FROM notes WHERE deleted_at IS NULL AND locked = 0"
     ).fetchall()
     count = 0
     for row in rows:
@@ -398,7 +398,7 @@ def retrieve(conn: sqlite3.Connection, question: str, *, limit: int = 6, public_
     if not terms:
         return []
 
-    conditions = ["deleted_at IS NULL"]
+    conditions = ["deleted_at IS NULL AND locked = 0"]
     if public_only:
         conditions.append("is_public = 1")
     rows = conn.execute(
@@ -442,7 +442,7 @@ def _use_fts() -> bool:
 def _conditions(*, public_only: bool, include_deleted: bool) -> list[str]:
     where: list[str] = []
     if not include_deleted:
-        where.append("n.deleted_at IS NULL")
+        where.append("n.deleted_at IS NULL AND n.locked = 0")
     if public_only:
         where.append("n.is_public = 1")
     return where

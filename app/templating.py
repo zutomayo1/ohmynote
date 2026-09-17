@@ -368,6 +368,7 @@ def _nav_trash_count() -> int:
 
 
 def base_context(request: Request) -> dict[str, Any]:
+    from .services import note_lock
     from .services import pwa  # 延迟导入：pwa 服务要用本模块的 custom_brand_css
 
     session = current_session(request)
@@ -379,6 +380,7 @@ def base_context(request: Request) -> dict[str, Any]:
         "is_authed": bool(session),
         "asset_v": ASSET_VERSION,
         "pwa": pwa.theme_colors(),
+        "note_lock_hours": note_lock.UNLOCK_MAX_AGE // 3600,
         "current_path": request.url.path,
         "query_params": request.query_params,
         "ai_enabled": ai.is_enabled(),

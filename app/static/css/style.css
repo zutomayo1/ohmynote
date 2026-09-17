@@ -8066,3 +8066,30 @@ details.warning[open] > summary, details.danger[open] > summary, details.quote[o
   .admonition, details.note, details.tip, details.success,
   details.warning, details.danger, details.quote { break-inside: avoid; }
 }
+
+
+/* ===== 补丁：锁定笔记（2026-09-17） =====
+   详情页的状态条：已锁时给「重新锁定 / 解除锁定」，未锁时折叠成「设密码」。
+   颜色取 --warn，和其它"需要注意"的状态一致；暗色与六套色板自动适配。 */
+
+.lock-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  margin: 14px 0 0; padding: 10px 12px;
+  border: 1px solid var(--line); border-left: 3px solid var(--warn);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--warn) 8%, var(--surface));
+  font-size: 13px; line-height: 1.6; color: var(--ink-2); }
+
+.lock-bar__label {
+  display: inline-flex; align-items: center; gap: 6px;
+  color: var(--warn); font-weight: 600; }
+
+.lock-bar__form { display: inline-flex; align-items: center; gap: 6px; margin: 0; }
+
+.lock-bar .input--sm { width: 168px; padding: 5px 10px; font-size: 13px; }
+
+.lock-bar__hint { flex-basis: 100%; color: var(--ink-3); font-size: 12px; }
+
+details.lock-bar > summary { cursor: pointer; list-style: none; }
+details.lock-bar > summary::-webkit-details-marker { display: none; }
+details.lock-bar[open] > summary { margin-bottom: 8px; }

@@ -154,6 +154,38 @@
   </div>
 </div>
 
+{% if note.locked %}
+  <div class="lock-bar">
+    <span class="lock-bar__label">{{ icon('lock', 14) }} 已锁定</span>
+    <span>本会话已解锁（{{ note_lock_hours }} 小时内免密码）</span>
+    <form class="lock-bar__form" method="post" action="{{ note.url }}/relock">
+      <input type="hidden" name="_csrf" value="{{ csrf }}">
+      <input type="hidden" name="next" value="{{ back }}">
+      <button class="btn btn--ghost btn--sm" type="submit">重新锁定</button>
+    </form>
+    <form class="lock-bar__form" method="post" action="{{ note.url }}/unlock/remove">
+      <input type="hidden" name="_csrf" value="{{ csrf }}">
+      <input type="hidden" name="next" value="{{ back }}">
+      <input class="input input--sm" type="password" name="password" placeholder="解除锁定需再输密码"
+             autocomplete="current-password" required>
+      <button class="btn btn--ghost btn--danger btn--sm" type="submit">解除锁定</button>
+    </form>
+    <span class="lock-bar__hint">锁定期间：不参与全文搜索 / 图谱 / AI，不会出现在博客与 RSS；正文导出也要先解锁。</span>
+  </div>
+{% else %}
+  <details class="lock-bar">
+    <summary class="lock-bar__label">{{ icon('lock', 14) }} 锁定这篇（需要密码才能看）</summary>
+    <form class="lock-bar__form" method="post" action="{{ note.url }}/lock">
+      <input type="hidden" name="_csrf" value="{{ csrf }}">
+      <input type="hidden" name="next" value="{{ back }}">
+      <input class="input input--sm" type="password" name="password" placeholder="设一个至少 4 位的密码"
+             autocomplete="new-password" required>
+      <button class="btn btn--ghost btn--sm" type="submit">设密码锁定</button>
+    </form>
+    <span class="lock-bar__hint">锁定会自动取消公开（博客 / RSS 里不再出现），并从搜索索引里撤下；密码忘记无法恢复正文。</span>
+  </details>
+{% endif %}
+
   <article class="post-body prose" id="post-body" data-task-note="{{ note.id }}">
     {% if not note.content.strip() %}
       <p class="muted">这篇笔记还是空的，<a href="{{ note.url }}/edit">去写点什么</a>。</p>

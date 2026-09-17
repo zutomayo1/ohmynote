@@ -70,11 +70,16 @@
       </h2>
       <div class="note-card__badges">
         {% if note.status == 'draft' %}<span class="badge badge--draft" title="草稿：还没定稿">草稿</span>{% else %}<span class="badge badge--saved" title="已保存">已保存</span>{% endif %}
+        {% if note.locked %}<span class="badge" title="已锁定：需要密码才能查看正文">已锁定</span>{% endif %}
       </div>
     </header>
 
-    {% if note.summary %}<p class="card__summary">{{ note.summary | truncate_cn(140) }}</p>{% endif %}
-    {% if note.snippet %}<p class="card__summary card__summary--snippet">{{ note.snippet | highlight(tokens) | safe }}</p>{% endif %}
+    {% if note.locked %}
+      <p class="card__summary muted">已锁定 · 摘要不显示，打开需输入密码</p>
+    {% else %}
+      {% if note.summary %}<p class="card__summary">{{ note.summary | truncate_cn(140) }}</p>{% endif %}
+      {% if note.snippet %}<p class="card__summary card__summary--snippet">{{ note.snippet | highlight(tokens) | safe }}</p>{% endif %}
+    {% endif %}
 
     <div class="card__meta meta">
       <span class="meta__item">{{ note.updated_at | rel }}</span>

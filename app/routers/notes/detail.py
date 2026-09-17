@@ -18,6 +18,8 @@ from fastapi.responses import JSONResponse, RedirectResponse, Response
 
 from ... import repo, search as search_mod
 from ...services import graph as graph_service
+from ...services import note_lock
+from .lock import locked_page
 from ...config import settings
 from ...deps import (
     MAX_SQLITE_INT,
@@ -165,6 +167,8 @@ router = APIRouter()
 @router.get("/notes/{note_id}")
 def note_detail(request: Request, note_id: NoteId, conn: sqlite3.Connection = Depends(db_conn)):
     note = _note_or_404(conn, note_id)
+    if not note_lock.is_open(request, note):   # 锁定且本会话没解锁：只给密码页
+        return locked_page(request, note, f"/notes/{note_id}")
     context = content_service.note_page_context(conn, note, public=False)
     # 语义相关笔记优先；拿不到（未配置向量模型 / 没建索引 / 服务异常）原样回退关键词推荐
     related_engine = "keyword"
@@ -216,6 +220,8 @@ def note_detail(request: Request, note_id: NoteId, conn: sqlite3.Connection = De
 @router.get("/notes/{note_id}/edit")
 def edit_note(request: Request, note_id: NoteId, conn: sqlite3.Connection = Depends(db_conn)):
     note = _note_or_404(conn, note_id)
+    if not note_lock.is_open(request, note):   # 编辑器同样要解锁，否则等于绕开密码
+        return locked_page(request, note, f"/notes/{note_id}/edit")
     rename_from = (request.query_params.get("rename_from") or "").strip()
     rename_ref_notes = (
         [(n["title"], hits) for n, hits in repo.link_refs_to(conn, note_id, rename_from)]
@@ -267,6 +273,9 @@ def update_note(
     is_pinned: str | None = Form(None),
     is_starred: str | None = Form(None),
 ):
+    # 锁定且本会话没解锁：连保存都不许（否则等于用一个表单绕开密码改正文）
+    if not note_lock.is_open(request, _note_or_404(conn, note_id)):
+        return locked_page(request, _note_or_404(conn, note_id), f"/notes/{note_id}")
     existing = _note_or_404(conn, note_id, include_deleted=True)
     if existing["deleted_at"]:
         raise HTTPException(status_code=409, detail="这篇笔记在回收站里，请先恢复再编辑")

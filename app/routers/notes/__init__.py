@@ -11,7 +11,7 @@ from ...deps import csrf_protect, require_login
 
 router = APIRouter(dependencies=[Depends(require_login), Depends(csrf_protect)])
 
-from . import batch, detail, export, flags, links, trash, versions, views  # noqa: E402
+from . import batch, detail, export, flags, links, lock, trash, versions, views  # noqa: E402
 
-for _module in (views, batch, trash, detail, flags, links, versions, export):
+for _module in (views, batch, trash, detail, flags, links, versions, lock, export):
     router.include_router(_module.router)

@@ -39,6 +39,11 @@
       <a class="btn btn--primary" href="/export/zip">{{ icon('download', 16) }} 下载 zip（Markdown 打包）</a>
       <a class="btn btn--ghost" href="/export/json">{{ icon('download', 16) }} 下载 JSON（结构化）</a>
     </div>
+    {% if locked_notes %}
+      <p class="micro">
+        注意：其中 <strong>{{ locked_notes }} 篇是锁定笔记</strong>，导出会照常包含它们的正文（备份以「不丢东西」为先，锁只挡随手翻看）。
+      </p>
+    {% endif %}
     <p class="micro">
       zip 内含 <code>index.md</code>、<code>notes/</code>（每篇一个 .md）、
       <code>notes.json</code>、<code>README.txt</code>。

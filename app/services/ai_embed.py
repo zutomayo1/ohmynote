@@ -181,14 +181,14 @@ def _report(progress, done: int, total: int) -> None:
 # 统计 / 元信息
 # ---------------------------------------------------------------------------
 def _count_live_notes(conn: sqlite3.Connection) -> int:
-    row = conn.execute("SELECT COUNT(*) AS c FROM notes WHERE deleted_at IS NULL").fetchone()
+    row = conn.execute("SELECT COUNT(*) AS c FROM notes WHERE deleted_at IS NULL AND locked = 0").fetchone()
     return int(row["c"] or 0) if row else 0
 
 
 def _count_indexed_notes(conn: sqlite3.Connection) -> int:
     row = conn.execute(
         f"SELECT COUNT(DISTINCT e.note_id) AS c FROM {TABLE} e "
-        "JOIN notes n ON n.id = e.note_id WHERE n.deleted_at IS NULL"
+        "JOIN notes n ON n.id = e.note_id WHERE n.deleted_at IS NULL AND n.locked = 0"
     ).fetchone()
     return int(row["c"] or 0) if row else 0
 
@@ -209,7 +209,7 @@ def _purge_stale(conn: sqlite3.Connection) -> int:
     """删掉 note_id 已不在 notes（或已进回收站）里的残留向量。"""
     cursor = conn.execute(
         f"DELETE FROM {TABLE} WHERE note_id NOT IN "
-        "(SELECT id FROM notes WHERE deleted_at IS NULL)"
+        "(SELECT id FROM notes WHERE deleted_at IS NULL AND locked = 0)"
     )
     return int(cursor.rowcount or 0)
 
@@ -492,7 +492,7 @@ def retrieve(conn: sqlite3.Connection, question: str, *, limit: int = 6) -> list
         note_ids = [note_id for note_id, _best in ordered]
         placeholders = ",".join("?" for _ in note_ids)
         note_rows = conn.execute(
-            f"SELECT * FROM notes WHERE id IN ({placeholders}) AND deleted_at IS NULL", note_ids
+            f"SELECT * FROM notes WHERE id IN ({placeholders}) AND deleted_at IS NULL AND locked = 0", note_ids
         ).fetchall()
         notes = {note["id"]: note for note in repo.hydrate(conn, note_rows)}
         terms = search_mod.question_terms(question)
@@ -583,7 +583,7 @@ def similar_notes(conn: sqlite3.Connection, note_id: int, *, limit: int = 5) -> 
         rows = conn.execute(
             f"SELECT e.note_id AS note_id, e.chunk AS chunk, e.vector AS vector "
             f"FROM {TABLE} e JOIN notes n ON n.id = e.note_id "
-            "WHERE e.note_id <> ? AND n.deleted_at IS NULL",
+            "WHERE e.note_id <> ? AND n.deleted_at IS NULL AND n.locked = 0",
             (note_id,),
         ).fetchall()
         if not rows:
@@ -618,7 +618,7 @@ def similar_notes(conn: sqlite3.Connection, note_id: int, *, limit: int = 5) -> 
         note_ids = [candidate_id for candidate_id, _best in ordered]
         placeholders = ",".join("?" for _ in note_ids)
         note_rows = conn.execute(
-            f"SELECT * FROM notes WHERE id IN ({placeholders}) AND deleted_at IS NULL",
+            f"SELECT * FROM notes WHERE id IN ({placeholders}) AND deleted_at IS NULL AND locked = 0",
             note_ids,
         ).fetchall()
         notes = {note["id"]: note for note in repo.hydrate(conn, note_rows)}
@@ -687,7 +687,7 @@ def rebuild(
 
         notes = conn.execute(
             "SELECT id, title, content, updated_at FROM notes "
-            "WHERE deleted_at IS NULL ORDER BY id"
+            "WHERE deleted_at IS NULL AND locked = 0 ORDER BY id"
         ).fetchall()
         total = len(notes)
         _report(progress, 0, total)
@@ -888,7 +888,7 @@ def maybe_auto_index(
 
         notes = conn.execute(
             "SELECT id, title, content, updated_at FROM notes "
-            "WHERE deleted_at IS NULL ORDER BY id"
+            "WHERE deleted_at IS NULL AND locked = 0 ORDER BY id"
         ).fetchall()
         total = len(notes)
         _report(progress, 0, total)
@@ -979,7 +979,7 @@ def pending_count(conn: sqlite3.Connection) -> int:
             f"SELECT COUNT(*) AS c FROM notes n LEFT JOIN ("
             f"SELECT note_id, MAX(updated_at) AS updated_at, MAX(model) AS model "
             f"FROM {TABLE} GROUP BY note_id) e ON e.note_id = n.id "
-            "WHERE n.deleted_at IS NULL AND ("
+            "WHERE n.deleted_at IS NULL AND n.locked = 0 AND ("
             " e.note_id IS NULL OR e.updated_at IS NULL OR e.updated_at <> n.updated_at"
             " OR e.model IS NULL OR e.model <> ?)",
             (model,),

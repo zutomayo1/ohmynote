@@ -71,11 +71,24 @@ def _source_for(filename: str) -> str:
     return "markdown"
 
 
+def _locked_note_count() -> int:
+    """导出仍然包含锁定笔记的正文，但要在页面上说清楚有多少篇 —— 免得以为被漏掉了。"""
+    from .. import db as db_mod
+    from ..services import note_lock
+
+    try:
+        with db_mod.db() as conn:
+            return note_lock.locked_count(conn)
+    except Exception:  # noqa: BLE001  统计失败不该挡住备份页
+        return 0
+
+
 @router.get("/backup")
 def backup_page(request: Request):
     return render(
         request,
         "backup.html",
+        locked_notes=_locked_note_count(),
         result=_last_result(),
         snapshots=db_backup.list_snapshots(),
         backups_dir=str(db_backup.backup_dir()),
