@@ -76,11 +76,13 @@ def _dry(kw: dict[str, Any]) -> bool:
 # ---------------------------------------------------------------------------
 # 入口分派
 # ---------------------------------------------------------------------------
-def normalize_defaults(category: str = "", tags: str = "", public: str = "") -> dict[str, Any]:
+def normalize_defaults(category: str = "", tags: str = "", public: str = "",
+                       status: str = "", pinned: str = "", starred: str = "") -> dict[str, Any]:
     """整理「批量设置」表单值。空值返回 {}（不干预任何字段的默认行为）。
 
     只有 markdown 导入吃这套（zip / json 是我们自己导出的结构化备份，
     自带完整元数据，不应该被表单值覆盖）。
+    ``public`` / ``pinned`` / ``starred`` 是三态："" = 不改，"yes"/"no" = 明确设置。
     """
     clean: dict[str, Any] = {}
     if (category or "").strip():
@@ -88,8 +90,13 @@ def normalize_defaults(category: str = "", tags: str = "", public: str = "") -> 
     tag_list = [t.strip() for t in (tags or "").replace("，", ",").split(",") if t.strip()]
     if tag_list:
         clean["tags"] = tag_list
-    if (public or "").strip() in ("public", "private"):
-        clean["public"] = public.strip() == "public"
+    for key, raw in (("public", public), ("pinned", pinned), ("starred", starred)):
+        value = (raw or "").strip()
+        if value in ("yes", "no"):
+            clean[key] = value == "yes"
+    status = (status or "").strip()
+    if status in ("draft", "saved"):
+        clean["status"] = status
     return clean
 
 
@@ -100,10 +107,13 @@ def sniff_and_import(
     *,
     dry_run: bool = False,
     defaults: dict[str, Any] | None = None,
+    file_created_at: str | None = None,
 ) -> dict[str, Any]:
     """按扩展名 / 内容分派到 zip / json / markdown 导入。
 
     ``defaults`` 是「批量设置」（见 normalize_defaults），只作用于 markdown。
+    ``file_created_at`` 是**单个文件**的修改时间（ISO）：每篇不同、不能进批量
+    defaults，由路由按文件传入（勾「用文件修改时间作为创建时间」时）。
     """
     name = (filename or "").strip()
     raw = data or b""
@@ -128,7 +138,8 @@ def sniff_and_import(
         if source == "json":
             return import_json(conn, raw, dry_run=dry_run)
         return _import_markdown_bytes(conn, raw, filename=name, dry_run=dry_run,
-                                      defaults=defaults or {})
+                                      defaults=defaults or {},
+                                      file_created_at=file_created_at)
     except Exception as exc:  # 解析层兜底：坏文件不能把整个页面带成 500
         # 错误同时返回给用户；服务端也留一条，方便统计是哪些文件/哪类异常导致导入失败
         logger.debug(
@@ -160,7 +171,7 @@ def _sniff_source(data: bytes) -> str:
 
 def _import_markdown_bytes(
     conn: sqlite3.Connection, data: bytes, *, filename: str, dry_run: bool,
-    defaults: dict[str, Any] | None = None,
+    defaults: dict[str, Any] | None = None, file_created_at: str | None = None,
 ) -> dict[str, Any]:
     result = _empty_result("markdown", dry_run)
     try:
@@ -177,7 +188,7 @@ def _import_markdown_bytes(
         )
         return result
     return import_markdown(conn, text, filename=filename, dry_run=dry_run,
-                           defaults=defaults or {})
+                           defaults=defaults or {}, file_created_at=file_created_at)
 
 
 # ---------------------------------------------------------------------------
@@ -503,6 +514,7 @@ def import_markdown(
     *,
     filename: str,
     defaults: dict[str, Any] | None = None,
+    file_created_at: str | None = None,
     **kw: Any,
 ) -> dict[str, Any]:
     """导入单篇 Markdown；标题依次取 front matter → 正文 ``# 标题`` → 文件名。
@@ -517,7 +529,8 @@ def import_markdown(
         return result
     try:
         meta, body = _parse_front_matter(text or "")
-        record = _note_from_markdown(meta, body, filename, defaults or {})
+        record = _note_from_markdown(meta, body, filename, defaults or {},
+                                     file_created_at=file_created_at)
     except Exception as exc:
         # 解析失败只拒绝这一篇，errors 里已经告诉用户；服务端留痕便于定位是哪类文件
         logger.debug("Markdown 解析失败（file=%s）：%s", filename or "-", exc, exc_info=True)
@@ -529,20 +542,34 @@ def import_markdown(
 
 
 def _note_from_markdown(meta: dict[str, Any], body: str, filename: str,
-                        defaults: dict[str, Any] | None = None) -> dict[str, Any]:
+                        defaults: dict[str, Any] | None = None,
+                        file_created_at: str | None = None) -> dict[str, Any]:
     defaults = defaults or {}
     title = _as_text(meta.get("title")) or _first_heading(body)
     if not title:
         title = Path(str(filename or "")).stem.strip()
 
-    # 公开性：文件里**显式**写了（public/is_public/published 任一）以文件为准；
-    # 没写才用「批量设置」。status 的推导保持旧行为（公开→saved，否则 draft）
-    has_public = any(key in meta for key in ("public", "is_public", "published"))
-    is_public = (_as_bool(meta.get("public", meta.get("is_public", meta.get("published"))))
-                 if has_public else bool(defaults.get("public")))
+    # 公开性 / 置顶 / 星标：文件里**显式**写了以文件为准；没写才用「批量设置」
+    def pick(flag: str, meta_keys: tuple[str, ...]) -> bool:
+        present = any(key in meta for key in meta_keys)
+        if present:
+            return _as_bool(meta.get(meta_keys[0], meta.get(meta_keys[1], "")))
+        return bool(defaults.get(flag))
+
+    is_public = pick("public", ("public", "is_public", "published"))
+    is_pinned = pick("pinned", ("pinned", "is_pinned", "top"))
+    is_starred = pick("starred", ("starred", "is_starred", "star"))
+    # 更新已有笔记时只有「明确设置了」的标志才动手（None = 不改）；
+    # 明确意图 = 批量设置里有这一项，或文件 front matter 显式写了
+    apply_pinned = "pinned" in defaults or any(
+        key in meta for key in ("pinned", "is_pinned", "top"))
+    apply_starred = "starred" in defaults or any(
+        key in meta for key in ("starred", "is_starred", "star"))
     status = _as_text(meta.get("status")).lower()
     if status not in _STATUSES:
-        status = "saved" if is_public else "draft"
+        # 文件没写 status：批量设置的「保存状态」优先于「按公开性推导」——
+        # 「已保存但不公开」是批量导入的常见组合
+        status = defaults.get("status") or ("saved" if is_public else "draft")
 
     # 标签：文件与批量设置合并去重（批量打标签是最常见诉求，直接覆盖会丢信息）
     tags = _as_tag_list(meta.get("tags"))
@@ -558,7 +585,12 @@ def _note_from_markdown(meta: dict[str, Any], body: str, filename: str,
         "summary": _as_text(meta.get("summary")),
         "status": status,
         "is_public": is_public,
+        "is_pinned": is_pinned,
+        "is_starred": is_starred,
+        "apply_pinned": apply_pinned,
+        "apply_starred": apply_starred,
         "slug": _as_text(meta.get("slug")),
+        "created_at": file_created_at or "",
     }
 
 
@@ -790,6 +822,8 @@ def _merge_one(
                 summary=summary,
                 status=status,
                 is_public=is_public,
+                is_pinned=(bool(record.get("is_pinned")) if record.get("apply_pinned") else None),
+                is_starred=(bool(record.get("is_starred")) if record.get("apply_starred") else None),
                 slug=(slug or None),
                 reason="import",
             )
@@ -805,6 +839,9 @@ def _merge_one(
                 summary=summary,
                 status=status,
                 is_public=is_public,
+                is_pinned=bool(record.get("is_pinned")),
+                is_starred=bool(record.get("is_starred")),
                 slug=slug,
+                created_at=(_as_text(record.get("created_at")) or None),
             )
         result["created"] += 1

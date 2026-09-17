@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import time
 import json
 import zipfile
 
@@ -397,11 +398,16 @@ def _note_by_title(auth_client, title):
 def test_normalize_defaults():
     assert importer.normalize_defaults() == {}
     assert importer.normalize_defaults("", "", "") == {}
-    assert importer.normalize_defaults("  导入 ", "迁移， 博客,日记", "public") == {
+    assert importer.normalize_defaults("  导入 ", "迁移， 博客,日记", "yes") == {
         "category": "导入", "tags": ["迁移", "博客", "日记"], "public": True,
     }
-    # 非法的公开值不干预
+    # 置顶 / 星标 / 保存状态
+    assert importer.normalize_defaults(pinned="yes", starred="no", status="saved") == {
+        "pinned": True, "starred": False, "status": "saved",
+    }
+    # 非法值不干预
     assert importer.normalize_defaults("", "", "maybe") == {}
+    assert importer.normalize_defaults(status="published") == {}
 
 
 def test_defaults_apply_to_plain_markdown(auth_client, csrf):
@@ -409,7 +415,7 @@ def test_defaults_apply_to_plain_markdown(auth_client, csrf):
     response = auth_client.post(
         "/backup/import",
         data={"_csrf": csrf, "default_category": "导入", "default_tags": "迁移, 博客",
-              "default_public": "public"},
+              "default_public": "yes"},
         files=files,
         follow_redirects=False,
     )
@@ -427,7 +433,7 @@ def test_defaults_lose_to_front_matter_but_tags_merge(auth_client, csrf):
     response = auth_client.post(
         "/backup/import",
         data={"_csrf": csrf, "default_category": "导入", "default_tags": "迁移",
-              "default_public": "public"},
+              "default_public": "yes"},
         files=files,
         follow_redirects=False,
     )
@@ -452,7 +458,7 @@ def test_defaults_do_not_touch_zip_or_json(auth_client, csrf):
     files = [("file", ("批量.zip", buf.getvalue(), "application/zip"))]
     response = auth_client.post(
         "/backup/import",
-        data={"_csrf": csrf, "default_category": "不该出现", "default_public": "public"},
+        data={"_csrf": csrf, "default_category": "不该出现", "default_public": "yes"},
         files=files,
         follow_redirects=False,
     )
@@ -469,3 +475,89 @@ def test_batch_settings_rendered(auth_client):
     assert 'name="default_public"' in page
     assert "批量设置" in page
     assert "选整个文件夹" in page and "webkitdirectory" in page
+
+
+def test_defaults_pinned_starred_and_status(auth_client, csrf):
+    """置顶/星标/保存状态：批量设置生效；「已保存 + 私密」是合法组合。"""
+    files = [("file", ("标记甲.md", "标记甲的正文".encode("utf-8"), "text/markdown"))]
+    response = auth_client.post(
+        "/backup/import",
+        data={"_csrf": csrf, "default_pinned": "yes", "default_starred": "no",
+              "default_status": "saved", "default_public": "no"},
+        files=files,
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    note = _note_by_title(auth_client, "标记甲")
+    assert note is not None
+    assert note["is_pinned"] == 1
+    assert note["is_starred"] == 0
+    assert note["status"] == "saved"
+    assert note["is_public"] == 0
+
+
+def test_front_matter_flag_loses_to_nothing_but_beats_default(auth_client, csrf):
+    """文件显式写了 pinned 以文件为准；没写的吃批量设置。"""
+    body = "---\ntitle: 标记乙\npinned: false\n---\n\n乙的正文"
+    files = [("file", ("标记乙.md", body.encode("utf-8"), "text/markdown"))]
+    response = auth_client.post(
+        "/backup/import",
+        data={"_csrf": csrf, "default_pinned": "yes"},
+        files=files,
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert _note_by_title(auth_client, "标记乙")["is_pinned"] == 0
+
+
+
+def test_defaults_pinned_starred_and_status(auth_client, csrf):
+    """置顶/星标/保存状态：批量设置生效；「已保存 + 私密」是合法组合。"""
+    files = [("file", ("标记甲.md", "标记甲的正文".encode("utf-8"), "text/markdown"))]
+    response = auth_client.post(
+        "/backup/import",
+        data={"_csrf": csrf, "default_pinned": "yes", "default_starred": "no",
+              "default_status": "saved", "default_public": "no"},
+        files=files,
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    note = _note_by_title(auth_client, "标记甲")
+    assert note is not None
+    assert note["is_pinned"] == 1
+    assert note["is_starred"] == 0
+    assert note["status"] == "saved"
+    assert note["is_public"] == 0
+
+
+def test_front_matter_flag_loses_to_nothing_but_beats_default(auth_client, csrf):
+    """文件显式写了 pinned 以文件为准；没写的吃批量设置。"""
+    body = "---\ntitle: 标记乙\npinned: false\n---\n\n乙的正文"
+    files = [("file", ("标记乙.md", body.encode("utf-8"), "text/markdown"))]
+    response = auth_client.post(
+        "/backup/import",
+        data={"_csrf": csrf, "default_pinned": "yes"},
+        files=files,
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert _note_by_title(auth_client, "标记乙")["is_pinned"] == 0
+
+def test_keep_mtime_sets_created_at(auth_client, csrf):
+    """勾「用文件修改时间作创建时间」：迁移时原日期保留（更新已有笔记时不改动）。"""
+    stamp_ms = int((time.time() - 86_400 * 30) * 1000)   # 30 天前
+    body = "---\ntitle: 旧日期笔记\n---\n\n正文"
+    files = [("file", ("旧日期笔记.md", body.encode("utf-8"), "text/markdown"))]
+    response = auth_client.post(
+        "/backup/import",
+        data={"_csrf": csrf, "keep_mtime": "1",
+              "file_times": json.dumps({"旧日期笔记.md": stamp_ms})},
+        files=files,
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    note = _note_by_title(auth_client, "旧日期笔记")
+    assert note is not None
+    # created_at 应是文件的修改时间（30 天前），而不是导入时刻
+    expect = time.strftime("%Y-%m-%d", time.localtime(stamp_ms / 1000))
+    assert str(note.get("created_at", "")).startswith(expect), note.get("created_at")

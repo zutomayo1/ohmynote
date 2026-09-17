@@ -101,6 +101,8 @@ def build_zip(conn: sqlite3.Connection) -> bytes:
                     "file": f"notes/{name}",
                     "status": note["status"],
                     "is_public": note["is_public"],
+                    "is_pinned": note["is_pinned"],
+                    "is_starred": note["is_starred"],
                     "tags": note.get("tags") or [],
                     "word_count": note["word_count"],
                     "created_at": note["created_at"],

@@ -203,6 +203,7 @@ def create_note(
     is_pinned: bool = False,
     is_starred: bool = False,
     slug: str = "",
+    created_at: str | None = None,
 ) -> dict[str, Any]:
     from ..markdown_render import render
 
@@ -211,7 +212,7 @@ def create_note(
     if is_public:
         # 公开的东西不该同时是「草稿」，状态自动升为已保存
         status = "saved"
-    stamp = now_iso()
+    stamp = created_at or now_iso()   # 导入迁移可指定原创建时间；updated_at 仍用导入时刻
     stats = text_stats(content)
     summary = (summary or "").strip() or make_excerpt(content)
     wanted_slug = sanitize_slug(slug)
@@ -233,8 +234,8 @@ def create_note(
             stats.words,
             stats.minutes,
             stamp,
-            stamp,
-            stamp if is_public else None,
+            now_iso(),
+            now_iso() if is_public else None,
         ),
     )
     note_id = int(cursor.lastrowid or 0)

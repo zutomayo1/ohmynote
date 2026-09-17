@@ -49,6 +49,7 @@
     <h2 class="backup-card__title">{{ icon('upload', 18) }} 导入 / 恢复</h2>
     <form class="backup-form" method="post" action="/backup/import" enctype="multipart/form-data">
       <input type="hidden" name="_csrf" value="{{ csrf }}">
+      <input type="hidden" name="file_times" value="" data-file-times>
       <div class="backup-drop" data-backup-drop>
         <input class="backup-drop__input" id="backup-file" type="file" name="file" multiple
                accept=".zip,.json,.md,.markdown,.txt,application/zip,application/json,text/markdown,text/plain">
@@ -86,11 +87,43 @@
           <label class="field">
             <span class="field__label">公开状态</span>
             <select class="input" name="default_public">
-              <option value="">不改（默认私密草稿）</option>
-              <option value="public">设为公开（已保存）</option>
-              <option value="private">保持私密</option>
+              <option value="">不改（默认私密）</option>
+              <option value="yes">公开</option>
+              <option value="no">私密</option>
             </select>
-            <span class="micro">文件里显式写了公开性的以文件为准</span>
+            <span class="micro">文件里写了 public 的以文件为准</span>
+          </label>
+          <label class="field">
+            <span class="field__label">保存状态</span>
+            <select class="input" name="default_status">
+              <option value="">不改（按公开性推导）</option>
+              <option value="saved">已保存</option>
+              <option value="draft">草稿</option>
+            </select>
+            <span class="micro">比如「已保存 + 私密」= 导入即定稿、不上博客</span>
+          </label>
+          <label class="field">
+            <span class="field__label">置顶</span>
+            <select class="input" name="default_pinned">
+              <option value="">不改</option>
+              <option value="yes">置顶</option>
+              <option value="no">取消置顶</option>
+            </select>
+          </label>
+          <label class="field">
+            <span class="field__label">星标</span>
+            <select class="input" name="default_starred">
+              <option value="">不改</option>
+              <option value="yes">加星标</option>
+              <option value="no">取消星标</option>
+            </select>
+          </label>
+          <label class="field field--wide">
+            <span class="field__label">创建时间</span>
+            <label class="checkbox">
+              <input type="checkbox" name="keep_mtime" value="1">
+              用文件的修改时间作为创建时间（迁移时保留原日期；更新已有笔记时不改动）
+            </label>
           </label>
         </div>
       </details>
@@ -364,6 +397,17 @@
     if (submitBtn) { submitBtn.disabled = !on; }
   }
 
+  // 把每个文件的修改时间交给服务端（勾了「用文件修改时间作创建时间」时使用）
+  function syncFileTimes() {
+    var box = form.querySelector('[data-file-times]');
+    if (!box) { return; }
+    var map = {};
+    Array.prototype.slice.call(input.files || []).forEach(function (file) {
+      if (file.lastModified) { map[file.name] = file.lastModified; }
+    });
+    box.value = JSON.stringify(map);
+  }
+
   function renderList() {
     var files = Array.prototype.slice.call(input.files || []);
     if (!list) { toggleSubmit(files.length > 0); return; }
@@ -376,6 +420,7 @@
     list.hidden = false;
     list.innerHTML = '';
     var total = 0;
+    syncFileTimes();
     files.forEach(function (file, index) {
       total += file.size;
       var row = document.createElement('div');

@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import datetime
 import threading
 from pathlib import Path
 
@@ -34,7 +35,7 @@ from ..config import settings
 from ..deps import csrf_protect, db_conn, require_login
 from ..services import db_backup, importer, remote_backup
 from ..templating import render
-from ..utils import as_bool, human_size, now, now_iso, url_with_query
+from ..utils import ISO_FMT, as_bool, human_size, now, now_iso, url_with_query
 
 router = APIRouter(dependencies=[Depends(require_login), Depends(csrf_protect)])
 
@@ -255,11 +256,32 @@ async def backup_import(
     default_category: str = Form(""),
     default_tags: str = Form(""),
     default_public: str = Form(""),
+    default_status: str = Form(""),
+    default_pinned: str = Form(""),
+    default_starred: str = Form(""),
+    keep_mtime: str = Form(""),
+    file_times: str = Form(""),
 ):
     del request
     preview = as_bool(dry_run)
     # 「批量设置」：只作用于 .md 导入（front matter 优先、标签合并），见 normalize_defaults
-    defaults = importer.normalize_defaults(default_category, default_tags, default_public)
+    defaults = importer.normalize_defaults(default_category, default_tags, default_public,
+                                           default_status, default_pinned, default_starred)
+    # 「用文件修改时间作为创建时间」：前端把每个 File 的 lastModified 塞进 file_times
+    # （JSON：文件名 → 毫秒时间戳）。迁移时原日期不丢。
+    mtime_map: dict[str, str] = {}
+    if as_bool(keep_mtime) and file_times.strip():
+        try:
+            raw_map = json.loads(file_times)
+        except (TypeError, ValueError):
+            raw_map = {}
+        if isinstance(raw_map, dict):
+            for name, ms in raw_map.items():
+                try:
+                    stamp = datetime.fromtimestamp(int(ms) / 1000)
+                except (TypeError, ValueError, OSError, OverflowError):
+                    continue
+                mtime_map[str(name)] = stamp.strftime(ISO_FMT)
 
     merged: dict | None = None
     for upload in files:
@@ -274,7 +296,8 @@ async def backup_import(
             )
         else:
             result = importer.sniff_and_import(conn, filename, raw, dry_run=preview,
-                                               defaults=defaults)
+                                               defaults=defaults,
+                                               file_created_at=mtime_map.get(filename))
         if merged is None:
             merged = result
             continue
@@ -318,6 +341,8 @@ def export_json(conn: sqlite3.Connection = Depends(db_conn)):
                 "summary": note.get("summary") or "",
                 "status": note.get("status") or "draft",
                 "is_public": bool(note.get("is_public")),
+                "is_pinned": bool(note.get("is_pinned")),
+                "is_starred": bool(note.get("is_starred")),
                 "created_at": note.get("created_at"),
                 "updated_at": note.get("updated_at"),
             }
