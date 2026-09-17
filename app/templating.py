@@ -246,8 +246,10 @@ _HEX_FULL = __import__("re").compile(r"#([0-9a-fA-F]{6})")
 def custom_brand_css(hex_color: str) -> str:
     """自定义主题色 → 覆盖 --brand 三件套的 CSS（亮 / 暗各一组）。
 
-    作用域用 ``:root:not([data-palette])``：访客在页头下拉里显式选了调色板时，
-    让位给访客的选择；没选（或选回「墨迹」）就用站点设置的自定义色。
+    作用域用 ``html:root``（特异性 0,1,1 / 0,2,1）：稳赢默认令牌与任何
+    ``[data-palette]`` 色板规则——否则浏览器 localStorage 里存过色板选择
+    （页头下拉点过一次就会存）时，自定义色会被它排除而「看起来没生效」。
+    自定义启用时页头色板下拉同时隐藏（见 base.html），不会出现死 UI。
     """
     m = _HEX_FULL.fullmatch((hex_color or "").strip())
     if not m:
@@ -263,10 +265,10 @@ def custom_brand_css(hex_color: str) -> str:
     white, black = (255, 255, 255), (24, 18, 14)
     return "\n".join(
         (
-            ":root:not([data-palette]){{--brand:{b};--brand-dark:{bd};--brand-soft:{bs}}}".format(
+            "html:root{{--brand:{b};--brand-dark:{bd};--brand-soft:{bs}}}".format(
                 b=hex_color.strip().upper(), bd=mix(black, 0.18), bs=mix(white, 0.82)
             ),
-            ':root:not([data-palette])[data-theme="dark"]{{--brand:{b};--brand-dark:{bd};--brand-soft:{bs}}}'.format(
+            'html:root[data-theme="dark"]{{--brand:{b};--brand-dark:{bd};--brand-soft:{bs}}}'.format(
                 b=mix(white, 0.28), bd=mix(white, 0.44), bs=mix(black, 0.80)
             ),
         )

@@ -66,6 +66,7 @@
             <a class="nav-link{{ ' is-active' if current_path.startswith('/todos') }}" href="/todos">今日待办</a>
             <a class="nav-link{{ ' is-active' if current_path.startswith('/stats') }}" href="/stats">写作统计</a>
             <a class="nav-link{{ ' is-active' if current_path.startswith('/graph') }}" href="/graph">关系图谱</a>
+            {% if not settings.appearance_custom %}
             <div class="palette-dd" id="palette-dd">
               <button class="palette-dd__toggle" type="button" aria-haspopup="listbox" aria-expanded="false">
                 <span class="palette-dd__label">墨迹</span>
@@ -98,6 +99,7 @@
                 </button>
               </div>
             </div>
+            {% endif %}
             <a class="nav-link{{ ' is-active' if current_path.startswith('/trash') }}" href="/trash">回收站{% if nav_trash %}<span class="nav-badge">{{ nav_trash }}</span>{% endif %}</a>
           </div>
         </div>
