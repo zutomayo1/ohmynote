@@ -59,7 +59,7 @@
   --line-strong: #D6C7AE;
   /* 强调 / 语义 */
   --brand: #B5533C; --brand-dark: #8F3F2C; --brand-soft: #F2E2DA; --accent: #4A6C5A;
-  --accent-soft: #E4EDE7; --warn-soft: #F6E7C8; --danger: #A83B2E;
+  --accent-soft: #E4EDE7; --warn: #8A6D3B; --warn-soft: #F6E7C8; --danger: #A83B2E;
   /* 阴影 / 圆角 */
   --shadow-sm: 0 1px 2px rgba(90, 70, 45, .05), 0 1px 3px rgba(90, 70, 45, .06);
   --shadow-md: 0 2px 6px rgba(90, 70, 45, .07), 0 10px 24px -12px rgba(90, 70, 45, .18);
@@ -80,7 +80,7 @@
   --ink: #EDE4D6; --ink-2: #C6B9A6; --ink-3: #9A8D7C; --line: #3D342C;
   --line-strong: #4A4038;
   --brand: #D98872; --brand-dark: #E8A48F; --brand-soft: #3A2A23; --accent: #83A694;
-  --accent-soft: #26332C; --warn-soft: #3B3222; --danger: #E08A7B;
+  --accent-soft: #26332C; --warn: #D9B26A; --warn-soft: #3B3222; --danger: #E08A7B;
   /* 暗色下投影更重、更暗 */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, .38), 0 2px 6px rgba(0, 0, 0, .3);
   --shadow-md: 0 4px 10px rgba(0, 0, 0, .45), 0 16px 36px -14px rgba(0, 0, 0, .7);
@@ -8004,4 +8004,65 @@ fieldset.field legend.field__label { padding: 0; margin-bottom: 6px; }
   width: 42px; height: 36px; padding: 2px; flex: none;
   border: 1px solid var(--line); border-radius: var(--radius-sm);
   background: var(--surface); cursor: pointer;
+}
+
+
+/* ===== 补丁：提示块 callout / admonition（2026-09-17） =====
+   写法（两种都支持）：
+     > [!NOTE] 标题        GitHub / Obsidian 风格，直觉写法
+     !!! note "标题"        Python-Markdown 原生
+     > [!TIP]- 标题        折叠（收起）／ + 为展开
+   展开型渲染成 div.admonition.TYPE，折叠型是 details.TYPE（pymdownx.details），
+   所以下面两组选择器要成对出现。颜色全部从既有令牌派生，六套色板与暗色自动适配。 */
+
+.admonition,
+details.note, details.tip, details.success,
+details.warning, details.danger, details.quote {
+  margin: 20px 0; padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--callout-fg, var(--brand));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--callout-fg, var(--brand)) 7%, var(--surface));
+  color: var(--ink); }
+
+.admonition.note, details.note { --callout-fg: var(--brand); }
+.admonition.tip, details.tip { --callout-fg: var(--accent); }
+.admonition.success, details.success { --callout-fg: var(--accent); }
+.admonition.warning, details.warning { --callout-fg: var(--warn); }
+.admonition.danger, details.danger { --callout-fg: var(--danger); }
+.admonition.quote, details.quote { --callout-fg: var(--ink-3); }
+
+.admonition > :last-child, details.note > :last-child, details.tip > :last-child,
+details.success > :last-child, details.warning > :last-child,
+details.danger > :last-child, details.quote > :last-child { margin-bottom: 0; }
+
+.admonition-title,
+details.note > summary, details.tip > summary, details.success > summary,
+details.warning > summary, details.danger > summary, details.quote > summary {
+  display: flex; align-items: center; gap: 7px;
+  margin: 0 0 6px; font-size: 15px; font-weight: 600; line-height: 1.5;
+  color: var(--callout-fg, var(--brand)); }
+
+.admonition-title::before,
+details.note > summary::before, details.tip > summary::before,
+details.success > summary::before, details.warning > summary::before,
+details.danger > summary::before, details.quote > summary::before {
+  content: ""; flex: none; width: 8px; height: 8px;
+  border-radius: var(--radius-pill); background: currentColor; }
+
+/* 折叠型：整行可点，去掉原生三角，用色点兼作展开指示 */
+details.note > summary, details.tip > summary, details.success > summary,
+details.warning > summary, details.danger > summary, details.quote > summary {
+  cursor: pointer; list-style: none; }
+details.note > summary::-webkit-details-marker, details.tip > summary::-webkit-details-marker,
+details.success > summary::-webkit-details-marker, details.warning > summary::-webkit-details-marker,
+details.danger > summary::-webkit-details-marker, details.quote > summary::-webkit-details-marker {
+  display: none; }
+details.note[open] > summary, details.tip[open] > summary, details.success[open] > summary,
+details.warning[open] > summary, details.danger[open] > summary, details.quote[open] > summary {
+  margin-bottom: 8px; }
+
+@media print {
+  .admonition, details.note, details.tip, details.success,
+  details.warning, details.danger, details.quote { break-inside: avoid; }
 }

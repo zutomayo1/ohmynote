@@ -33,6 +33,9 @@ EXTENSIONS = [
     "attr_list",
     "def_list",
     "footnotes",
+    "abbr",
+    "admonition",
+    "pymdownx.details",
     "smarty",
     # pymdown-extensions 提供 GitHub 风味语法：任务清单、删除线、高亮
     "pymdownx.tasklist",
@@ -302,6 +305,83 @@ def escape_raw_html(text: str) -> str:
 # `#标签`、`##标题` 这类「井号后面没有空格」的写法，按 CommonMark 当普通文本处理，
 # 否则一整行 `#标签` 会被当成 H1，正文里的 #标签 就废了。
 _ATX_NO_SPACE_RE = re.compile(r"^(#{1,6})(?=[^\s#])")
+
+
+# 提示块（callout）：GitHub / Obsidian 风格 `> [!NOTE] 标题` → admonition 语法
+_CALLOUT_START_RE = re.compile(r"^ {0,3}>[ \t]*\[!([A-Za-z\u4e00-\u9fff]{1,12})\]([+-]?)[ \t]*(.*)$")
+
+# 类型别名 → admonition 的类型名（未知类型退回 note，内容不会丢）
+CALLOUT_TYPES: dict[str, str] = {
+    "note": "note", "info": "note", "说明": "note", "注意": "note", "信息": "note",
+    "tip": "tip", "hint": "tip", "提示": "tip", "技巧": "tip",
+    "success": "success", "check": "success", "done": "success", "成功": "success", "完成": "success",
+    "warning": "warning", "warn": "warning", "警告": "warning",
+    "danger": "danger", "error": "danger", "failure": "danger", "caution": "danger",
+    "危险": "danger", "错误": "danger",
+    "quote": "quote", "cite": "quote", "引用": "quote",
+}
+
+
+def rewrite_callouts(text: str) -> str:
+    """把 ``> [!NOTE] 标题`` 这类引用块改写成 admonition 语法。
+
+    为什么要翻译：GitHub、Obsidian 都用 ``> [!TYPE]``，凭直觉就会这么写；
+    而 Python-Markdown 原生的 admonition 用的是 ``!!! note "标题"``（展开）与
+    ``??? note "标题"``（折叠）。这里当桥，两种语法都能用。
+
+    只处理「独立成块的引用首行」，并且**跳过围栏代码块**——否则文档里贴的
+    示例代码会被一起翻译。嵌套引用（``> > [!NOTE]``）原样保留。
+    """
+    if "[!" not in text:
+        return text
+
+    lines = text.split("\n")
+    out: list[str] = []
+    fence: str | None = None
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        fence_match = _FENCE_RE.match(line)
+        if fence is None and fence_match:
+            fence = fence_match.group(1)[0] * 3
+            out.append(line)
+            index += 1
+            continue
+        if fence is not None:
+            out.append(line)
+            if fence_match and fence_match.group(1)[0] * 3 == fence and not fence_match.group(2).strip():
+                fence = None
+            index += 1
+            continue
+
+        start = _CALLOUT_START_RE.match(line)
+        if not start:
+            out.append(line)
+            index += 1
+            continue
+
+        kind = CALLOUT_TYPES.get(start.group(1).lower(), "note")
+        flag, title = start.group(2), start.group(3).strip()
+        if not title and not start.group(1).isascii():
+            title = start.group(1)  # 中文别名没写标题时，直接拿它当标题（“危险”比“Danger”顺眼）
+        body: list[str] = []
+        index += 1
+        while index < len(lines) and lines[index].lstrip().startswith(">"):
+            quoted = lines[index].lstrip()[1:]
+            body.append(quoted[1:] if quoted.startswith(" ") else quoted)
+            index += 1
+
+        marker = "???" if flag == "-" else "!!!"
+        head = f"{marker} {kind}"
+        if title:
+            head += ' "' + title.replace('"', '\\"') + '"'
+        # admonition 是块级语法：前面要有空行，内容要缩进 4 空格
+        if out and out[-1].strip():
+            out.append("")
+        out.append(head)
+        out.extend("    " + item if item.strip() else "" for item in body)
+        out.append("")
+    return "\n".join(out)
 
 
 def normalise_headings(text: str) -> str:
@@ -639,6 +719,8 @@ def render(
 
     # 1) 禁用裸 HTML + 把 `#标签` 这类写法从「标题」里救出来
     body = map_outside_code(body, lambda chunk: normalise_headings(escape_raw_html(chunk)))
+    # 1b) `> [!NOTE]` → admonition 语法（跳过代码块，见 rewrite_callouts 注释）
+    body = rewrite_callouts(body)
     # 2) 双链 -> 占位符（避免被 Markdown 的链接语法吃掉）
     body, refs = _replace_wikilinks(body, resolver, url_builder)
 
