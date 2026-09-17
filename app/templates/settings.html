@@ -941,80 +941,120 @@
 {% endblock %}
 
 {% block scripts %}
+<style nonce="{{ nonce }}" id="appearance-preview"></style>
 <script src="/static/js/settings.js?v={{ asset_v }}" defer></script>
 <script nonce="{{ nonce }}">
   (function () {
     'use strict';
     var picker = document.getElementById('appearance-custom-picker');
     var text = document.getElementById('appearance-custom-text');
-    if (!picker || !text) { return; }
+    var styleEl = document.getElementById('appearance-preview');
+    if (!picker || !text || !styleEl) { return; }
     var HEX = /^#[0-9a-fA-F]{6}$/;
-    var root = document.documentElement;
-    var VARS = ['--bg', '--bg-soft', '--surface', '--surface-2', '--ink', '--ink-2',
-      '--ink-3', '--line', '--line-strong', '--brand', '--brand-dark', '--brand-soft',
-      '--accent', '--accent-soft', '--header-bg'];
-    function preview(hex) {
-      var m = HEX.exec(hex || '');
-      if (!m) {
-        VARS.forEach(function (p) { root.style.removeProperty(p); });
-        return;
-      }
-      var n = parseInt(m[1], 16);
+
+    // 与 app/templating.py::custom_brand_css 逐项对齐：改一处要同步另一处
+    function seedParts(seed) {
+      var n = parseInt(seed.slice(1), 16);
       var r = ((n >> 16) & 255) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
-      var max = Math.max(r, g, b), min = Math.min(r, g, b), h, s, l = (max + min) / 2;
-      if (max === min) { h = 0; s = 0; } else {
+      var max = Math.max(r, g, b), min = Math.min(r, g, b);
+      var l = (max + min) / 2, h = 0, s = 0;
+      if (max !== min) {
         var d = max - min;
         s = l > .5 ? d / (2 - max - min) : d / (max + min);
         h = max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
         h /= 6;
       }
-      var nf = Math.min(1, s / .10);
-      function t(hh, v) {
-        if (hh < 0) { hh += 1; } if (hh > 1) { hh -= 1; }
-        var q = v < .5 ? v * (1 + s2(v)) : 0;
-        return q;
-      }
-      function hx(hh, ss, ll) {
-        function chan(v) {
-          var q = ll < .5 ? ll * (1 + ss) : ll + ss - ll * ss, p = 2 * ll - q;
-          var kk = v; if (kk < 0) { kk += 1; } if (kk > 1) { kk -= 1; }
-          if (kk < 1 / 6) { return p + (q - p) * 6 * kk; }
-          if (kk < .5) { return q; }
-          if (kk < 2 / 3) { return p + (q - p) * (2 / 3 - kk) * 6; }
-          return p;
-        }
-        return '#' + [chan(hh + 1 / 3), chan(hh), chan(hh - 1 / 3)].map(function (c) {
-          var v = Math.round(c * 255).toString(16);
-          return v.length < 2 ? '0' + v : v;
-        }).join('');
-      }
-      function rgba(hh, ss, ll, a) {
-        function chan(v) {
-          var q = ll < .5 ? ll * (1 + ss) : ll + ss - ll * ss, p = 2 * ll - q;
-          var kk = v; if (kk < 0) { kk += 1; } if (kk > 1) { kk -= 1; }
-          if (kk < 1 / 6) { return p + (q - p) * 6 * kk; }
-          if (kk < .5) { return q; }
-          if (kk < 2 / 3) { return p + (q - p) * (2 / 3 - kk) * 6; }
-          return p;
-        }
-        return 'rgba(' + [chan(hh + 1 / 3), chan(hh), chan(hh - 1 / 3)].map(function (c) {
-          return Math.round(c * 255);
-        }).join(', ') + ', ' + a + ')';
-      }
-      var ah = (h + .5) % 1;
-      var vars = {
-        '--bg': hx(h, .22 * nf, .955), '--bg-soft': hx(h, .24 * nf, .918),
-        '--surface': hx(h, .20 * nf, .975), '--surface-2': hx(h, .22 * nf, .935),
-        '--ink': hx(h, .16 * nf, .17), '--ink-2': hx(h, .13 * nf, .34),
-        '--ink-3': hx(h, .10 * nf, .52), '--line': hx(h, .24 * nf, .865),
-        '--line-strong': hx(h, .24 * nf, .80), '--brand': hex.toUpperCase(),
-        '--brand-dark': hx(h, s, Math.max(l - .13, .18)),
-        '--brand-soft': hx(h, Math.min(s + .05, .5), .93),
-        '--accent': hx(ah, .40 * nf + .02, .42), '--accent-soft': hx(ah, .30 * nf, .92),
-        '--header-bg': rgba(h, .22 * nf, .955, .82)
-      };
-      VARS.forEach(function (k) { root.style.setProperty(k, vars[k]); });
+      return { h: h, l: l, s: s };
     }
+
+    function chan(p, q, t) {
+      if (t < 0) { t += 1; } else if (t > 1) { t -= 1; }
+      if (t < 1 / 6) { return p + (q - p) * 6 * t; }
+      if (t < 1 / 2) { return q; }
+      if (t < 2 / 3) { return p + (q - p) * (2 / 3 - t) * 6; }
+      return p;
+    }
+
+    function rgbOf(h, s, l) {
+      var q = l <= .5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
+      return [chan(p, q, h + 1 / 3), chan(p, q, h), chan(p, q, h - 1 / 3)].map(function (c) {
+        return Math.round(Math.min(Math.max(c, 0), 1) * 255);
+      });
+    }
+
+    function hx(h, s, l) {
+      return '#' + rgbOf(h, s, l).map(function (c) {
+        var v = c.toString(16);
+        return v.length < 2 ? '0' + v : v;
+      }).join('').toUpperCase();
+    }
+
+    // 目标彩度（max-min）反推 HLS 饱和度：接近白色时需要更大 S 才有同样彩度
+    function satOf(chroma, l) {
+      var room = 2 * l * (1 - l);
+      return room > 1e-9 ? Math.min(1, Math.max(chroma, 0) / room) : 0;
+    }
+
+    function hxc(h, chroma, l) { return hx(h, satOf(chroma, l), l); }
+
+    function rgbaC(h, chroma, l, a) {
+      return 'rgba(' + rgbOf(h, satOf(chroma, l), l).join(', ') + ', ' + a + ')';
+    }
+
+    function rule(selector, pairs) {
+      return selector + '{' + pairs.map(function (kv) {
+        return kv[0] + ':' + kv[1] + ';';
+      }).join('') + '}';
+    }
+
+    function buildCss(seed) {
+      var p = seedParts(seed);
+      var h = p.h, l = p.l, s = p.s;
+      var nf = Math.min(1, s / .10), sv = Math.min(1, s / .55);
+      var ah = (h + .5) % 1;
+      var light = rule('html:root', [
+        ['--bg', hxc(h, nf * (.036 + .030 * sv), .940)],
+        ['--bg-soft', hxc(h, nf * (.046 + .038 * sv), .885)],
+        ['--surface', hxc(h, nf * (.028 + .026 * sv), .974)],
+        ['--surface-2', hxc(h, nf * (.040 + .034 * sv), .915)],
+        ['--ink', hx(h, .16 * nf, .17)],
+        ['--ink-2', hx(h, .13 * nf, .34)],
+        ['--ink-3', hx(h, .10 * nf, .52)],
+        ['--line', hxc(h, nf * (.036 + .032 * sv), .855)],
+        ['--line-strong', hxc(h, nf * (.042 + .036 * sv), .775)],
+        ['--brand', seed.toUpperCase()],
+        ['--brand-dark', hx(h, s, Math.max(l - .13, .18))],
+        ['--brand-soft', hx(h, Math.min(s + .05, .5), .93)],
+        ['--accent', hx(ah, .40 * nf + .02, .42)],
+        ['--accent-soft', hx(ah, .30 * nf, .92)],
+        ['--header-bg', rgbaC(h, nf * (.036 + .030 * sv), .940, .82)]
+      ]);
+      var dark = rule('html:root[data-theme="dark"]', [
+        ['--bg', hxc(h, nf * (.022 + .030 * sv), .105)],
+        ['--bg-soft', hxc(h, nf * (.026 + .034 * sv), .145)],
+        ['--surface', hxc(h, nf * (.026 + .034 * sv), .165)],
+        ['--surface-2', hxc(h, nf * (.030 + .036 * sv), .205)],
+        ['--ink', hx(h, .12 * nf, .89)],
+        ['--ink-2', hx(h, .12 * nf, .71)],
+        ['--ink-3', hx(h, .10 * nf, .55)],
+        ['--line', hxc(h, nf * (.032 + .032 * sv), .235)],
+        ['--line-strong', hxc(h, nf * (.036 + .034 * sv), .285)],
+        ['--brand', hx(h, Math.min(s * .75, .5), .62)],
+        ['--brand-dark', hx(h, Math.min(s * .7, .45), .72)],
+        ['--brand-soft', hx(h, .20 * nf, .17)],
+        ['--accent', hx(ah, .28 * nf, .62)],
+        ['--accent-soft', hx(ah, .20 * nf, .17)],
+        ['--header-bg', rgbaC(h, nf * (.022 + .030 * sv), .105, .82)]
+      ]);
+      return light + '\n' + dark;
+    }
+
+    function preview(hex) {
+      var m = HEX.exec((hex || '').trim());
+      if (!m) { styleEl.textContent = ''; return; }
+      styleEl.textContent = buildCss(m[0]);
+    }
+
     picker.addEventListener('input', function () {
       text.value = picker.value;
       preview(picker.value);
@@ -1023,9 +1063,7 @@
       var v = text.value.trim();
       if (HEX.test(v)) { picker.value = v; preview(v); }
     });
-    text.addEventListener('change', function () {
-      preview(text.value.trim());
-    });
+    text.addEventListener('change', function () { preview(text.value.trim()); });
   })();
 </script>
 {% endblock %}

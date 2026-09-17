@@ -246,10 +246,18 @@ _HEX_FULL = __import__("re").compile(r"#([0-9a-fA-F]{6})")
 def custom_brand_css(hex_color: str) -> str:
     """自定义主题色 → 从种子色推导**整套色板**（亮 / 暗各一组）。
 
-    与六套内置色板同级：背景纸色 / 文字 / 边框 / 品牌三件套 / 强调色全部
-    从种子色的色相衍生（近灰种子自动退化为纯灰中性色）。作用域
-    ``html:root``（特异性 0,1,1 / 0,2,1）稳赢默认令牌与 data-palette 规则，
-    浏览器 localStorage 里存过页头色板选择也不会盖掉它。
+    与六套内置色板同级：背景纸色 / 卡片 / 文字 / 边框 / 品牌三件套 / 强调色
+    全部从种子色的色相衍生。作用域 ``html:root``（特异性 0,1,1 / 0,2,1）稳赢
+    默认令牌与 data-palette 规则，浏览器 localStorage 里存过页头色板选择也
+    不会盖掉它。
+
+    纸面 / 边框这一族按**目标彩度**（chroma = max-min）反推，而不是按 HLS
+    饱和度——HLS 饱和度是相对值，接近白色时算出的彩度很小，纸色看起来
+    「根本没染上色」。改为按彩度反推后，鲜艳种子（``sv``）纸色染色一眼可见；
+    色相很淡的种子（``nf``）仍退化为中性灰，不会染出脏色。
+
+    输出用字符串拼接而非 ``str.format``：CSS 花括号不必转义，避开漏写 ``{{``
+    导致 KeyError / 多余括号的历史坑。
     """
     import colorsys
 
@@ -260,42 +268,66 @@ def custom_brand_css(hex_color: str) -> str:
     r, g, b = ((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255
     h, l_seed, s = colorsys.rgb_to_hls(r, g, b)
     nf = min(1.0, s / 0.10)   # 近灰种子：衍生中性色退化为纯灰
+    sv = min(1.0, s / 0.55)   # 鲜艳种子：纸面染色强度跟随
 
     def hx(hh, ss, ll):
         rr, gg, bb = colorsys.hls_to_rgb(hh % 1.0, min(max(ll, 0.0), 1.0), min(max(ss, 0.0), 1.0))
         return "#{:02X}{:02X}{:02X}".format(round(rr * 255), round(gg * 255), round(bb * 255))
 
+    def sat(hh, chroma, ll):
+        """色相 + 目标彩度 + 亮度 → HLS 饱和度（L 越接近 1，同样彩度需要越大 S）。"""
+        ll = min(max(ll, 0.0), 1.0)
+        room = 2 * ll * (1 - ll)
+        return min(1.0, max(chroma, 0.0) / room) if room > 1e-9 else 0.0
+
+    def hxc(hh, chroma, ll):
+        return hx(hh, sat(hh, chroma, ll), ll)
+
     def rgba(hh, ss, ll, a):
         rr, gg, bb = colorsys.hls_to_rgb(hh % 1.0, min(max(ll, 0.0), 1.0), min(max(ss, 0.0), 1.0))
         return "rgba({}, {}, {}, {})".format(round(rr * 255), round(gg * 255), round(bb * 255), a)
 
+    def rgba_c(hh, chroma, ll, a):
+        return rgba(hh, sat(hh, chroma, ll), ll, a)
+
+    def rule(selector, pairs):
+        return selector + "{" + "".join("--{}:{};".format(k, v) for k, v in pairs) + "}"
+
     ah = (h + 0.5) % 1.0   # 强调色取补色相
-    light = (
-        "html:root{{--bg:{bg};--bg-soft:{bgs};--surface:{sf};--surface-2:{sf2};"
-        "--ink:{ink};--ink-2:{ink2};--ink-3:{ink3};--line:{ln};--line-strong:{lns};"
-        "--brand:{b};--brand-dark:{bd};--brand-soft:{bs};"
-        "--accent:{ac};--accent-soft:{acs};--header-bg:{hb};}}"
-    ).format(
-        bg=hx(h, .22 * nf, .955), bgs=hx(h, .24 * nf, .918), sf=hx(h, .20 * nf, .975),
-        sf2=hx(h, .22 * nf, .935), ink=hx(h, .16 * nf, .17), ink2=hx(h, .13 * nf, .34),
-        ink3=hx(h, .10 * nf, .52), ln=hx(h, .24 * nf, .865), lns=hx(h, .24 * nf, .80),
-        b=hex_color.strip().upper(), bd=hx(h, s, max(l_seed - .13, .18)),
-        bs=hx(h, min(s + .05, .5), .93), ac=hx(ah, .40 * nf + .02, .42),
-        acs=hx(ah, .30 * nf, .92), hb=rgba(h, .22 * nf, .955, .82),
-    )
-    dark = (
-        'html:root[data-theme="dark"]{{--bg:{bg};--bg-soft:{bgs};--surface:{sf};--surface-2:{sf2};'
-        "--ink:{ink};--ink-2:{ink2};--ink-3:{ink3};--line:{ln};--line-strong:{lns};"
-        "--brand:{b};--brand-dark:{bd};--brand-soft:{bs};"
-        "--accent:{ac};--accent-soft:{acs};--header-bg:{hb};}}"
-    ).format(
-        bg=hx(h, .16 * nf, .105), bgs=hx(h, .15 * nf, .14), sf=hx(h, .16 * nf, .16),
-        sf2=hx(h, .15 * nf, .19), ink=hx(h, .12 * nf, .89), ink2=hx(h, .12 * nf, .71),
-        ink3=hx(h, .10 * nf, .55), ln=hx(h, .14 * nf, .22), lns=hx(h, .14 * nf, .27),
-        b=hx(h, min(s * .75, .5), .62), bd=hx(h, min(s * .7, .45), .72),
-        bs=hx(h, .20 * nf, .17), ac=hx(ah, .28 * nf, .62),
-        acs=hx(ah, .20 * nf, .17), hb=rgba(h, .16 * nf, .105, .82),
-    )
+    light = rule("html:root", [
+        ("bg", hxc(h, nf * (.036 + .030 * sv), .940)),
+        ("bg-soft", hxc(h, nf * (.046 + .038 * sv), .885)),
+        ("surface", hxc(h, nf * (.028 + .026 * sv), .974)),
+        ("surface-2", hxc(h, nf * (.040 + .034 * sv), .915)),
+        ("ink", hx(h, .16 * nf, .17)),
+        ("ink-2", hx(h, .13 * nf, .34)),
+        ("ink-3", hx(h, .10 * nf, .52)),
+        ("line", hxc(h, nf * (.036 + .032 * sv), .855)),
+        ("line-strong", hxc(h, nf * (.042 + .036 * sv), .775)),
+        ("brand", hex_color.strip().upper()),
+        ("brand-dark", hx(h, s, max(l_seed - .13, .18))),
+        ("brand-soft", hx(h, min(s + .05, .5), .93)),
+        ("accent", hx(ah, .40 * nf + .02, .42)),
+        ("accent-soft", hx(ah, .30 * nf, .92)),
+        ("header-bg", rgba_c(h, nf * (.036 + .030 * sv), .940, .82)),
+    ])
+    dark = rule('html:root[data-theme="dark"]', [
+        ("bg", hxc(h, nf * (.022 + .030 * sv), .105)),
+        ("bg-soft", hxc(h, nf * (.026 + .034 * sv), .145)),
+        ("surface", hxc(h, nf * (.026 + .034 * sv), .165)),
+        ("surface-2", hxc(h, nf * (.030 + .036 * sv), .205)),
+        ("ink", hx(h, .12 * nf, .89)),
+        ("ink-2", hx(h, .12 * nf, .71)),
+        ("ink-3", hx(h, .10 * nf, .55)),
+        ("line", hxc(h, nf * (.032 + .032 * sv), .235)),
+        ("line-strong", hxc(h, nf * (.036 + .034 * sv), .285)),
+        ("brand", hx(h, min(s * .75, .5), .62)),
+        ("brand-dark", hx(h, min(s * .7, .45), .72)),
+        ("brand-soft", hx(h, .20 * nf, .17)),
+        ("accent", hx(ah, .28 * nf, .62)),
+        ("accent-soft", hx(ah, .20 * nf, .17)),
+        ("header-bg", rgba_c(h, nf * (.022 + .030 * sv), .105, .82)),
+    ])
     return light + "\n" + dark
 
 
