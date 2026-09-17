@@ -232,12 +232,34 @@ def dashboard(
     )
 
 
+def is_speculative_prefetch(request: Request) -> bool:
+    """判断这是不是浏览器的预取 / 预渲染请求（见 base.html 的 speculation rules）。
+
+    这个模块里有一个 GET 会「不存在就建一篇」的路由（/notes/today），预取一旦
+    落到它头上，鼠标划过链接就会凭空多出一篇空笔记。客户端那边已经把该路由排除
+    在预渲染规则之外，这里是服务端的第二道闸：规则写错、浏览器行为变化、用户自己
+    配的扩展规则，都挡得住。
+
+    Sec-Purpose 是现行头（Chrome 用它区分 prefetch / prerender）；
+    Purpose / X-Purpose 是早年写法，当年用的词是 preview，也一起认。
+    """
+    for header in ("sec-purpose", "purpose", "x-purpose"):
+        value = request.headers.get(header, "").lower()
+        if any(word in value for word in ("prefetch", "prerender", "preview")):
+            return True
+    return False
+
+
 @router.get("/notes/today")
 def today_note(request: Request, conn: sqlite3.Connection = Depends(db_conn)):
     """每日笔记快捷入口：今天的笔记存在就打开，不存在就从「每日笔记」模板建一篇。
 
     必须注册在 /notes/{note_id} 之前（同 /notes/new 的路由顺序讲究）。
     """
+    # 预取来的请求不落地任何数据（否则悬停一下就会多出一篇空的每日笔记）
+    if is_speculative_prefetch(request):
+        return RedirectResponse("/notes", status_code=303)
+
     import datetime as dt
 
     title = dt.date.today().strftime("%Y-%m-%d")

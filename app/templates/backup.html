@@ -36,8 +36,8 @@
       导出的文件不依赖本工具，可以直接放进 Obsidian / Typora / VS Code 阅读。
     </p>
     <div class="backup-exports">
-      <a class="btn btn--primary" href="/export/zip">{{ icon('download', 16) }} 下载 zip（Markdown 打包）</a>
-      <a class="btn btn--ghost" href="/export/json">{{ icon('download', 16) }} 下载 JSON（结构化）</a>
+      <a class="btn btn--primary" href="/export/zip" data-no-prerender>{{ icon('download', 16) }} 下载 zip（Markdown 打包）</a>
+      <a class="btn btn--ghost" href="/export/json" data-no-prerender>{{ icon('download', 16) }} 下载 JSON（结构化）</a>
     </div>
     <p class="micro">
       zip 内含 <code>index.md</code>、<code>notes/</code>（每篇一个 .md）、
@@ -122,7 +122,7 @@
               {% endif %}
             </td>
             <td class="backup-row-actions">
-              <a class="btn btn--ghost btn--sm" href="/backup/download/{{ snap.name }}">{{ icon('download', 15) }} 下载</a>
+              <a class="btn btn--ghost btn--sm" href="/backup/download/{{ snap.name }}" data-no-prerender>{{ icon('download', 15) }} 下载</a>
               <form method="post" action="/backup/restore/{{ snap.name }}"
                     data-confirm="回滚会用这份备份覆盖当前全部数据（当前数据会先自动另存一份）。确定回滚到 {{ snap.name }}？">
                 <input type="hidden" name="_csrf" value="{{ csrf }}">

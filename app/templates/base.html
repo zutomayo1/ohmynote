@@ -29,6 +29,49 @@
   <link rel="stylesheet" href="/static/css/highlight.css?v={{ asset_v }}">
   {# 自定义主题色：紧跟样式表之后，权重刚好压过默认令牌、让位给访客显式选的调色板 #}
   {% if settings.appearance_custom %}<style nonce="{{ nonce }}">{{ custom_brand_css(settings.appearance_custom) | safe }}</style>{% endif %}
+  {# 预渲染 / 预取：悬停即把目标页准备好，点下去就是「激活」——导航近乎瞬时。
+     只列**只读页面**（白名单），并显式排除会写库的 GET 路由与下载类路径：
+       · /notes/today 是唯一有副作用的 GET —— 不存在时就地新建「每日笔记」，
+         预取一下就会凭空多出一篇空笔记，必须排除（同时给链接打了 data-no-prerender）
+       · /export/*、/backup/download/*、/notes/*/export.* 是文件下载，预渲染会把整个包拉一遍
+     浏览器不支持时整段被忽略，页面行为与现在完全一致。 #}
+  <script type="speculationrules" nonce="{{ nonce }}">
+  {
+    "prerender": [{
+      "where": {"and": [
+        {"href_matches": "/"},
+        {"href_matches": "/blog"}, {"href_matches": "/blog/*"},
+        {"href_matches": "/notes"}, {"href_matches": "/notes/*"},
+        {"href_matches": "/tags"}, {"href_matches": "/tags/*"},
+        {"href_matches": "/todos"}, {"href_matches": "/stats"}, {"href_matches": "/graph"},
+        {"href_matches": "/templates"}, {"href_matches": "/manual"}, {"href_matches": "/about"},
+        {"href_matches": "/images"}, {"href_matches": "/trash"}, {"href_matches": "/ask"},
+        {"href_matches": "/agent"}, {"href_matches": "/search"}, {"href_matches": "/settings"},
+        {"not": {"href_matches": "/notes/today"}},
+        {"not": {"href_matches": "/notes/*/export.*"}},
+        {"not": {"href_matches": "/export/*"}},
+        {"not": {"href_matches": "/backup/download/*"}},
+        {"not": {"selector_matches": "[data-no-prerender]"}},
+        {"not": {"selector_matches": "[download]"}},
+        {"not": {"selector_matches": "[target=_blank]"}}
+      ]},
+      "eagerness": "moderate"
+    }],
+    "prefetch": [{
+      "where": {"and": [
+        {"href_matches": "/*"},
+        {"not": {"href_matches": "/notes/today"}},
+        {"not": {"href_matches": "/notes/*/export.*"}},
+        {"not": {"href_matches": "/export/*"}},
+        {"not": {"href_matches": "/backup/download/*"}},
+        {"not": {"href_matches": "/logout"}},
+        {"not": {"selector_matches": "[data-no-prerender]"}},
+        {"not": {"selector_matches": "[download]"}}
+      ]},
+      "eagerness": "conservative"
+    }]
+  }
+  </script>
   <script nonce="{{ nonce }}">
     // 首屏之前就把主题定好，避免深色模式闪白
     (function () {
@@ -69,7 +112,7 @@
             <a class="nav-link{{ ' is-active' if current_path.startswith('/templates') }}" href="/templates">模板</a>
             <a class="nav-link{{ ' is-active' if current_path.startswith('/ask') }}" href="/ask">问笔记</a>
             <a class="nav-link{{ ' is-active' if current_path.startswith('/agent') }}" href="/agent">笔记助手</a>
-            <a class="nav-link" href="/notes/today">今日笔记</a>
+            <a class="nav-link" href="/notes/today" data-no-prerender>今日笔记</a>
             <a class="nav-link{{ ' is-active' if current_path.startswith('/todos') }}" href="/todos">今日待办</a>
             <a class="nav-link{{ ' is-active' if current_path.startswith('/stats') }}" href="/stats">写作统计</a>
             <a class="nav-link{{ ' is-active' if current_path.startswith('/graph') }}" href="/graph">关系图谱</a>
@@ -156,7 +199,7 @@
       <a href="/rss.xml">RSS</a>
       <a href="/blog/archive">归档</a>
       <a href="/about">关于</a>
-      {% if is_authed %}<a href="/manual">使用说明</a> · <a href="/settings">设置</a> · <a href="/backup">备份与恢复</a> · <a href="/images">图片</a> · <a href="/export/zip">导出全部笔记</a>{% endif %}
+      {% if is_authed %}<a href="/manual">使用说明</a> · <a href="/settings">设置</a> · <a href="/backup">备份与恢复</a> · <a href="/images">图片</a> · <a href="/export/zip" data-no-prerender>导出全部笔记</a>{% endif %}
     </nav>
     <div class="footer-note">© {{ current_year }} {{ settings.author }} · 由 InkNote 驱动</div>
   </div>

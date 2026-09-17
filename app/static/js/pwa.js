@@ -44,9 +44,15 @@
   });
 
   if (!('serviceWorker' in navigator)) { return; }
-  window.addEventListener('load', function () {
-    // 安装时已 skipWaiting：资源指纹一变就会装新版本并清掉旧缓存
+  // 安装时已 skipWaiting：资源指纹一变就会装新版本并清掉旧缓存
+  function registerSW() {
     navigator.serviceWorker.register('/sw.js', { scope: '/' })
       .catch(function () { /* 忽略：离线增强失败不影响正常使用 */ });
+  }
+
+  window.addEventListener('load', function () {
+    // 预渲染的页面还没被用户看到，等激活后再注册，别为没人看的页面牵动 SW
+    if (!document.prerendering) { registerSW(); return; }
+    document.addEventListener('prerenderingchange', function () { registerSW(); }, { once: true });
   });
 })();

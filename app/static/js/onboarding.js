@@ -30,6 +30,13 @@
   function prefersReducedMotion() {
     return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   }
+  // 预渲染守卫：页面被浏览器预渲染时先什么都不做（写标记/弹引导都等到真正激活）。
+  // 否则「鼠标从链接上划过」就把一次性的新手引导消耗掉了。
+  function whenActive(fn) {
+    if (!document.prerendering) { fn(); return; }
+    document.addEventListener('prerenderingchange', function () { fn(); }, { once: true });
+  }
+
   function readLS(key) {
     try { return window.localStorage.getItem(key); } catch (e) { return null; }
   }
@@ -274,8 +281,13 @@
 
     active = true;
 
-    onResize = function () { layout(); };
-    onScroll = function () { layout(); };
+    var layoutRaf = 0;
+    function scheduleLayout() {
+      if (layoutRaf) { return; }
+      layoutRaf = window.requestAnimationFrame(function () { layoutRaf = 0; layout(); });
+    }
+    onResize = function () { scheduleLayout(); };
+    onScroll = function () { scheduleLayout(); };
     onKey = function (ev) {
       if (!active) { return; }
       var key = ev.key;
@@ -284,7 +296,7 @@
       else if (key === 'ArrowLeft') { ev.preventDefault(); go(current - 1); }
     };
     window.addEventListener('resize', onResize);
-    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('scroll', onScroll, { passive: true, capture: true });
     document.addEventListener('keydown', onKey, true);
 
     showStep(0);
@@ -301,9 +313,11 @@
     InkNote.onboarding = { start: start, reset: resetAndStart };
   } catch (e) { /* 忽略 */ }
 
+  // 预渲染中的页面不算「用户来过」：等激活后再决定要不要弹引导
+  function boot() { whenActive(start); }
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', start, { once: true });
+    document.addEventListener('DOMContentLoaded', boot, { once: true });
   } else {
-    start();
+    boot();
   }
 })();

@@ -350,8 +350,15 @@
     // 像「历史任务」这种 JS 动态渲染的条目，DOMContentLoaded 时还不存在
     document.addEventListener('pointerover', onPointerOver, true);
     document.addEventListener('pointerout', onPointerOut, true);
-    window.addEventListener('scroll', reposition, true);
-    window.addEventListener('resize', reposition);
+    // 滚动/改尺寸时重定位：被动监听 + rAF 合帧。
+    // reposition 里有 getBoundingClientRect（读布局），不能挂在滚动线程上同步跑。
+    var reposRaf = 0;
+    function scheduleReposition() {
+      if (reposRaf) { return; }
+      reposRaf = window.requestAnimationFrame(function () { reposRaf = 0; reposition(); });
+    }
+    window.addEventListener('scroll', scheduleReposition, { passive: true, capture: true });
+    window.addEventListener('resize', scheduleReposition, { passive: true });
     document.querySelectorAll('[data-tip-nav]').forEach(initNav);
   }
 

@@ -205,9 +205,14 @@
         btn.addEventListener('click', function () { applyMode(btn.getAttribute('data-mode')); });
       });
       applyMode(currentMode);   // 恢复上次的选择
+      var thumbRaf = 0;
       window.addEventListener('resize', function () {
-        moveThumb(modeBox.querySelector('.seg__btn.is-on'));
-      });
+        if (thumbRaf) { return; }
+        thumbRaf = window.requestAnimationFrame(function () {
+          thumbRaf = 0;
+          moveThumb(modeBox.querySelector('.seg__btn.is-on'));
+        });
+      }, { passive: true });
     }
 
     // 示例任务：点一下填进输入框

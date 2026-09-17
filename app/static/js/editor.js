@@ -1187,13 +1187,23 @@
 
           textarea.addEventListener('mouseup', function () { window.setTimeout(maybeShowPill, 0); });
           textarea.addEventListener('keyup', maybeShowPill);
-          textarea.addEventListener('scroll', hidePill);
+          textarea.addEventListener('scroll', hidePill, { passive: true });
           textarea.addEventListener('blur', hidePill);
           document.addEventListener('selectionchange', function () {
             if (document.activeElement === textarea) { maybeShowPill(); }
           });
-          window.addEventListener('scroll', hidePill, true);
-          window.addEventListener('resize', function () { if (aiState.pillOpen) { positionPill(); } });
+          // 被动监听 + rAF 合帧：滚动线程里不能同步做布局读取（药丸定位要量光标坐标）
+          var pillRaf = 0;
+          function schedulePill(work) {
+            if (pillRaf) { return; }
+            pillRaf = window.requestAnimationFrame(function () { pillRaf = 0; work(); });
+          }
+          window.addEventListener('scroll', function () { schedulePill(hidePill); },
+            { passive: true, capture: true });
+          window.addEventListener('resize', function () {
+            if (!aiState.pillOpen) { return; }
+            schedulePill(positionPill);
+          }, { passive: true });
 
           /* ---- 结果预览面板：先预览，点了按钮才动正文 ---- */
           var panel = document.createElement('div');
