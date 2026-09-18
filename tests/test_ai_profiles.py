@@ -225,3 +225,47 @@ def test_settings_page_shows_empty_hint_without_profiles(auth_client):
     page = auth_client.get("/settings")
     assert "我的预设" in page.text
     assert "还没有预设" in page.text
+
+
+def test_settings_page_has_no_nested_forms(auth_client):
+    """HTML 不允许嵌套 form：浏览器会丢弃内层 form 标签，按钮就会提交到外层地址。
+
+    上一版「我的预设」被放在 AI 配置表单内部 → 「存当前配置 / 启用 / 删除」实际
+    提交的都是「保存 AI 配置」，预设永远存不进去（用户实测「我的预设一直为空」）。
+    这里用 HTML 解析器守住结构，别再用浏览器行为差异踩同一个坑。
+    """
+    from html.parser import HTMLParser
+
+    class FormNesting(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.depth = 0
+            self.forms = 0
+            self.nested = 0
+
+        def handle_starttag(self, tag, attrs):
+            if tag != "form":
+                return
+            self.forms += 1
+            if self.depth > 0:
+                self.nested += 1
+            self.depth += 1
+
+        def handle_endtag(self, tag):
+            if tag == "form" and self.depth > 0:
+                self.depth -= 1
+
+    page = auth_client.get("/settings")
+    parser = FormNesting()
+    parser.feed(page.text)
+    assert parser.forms >= 4, "设置页应该有：AI 配置 / 预设若干 / 提示词 等多个表单"
+    assert parser.nested == 0, "设置页出现了嵌套 form——浏览器会丢弃内层，按钮会提交错地址"
+
+    # 预设相关表单必须在外层 AI 配置表单之外
+    assert 'class="ai-profile-save"' in page.text
+    start = page.text.index('id="ai-settings-form"')
+    end = page.text.index("</form>", start)
+    outer_block = page.text[start:end]
+    assert "profiles/save" not in outer_block
+    assert "profiles/apply" not in outer_block
+    assert "profiles/delete" not in outer_block

@@ -64,6 +64,57 @@
   </p>
 {% endif %}
 
+{# ===== 我的预设：必须是独立区块，放在外层 AI 表单之外 =====
+   HTML 不允许嵌套 form：上一版把这段塞进 AI 表单内部，浏览器直接丢弃了内层
+   form 标签 → 「存当前配置 / 启用 / 删除」实际提交的都是「保存 AI 配置」的地址，
+   预设永远存不进去。这里每行是各自独立的 form，纯 HTML，无 JS 也能用。 #}
+<details class="settings-block settings-block--primary" open>
+  <summary class="settings-block__summary">
+    <span class="settings-block__chevron" aria-hidden="true">▸</span>
+    <span class="settings-block__title">我的预设</span>
+    <span class="settings-block__note">存下整套「地址 + 密钥 + 模型」，换服务商一键切换，不用再抄密钥</span>
+    <span class="settings-block__state">
+      {% if ai_profiles %}<span class="badge badge--saved">{{ ai_profiles | length }} 份</span>{% else %}<span class="badge badge--draft">还没有</span>{% endif %}
+    </span>
+  </summary>
+  <div class="settings-block__body">
+    <div class="ai-section-head">
+      <p class="micro">先把下面「AI 服务」配好并保存，再回到这里点「存当前配置」存成预设。</p>
+      <form class="ai-profile-save" method="post" action="/settings/ai/profiles/save">
+        <input type="hidden" name="_csrf" value="{{ csrf }}">
+        <input class="input" type="text" name="name" maxlength="40" required
+               placeholder="预设名称，如：硅基流动" aria-label="预设名称">
+        <button class="btn btn--ghost btn--sm" type="submit">存当前配置</button>
+      </form>
+    </div>
+    {% if ai_profiles %}
+      <div class="ai-profile-list">
+        {% for p in ai_profiles %}
+          <div class="ai-profile-row{{ ' is-active' if p.base_url == ai.base_url }}">
+            <span class="ai-profile-row__name">{{ p.name }}{% if p.base_url == ai.base_url %} <span class="badge badge--saved">使用中</span>{% endif %}</span>
+            <span class="ai-profile-row__meta">{{ p.base_url }} · {{ p.model or '无模型' }} · 密钥…{{ p.key_tail }}</span>
+            <span class="ai-profile-row__actions">
+              <form method="post" action="/settings/ai/profiles/apply">
+                <input type="hidden" name="_csrf" value="{{ csrf }}">
+                <input type="hidden" name="name" value="{{ p.name }}">
+                <button class="btn btn--sm" type="submit">启用</button>
+              </form>
+              <form method="post" action="/settings/ai/profiles/delete"
+                    data-confirm="删除预设《{{ p.name }}》？当前生效的配置不受影响。">
+                <input type="hidden" name="_csrf" value="{{ csrf }}">
+                <input type="hidden" name="name" value="{{ p.name }}">
+                <button class="btn btn--ghost btn--sm" type="submit">删除</button>
+              </form>
+            </span>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="micro">还没有预设。配好一家并保存后，点右上角「存当前配置」；以后换服务商点「启用」就行。</p>
+    {% endif %}
+  </div>
+</details>
+
 <form class="settings-form" id="ai-settings-form" method="post" action="/settings/ai"
       data-models-url="/api/ai/models"
       data-probe-url="/api/ai/probe"
@@ -88,48 +139,14 @@
           <span class="ai-statusline__text"><code>{{ ai.model }}</code> · {{ ai.base_url }}{% if ai.has_key %} · 密钥 {{ ai.key_mask }}{% endif %}</span>
         {% else %}
           <span class="badge badge--draft">未启用</span>
-          <span class="ai-statusline__text">按下面 2 → 3 填好，点底部「保存配置」即可。</span>
+          <span class="ai-statusline__text">按下面 1 → 2 填好，点底部「保存配置」即可；常用配置可以在上面的「我的预设」里存下来一键切换。</span>
         {% endif %}
       </p>
 
-      {# ===== 1 · 我的预设：整套「地址+密钥+模型」命名存档，一键切换（DeepSeek 控制台式行列表）。
-           密钥只在服务端流转，行上只露尾号；纯表单 POST，无 JS 也能用。 ===== #}
-      <div class="ai-section-head">
-        <h3 class="section-title">1 · 我的预设</h3>
-        <form class="ai-profile-save" method="post" action="/settings/ai/profiles/save">
-          <input type="hidden" name="_csrf" value="{{ csrf }}">
-          <input class="input" type="text" name="name" maxlength="40" required
-                 placeholder="预设名称，如：硅基流动" aria-label="预设名称">
-          <button class="btn btn--ghost btn--sm" type="submit">存当前配置</button>
-        </form>
-      </div>
-      {% if ai_profiles %}
-        <div class="ai-profile-list">
-          {% for p in ai_profiles %}
-            <div class="ai-profile-row{{ ' is-active' if p.base_url == ai.base_url }}">
-              <span class="ai-profile-row__name">{{ p.name }}{% if p.base_url == ai.base_url %} <span class="badge badge--saved">使用中</span>{% endif %}</span>
-              <span class="ai-profile-row__meta">{{ p.base_url }} · {{ p.model or '无模型' }} · 密钥…{{ p.key_tail }}</span>
-              <span class="ai-profile-row__actions">
-                <form method="post" action="/settings/ai/profiles/apply">
-                  <input type="hidden" name="_csrf" value="{{ csrf }}">
-                  <input type="hidden" name="name" value="{{ p.name }}">
-                  <button class="btn btn--sm" type="submit">启用</button>
-                </form>
-                <form method="post" action="/settings/ai/profiles/delete"
-                      data-confirm="删除预设《{{ p.name }}》？当前生效的配置不受影响。">
-                  <input type="hidden" name="_csrf" value="{{ csrf }}">
-                  <input type="hidden" name="name" value="{{ p.name }}">
-                  <button class="btn btn--ghost btn--sm" type="submit">删除</button>
-                </form>
-              </span>
-            </div>
-          {% endfor %}
-        </div>
-      {% else %}
-        <p class="micro">还没有预设。配好一家并保存后，点右上角「存当前配置」；以后换服务商点「启用」就行，不用再抄密钥。</p>
-      {% endif %}
+      {# 「我的预设」不在这里——HTML 不允许嵌套 form，它在外层表单之外单独立块。
+          这个折叠块里只剩「填表 → 保存」的字段，保持单一表单结构。 #}
 
-      {# ===== 2 · 服务商快捷填充：点一下把地址/模型填进下面第 3 步的表单（不会自动保存）。
+      {# ===== 1 · 服务商快捷填充：点一下把地址/模型填进下面第 2 步的表单（不会自动保存）。
            DOM 契约被 settings.js 依赖（.ai-preset-card > .ai-preset[data-*]），别改结构。 ===== #}
       {% macro preset_card(p) -%}
         <div class="ai-preset-card{{ ' is-active' if p.base_url == ai.base_url else '' }}">
@@ -149,7 +166,7 @@
         </div>
       {%- endmacro %}
       <div class="ai-section-head">
-        <h3 class="section-title">2 · 服务商快捷填充</h3>
+        <h3 class="section-title">1 · 服务商快捷填充</h3>
         <p class="micro">点一下自动填地址和模型；密钥去各服务商官网拿。</p>
       </div>
       {% set extra_providers = ai.providers | rejectattr('featured') | list %}
@@ -157,9 +174,9 @@
         {% for p in ai.providers %}{{ preset_card(p) }}{% endfor %}
       </div>
 
-      {# ===== 3 · 连接配置 ===== #}
+      {# ===== 2 · 连接配置 ===== #}
       <div class="ai-section-head">
-        <h3 class="section-title">3 · 连接配置</h3>
+        <h3 class="section-title">2 · 连接配置</h3>
         <p class="micro">密钥留空表示不修改；只存在你自己电脑的数据库里。</p>
       </div>
       <div class="field-grid">
