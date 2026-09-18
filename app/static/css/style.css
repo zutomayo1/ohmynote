@@ -5423,11 +5423,6 @@ body.split-dragging .editor__textarea { pointer-events: none; }
   background: linear-gradient(90deg, var(--brand), color-mix(in srgb, var(--brand) 45%, var(--surface)));
   transition: width .3s ease; }
 
-@media (prefers-reduced-motion: no-preference) {
-  .ai-usage-model__bar span { animation: usage-bar .5s ease; }
-  @keyframes usage-bar { from { width: 0; } }
-}
-
 /* ===== 补丁：用量柱状图增强（2026-09-13） ===== */
 /* 堆叠双色：输入（浅）/输出（深）；柱顶数值；稀疏日期轴 */
 .ai-usage-legend {
@@ -5893,29 +5888,6 @@ body.split-dragging .editor__textarea { pointer-events: none; }
   white-space: pre-wrap; overflow-wrap: anywhere; }
 
 .chart-tip__note:empty { display: none; }
-
-/* ---------- 进场动画（只在允许动效时启用） ---------- */
-
-@media (prefers-reduced-motion: no-preference) {
-  @keyframes chart-rise { from { transform: scaleY(0); } }
-  @keyframes chart-grow-x { from { transform: scaleX(0); } }
-
-  .ai-chart__bar {
-    transform-origin: bottom;
-    animation: chart-rise .45s cubic-bezier(.22, .68, .36, 1) both;
-    animation-delay: calc(var(--i, 0) * 12ms); }
-
-  .ai-usage-hours__bar {
-    transform-origin: bottom;
-    animation: chart-rise .45s cubic-bezier(.22, .68, .36, 1) both;
-    animation-delay: calc(var(--i, 0) * 16ms); }
-
-  .ai-usage-week__bar {
-    transform-origin: left;
-    animation: chart-grow-x .5s cubic-bezier(.22, .68, .36, 1) both;
-    animation-delay: calc(var(--i, 0) * 55ms); }
-
-}
 
 /* ---------- 窄屏：柱顶数值太挤就只留给悬停 ---------- */
 
@@ -8392,3 +8364,12 @@ html:not(.js) .svg-view__actions { display: none; }
 .settings-sub__body .section-title {
   margin: 16px 0 8px; padding-bottom: 0; border-bottom: 0;
   color: var(--ink-2); font-family: var(--font-sans); font-size: 13px; font-weight: 600; }
+
+/* ===== 补丁：设置页折叠块里的入场动画（2026-09-18） =====
+   `main .prose { animation: ink-rise }` 是给「页面加载」用的轻入场（页头/卡片/正文）。
+   但用量统计那 4 张表格也包在 .prose 里，而且整体默认收起——于是每次展开都重放一次
+   「淡入 + 上移」。看数字是「瞥一眼」的动作，不值当；折叠块里的 .prose 一律关掉，
+   页面加载时的正文动效不受影响（选择器优先级更高，只覆盖这一层）。
+   同类问题已一并处理：图表柱子的 chart-rise / chart-grow-x 与按模型条的 usage-bar
+   也是每次展开重放，已整段删除（2026-09-18）。 */
+main .settings-block .prose { animation: none; }
