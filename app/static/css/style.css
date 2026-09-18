@@ -2176,7 +2176,7 @@ img { border-radius: var(--radius-sm); }
   overflow-wrap: anywhere;
 }
 
-.settings-status__env { display: block; margin: 8px 2px 0; }
+.settings-status__env { margin: 8px 2px 0; }
 
 /* ---------- 折叠分组：一行一条发丝线，不做边框盒子 ---------- */
 
@@ -8304,20 +8304,8 @@ html:not(.js) .svg-view__actions { display: none; }
    ④ 当前服务商标识加强  ⑥ 模型输入框与「获取可用模型」成组
    （⑤「快捷填充/连接配置」合并属模板结构调整，见 settings.html） */
 
-/* ① 模式横幅 + 输入框变色：避免用户以为「计划/只读」下真的改了笔记 */
-.agent-mode-banner {
-  margin: 0 0 var(--sp-3);
-  padding: 8px 12px;
-  border-left: 3px solid var(--warn);
-  border-radius: var(--radius-sm);
-  background: var(--warn-soft);
-  color: var(--ink);
-  font-size: 13px;
-  font-weight: 600;
-}
-.agent-mode-banner--ro { border-left-color: var(--brand); background: var(--brand-soft); }
-.composer.is-dry .composer-input { border-color: var(--warn); }
-.composer.is-ro .composer-input { border-color: var(--brand); }
+/* ① 模式提示：已按用户评审撤掉——三段控件本身已经表达了当前模式，额外横幅重复。
+   （原 .agent-mode-banner / .composer.is-dry / .is-ro 规则随功能一并删除） */
 
 /* ② 本轮会话气泡：任务靠右品牌底色、回答靠左描边底色，各带角色标签 */
 .agent-history__list { display: flex; flex-direction: column; gap: var(--sp-3); }
@@ -8354,9 +8342,19 @@ html:not(.js) .svg-view__actions { display: none; }
   font-weight: 600;
 }
 
-/* ③ .env 覆盖提醒：flash--warn 已有底色，这里补图标对齐（原本只是一行灰字） */
-.settings-status__env { display: flex; gap: 8px; align-items: flex-start; margin: 8px 0 0; }
+/* ③ .env 覆盖提醒：文案回到原版，视觉上用一个带边框的盒子框住（用户评审） */
+.settings-status__env {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
 .settings-status__env .icon { flex: none; margin-top: 2px; color: var(--warn); }
+.settings-status__env p { margin: 0; }
 
 /* ④ 当前服务商：细边框 → 实心描边 + 底色 + 「当前」角标 */
 .ai-preset-card.is-active {

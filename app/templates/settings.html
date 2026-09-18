@@ -59,13 +59,12 @@
 </div>
 
 {% if ai.env_keys %}
-  {# 这是「改了配置却不生效」的经典坑，视觉上必须是告警条，不能混在普通说明里 #}
-  <div class="flash flash--warn settings-status__env" role="status">
+  {# 用户评审：文案回到原来的简洁版，视觉上用带边框的盒子框住即可（不用色块告警条） #}
+  <div class="settings-status__env" role="status">
     {{ icon('alert', 15) }}
-    <span>
-      检测到 <code>.env</code> 里也配了 AI（{{ ai.env_keys | join('、') }}）——目前<strong>被本页保存的值覆盖</strong>，
-      改了 <code>.env</code> 不会生效；想让 <code>.env</code> 说了算，点下面的「清除本页配置」。
-    </span>
+    <p class="micro">
+      检测到 <code>.env</code> 里也配了 AI（{{ ai.env_keys | join('、') }}），目前被本页保存的值覆盖；想让 <code>.env</code> 生效，点下面的「清除本页配置」。
+    </p>
   </div>
 {% endif %}
 

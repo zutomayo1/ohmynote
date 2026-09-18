@@ -221,13 +221,6 @@
 
     // ===== 执行模式切换（读写 / 只读 / 计划） =====
     var MODE_KEY = HISTORY_KEY + '.mode';
-
-    // 非读写模式的常驻提示文案：横幅 + 输入框变色（CSS .composer.is-dry / .is-ro），
-    // 免得用户扫一眼没读到回答里那句话，就以为「删除」真的执行了
-    var MODE_NOTES = {
-      ro: '只读模式：只看不改 —— 任何写操作都会被拦下，不会动你的笔记。',
-      dry: '计划模式：只出计划、不动手 —— 不会真正修改任何笔记；要执行请点结果下方的「按计划执行」。'
-    };
     var modeBox = document.getElementById('agent-mode');
     var currentMode = 'rw';
     if (modeBox) {
@@ -254,18 +247,7 @@
           btn.setAttribute('aria-pressed', on ? 'true' : 'false');
           if (on) { moveThumb(btn); }
         });
-        // 强提示：非读写模式下横幅常驻 + 输入框变色，别让用户以为操作真的执行了
-        var banner = document.getElementById('agent-mode-banner');
-        if (banner) {
-          var note = MODE_NOTES[mode];
-          banner.hidden = !note;
-          banner.className = 'agent-mode-banner'
-            + (note && mode === 'dry' ? ' agent-mode-banner--dry' : '')
-            + (note && mode === 'ro' ? ' agent-mode-banner--ro' : '');
-          banner.textContent = note || '';
-        }
-        form.classList.toggle('is-dry', mode === 'dry');
-        form.classList.toggle('is-ro', mode === 'ro');
+        // 模式只靠三段控件本身表达（用户评审：额外的横幅与它重复，已去掉）
         try { window.localStorage.setItem(MODE_KEY, mode); } catch (err) { /* 静默 */ }
       }
       segBtns.forEach(function (btn) {
