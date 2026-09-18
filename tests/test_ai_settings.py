@@ -108,17 +108,20 @@ def test_settings_page_renders_presets_and_sections(auth_client):
     page = auth_client.get("/settings")
     assert page.status_code == 200
 
-    # 预设：全部服务商平铺成紧凑卡片（2026-09-18 起不再分「更多服务商」折叠）
-    for name in ("硅基流动", "智谱 GLM", "本地 Ollama", "DeepSeek", "OpenAI", "通义千问"):
-        assert name in page.text
+    # 服务商预设：下拉列表（2026-09-18 起由卡片改为 select），option 用 data-* 带地址/模型
+    for name in ("硅基流动", "智谱 GLM", "本地 Ollama", "DeepSeek", "OpenAI", "通义千问",
+                 "月之暗面 Kimi", "火山方舟（豆包）", "腾讯混元", "百度文心", "Google Gemini",
+                 "OpenRouter", "Groq", "Mistral", "零一万物 Yi", "本地 LM Studio", "本地 vLLM"):
+        assert name in page.text, f"{name} 不在服务商下拉里"
+    assert 'id="ai-provider"' in page.text
+    assert page.text.count("<option") >= 17       # 17 家预设 + 「自定义」
     assert 'data-base-url="https://api.deepseek.com/v1"' in page.text
     assert 'data-model="deepseek-chat"' in page.text
-    assert 'title="去 DeepSeek 官网获取密钥"' in page.text
-    assert "Key ↗" in page.text
     assert 'data-embed-model="BAAI/bge-m3"' in page.text  # 硅基流动免费向量
-    assert 'class="ai-presets ai-presets--compact"' in page.text
+    assert 'data-key-url="https://platform.deepseek.com/api_keys"' in page.text
+    assert 'id="ai-provider-hint"' in page.text
+    assert "ai-preset-card" not in page.text      # 卡片已整体移除
     assert "ai-presets-more" not in page.text
-    assert page.text.count('badge badge--saved') >= 3  # 免费 / 对话免费 / 离线免费
 
     # 模型选择：自绘下拉面板（不再用 <datalist>，那控件点一下不弹、只做前缀匹配）
     assert 'data-model-combo' in page.text
@@ -148,16 +151,17 @@ def test_settings_page_renders_presets_and_sections(auth_client):
     assert "/static/js/settings.js" in page.text
 
 
-def test_preset_is_highlighted_for_current_provider(auth_client, csrf, fake_ai):
-    """当前地址命中某个预设时，那张卡片应该带 is-active。"""
+def test_provider_select_preselects_current(auth_client, csrf, fake_ai):
+    """当前地址命中某个服务商时，下拉里那一项要 preselected。"""
     # 用一个预设地址（不联网保存即可，local_only 不开不会请求网络）
     save_ai(auth_client, csrf, base_url="https://api.deepseek.com/v1", model="deepseek-chat", timeout="20")
     page = auth_client.get("/settings")
-    assert 'ai-preset-card is-active' in page.text or 'is-active" ' in page.text
-    # DeepSeek 那张卡片高亮：名字附近能同时看到 is-active 与 deepseek
     marker = page.text.find('data-base-url="https://api.deepseek.com/v1"')
     assert marker != -1
-    assert "is-active" in page.text[: marker + 400]
+    option_start = page.text.rfind("<option", 0, marker)
+    option_end = page.text.find("</option>", marker)
+    assert option_start != -1 and option_end != -1
+    assert "selected" in page.text[option_start:option_end], "当前使用的服务商没有 preselected"
 
 
 # ---------------------------------------------------------------------------

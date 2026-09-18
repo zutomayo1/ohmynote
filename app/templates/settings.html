@@ -140,31 +140,28 @@
       {# 「我的预设」不在这里——HTML 不允许嵌套 form，它在外层表单之外单独立块。
           这个折叠块里只剩「填表 → 保存」的字段，保持单一表单结构。 #}
 
-      {# ===== 1 · 连接配置：选服务商（自动填表）与填字段是同一个步骤，
-           拆成两块会让人以为要填两遍 ===== #}
-      {% macro preset_card(p) -%}
-        <div class="ai-preset-card{{ ' is-active' if p.base_url == ai.base_url else '' }}">
-          <button class="ai-preset" type="button"
-                  data-base-url="{{ p.base_url }}"
-                  data-model="{{ p.model }}"
-                  data-embed-model="{{ p.embed_model }}"
-                  title="{{ p.note }}"
-                  aria-label="使用 {{ p.name }} 预设">
-            <span class="ai-preset__name">{{ p.name }}{% if p.get('tag') %} <span class="badge badge--saved">{{ p.tag }}</span>{% endif %}</span>
-            <span class="ai-preset__note">{{ p.note }}</span>
-          </button>
-          {% if p.key_url %}
-            <a class="ai-preset__key" href="{{ p.key_url }}" target="_blank" rel="noopener noreferrer"
-               title="去 {{ p.name }} 官网获取密钥">Key ↗</a>
-          {% endif %}
-        </div>
-      {%- endmacro %}
+      {# ===== 连接配置：服务商下拉（选中自动填地址/模型）→ 填密钥 → 保存 =====
+           下拉里每个 option 用 data-* 带着 base_url/model/embed_model，
+           settings.js 只负责往表单里填（无 JS 时手填地址一样可用）。 #}
       <div class="ai-section-head">
-        <h3 class="section-title">1 · 连接配置</h3>
-        <p class="micro">点卡片自动填地址和模型；密钥需自备。</p>
+        <h3 class="section-title">连接配置</h3>
+        <p class="micro">密钥需自备；下拉只填地址与模型，不会自动保存。</p>
       </div>
-      <div class="ai-presets ai-presets--compact" role="group" aria-label="服务商快捷填充">
-        {% for p in ai.providers %}{{ preset_card(p) }}{% endfor %}
+      <div class="field field--wide ai-provider">
+        <label class="field__label" for="ai-provider">服务商预设</label>
+        <select class="input" id="ai-provider" autocomplete="off">
+          <option value="">自定义 / 不预填</option>
+          {% for p in ai.providers %}
+            <option value="{{ p.name }}"
+                    data-base-url="{{ p.base_url }}"
+                    data-model="{{ p.model }}"
+                    data-embed-model="{{ p.embed_model }}"
+                    data-key-url="{{ p.key_url or '' }}"
+                    data-note="{{ p.note }}"
+                    {% if p.base_url == ai.base_url %}selected{% endif %}>{{ p.name }}{% if p.get('tag') %} · {{ p.tag }}{% endif %}</option>
+          {% endfor %}
+        </select>
+        <p class="ai-provider__hint micro" id="ai-provider-hint">选中后自动填入下面的地址与模型；密钥去服务商官网获取。</p>
       </div>
       <div class="field-grid">
         <label class="field field--wide">

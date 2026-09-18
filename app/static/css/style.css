@@ -2732,32 +2732,9 @@ a.archive-month__label:hover { color: var(--brand); }
 
 /* 一键预设按钮 */
 
-.ai-presets { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-top: 12px; }
-
-.ai-preset-card {
-  display: flex; flex-direction: column; gap: 6px; padding: 12px 14px;
-  border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2);
-  transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease; }
-
-.ai-preset-card:hover { border-color: var(--line-strong); box-shadow: var(--shadow-sm); }
-
-.ai-preset-card.is-active { border-color: var(--brand); background: var(--brand-soft); box-shadow: var(--shadow-sm); }
-
-.ai-preset {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
-  padding: 0; border: 0; background: none; color: var(--ink); text-align: left; cursor: pointer; }
-
-.ai-preset__name { color: var(--brand); font-family: var(--font-serif); font-size: 16px; font-weight: 700; }
-
-.ai-preset-card.is-active .ai-preset__name { color: var(--brand-dark); }
-
-.ai-preset__note { color: var(--ink-3); font-family: var(--font-sans); font-size: 12.5px; line-height: 1.55; }
-
 .ai-preset__key { align-self: flex-start; color: var(--accent); font-family: var(--font-sans); font-size: 12.5px; text-decoration: none; }
 
 .ai-preset__key:hover { color: var(--brand); text-decoration: underline; text-underline-offset: 3px; }
-
-.ai-preset__key--none { color: var(--ink-3); }
 
 /* 输入框 + 按钮一行；拉模型的状态文字 */
 
@@ -2868,7 +2845,6 @@ a.archive-month__label:hover { color: var(--brand); }
 /* 窄屏：预设有单列、输入框与按钮上下排 */
 
 @media (max-width: 640px) {
-  .ai-presets { grid-template-columns: 1fr; }
   .ai-inline { flex-direction: column; }
   .ai-inline .btn { width: 100%; }
   .ai-chart { gap: 2px; height: 76px; }
@@ -4711,16 +4687,6 @@ body { transition: background-color .12s ease, color .12s ease; }
   overflow-wrap: anywhere; }
 
 /* ===== 补丁：预设「更多服务商」折叠块（2026-09-13） ===== */
-.ai-presets-more { margin-top: 10px; }
-
-.ai-presets-more__summary {
-  cursor: pointer; user-select: none;
-  color: var(--ink-2); font-size: 13px; }
-.ai-presets-more__summary:hover { color: var(--ink); }
-
-.ai-presets-more[open] .ai-presets-more__summary { margin-bottom: 10px; }
-.ai-presets-more .ai-presets { margin-top: 10px; }
-
 /* ===== 补丁：设置页重排（2026-09-13，分组标题 + 统一折叠视觉） ===== */
 /* 分组成员标题：把十几个折叠块分成「AI / 站点与账号 / 参考」三组 */
 .settings-group { margin-top: 30px; }
@@ -6297,18 +6263,16 @@ body.split-dragging .editor__textarea { pointer-events: none; }
       overflow clip 会裁掉它们，故不参与高度动画，仅保留原有的箭头旋转）
       旧浏览器不支持 ::details-content 时退化为瞬时开合 */
 .agent-runs, .agent-history, .editor__templates,
-.ai-presets-more, .backup-errors { interpolate-size: allow-keywords; } /* tag-admin 不参与：块内有选择标签的下拉弹层，clip 会裁掉 */
+ /* tag-admin 不参与：块内有选择标签的下拉弹层，clip 会裁掉 */
 
 .agent-runs::details-content,
-.agent-history::details-content, .editor__templates::details-content,
-.ai-presets-more::details-content, .backup-errors::details-content {
+.agent-history::details-content, .editor__templates::details-content
   display: block; block-size: 0; overflow-y: clip;
   transition: block-size .26s cubic-bezier(.3, .8, .3, 1), content-visibility .26s allow-discrete;
 }
 
 .agent-runs[open]::details-content,
-.agent-history[open]::details-content, .editor__templates[open]::details-content,
-.ai-presets-more[open]::details-content, .backup-errors[open]::details-content { block-size: auto; }
+.agent-history[open]::details-content, .editor__templates[open]::details-content
 
 /* 2) 主题切换：月亮悬停「转一下」（每次移入重放）；切换瞬间全站颜色柔和过渡 */
 .theme-toggle svg { transform-origin: 50% 50%; }
@@ -6356,8 +6320,7 @@ html.theme-anim .theme-toggle svg { animation: theme-moon-flip .45s cubic-bezier
   .tag-manage__menu[open] .tag-manage__panel, .combo__panel, .toast,
   .batch-bar.is-active, .code-copy.is-copied { animation: none; }
   .agent-runs::details-content, .agent-history::details-content,
-  .editor__templates::details-content, .ai-presets-more::details-content,
-  .backup-errors::details-content { transition: none; }
+
 }
 
 /* ===== 补丁：标签药丸统一质感（2026-09-14 深夜三，已合并） ===== */
@@ -8234,9 +8197,9 @@ html:not(.js) .svg-view__actions { display: none; }
 /* .btn 的 display 会盖过 UA 的 [hidden]（agent 的「停止」按钮踩过）：显式兜底 */
 .btn[hidden] { display: none; }
 
-/* ===== 补丁：设置页 AI 区重排（2026-09-18 二版，DeepSeek 控制台式行列表） =====
-   三步式：① 我的预设行列表 ② 服务商快捷填充 chips ③ 连接配置。
-   内置服务商复用 ai-preset-card 卡皮（settings.js 契约），compact 模式压成 chip。 */
+/* ===== 补丁：设置页 AI 区重排（2026-09-18；服务商已从卡片改为下拉） =====
+   「我的预设」行列表 +「连接配置」（服务商下拉 + 核心字段）。
+   下拉 option 用 data-* 带地址/模型，settings.js 只负责填表。 */
 .ai-statusline {
   display: flex;
   align-items: center;
@@ -8280,27 +8243,6 @@ html:not(.js) .svg-view__actions { display: none; }
 }
 .ai-profile-row__actions { display: flex; gap: var(--sp-2); flex-shrink: 0; }
 .ai-profile-row__actions form { margin: 0; }
-.ai-presets--compact { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
-.ai-presets--compact .ai-preset-card {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-}
-.ai-presets--compact .ai-preset {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-  flex-direction: row;
-  align-items: center;
-  gap: 6px;
-}
-.ai-presets--compact .ai-preset__note,
-.ai-presets--compact .ai-preset__key { white-space: nowrap; font-size: 12px; }
-/* 说明文字收进悬浮提示（title）：卡片只留「名字 + 标签 + Key」，别把一行塞满 */
-.ai-presets--compact .ai-preset__note { display: none; }
-
 /* ===== 补丁：UI 评审第一轮（2026-09-18）=====
    ① agent 非读写模式强提示  ② 本轮会话气泡化  ③ .env 告警条
    ④ 当前服务商标识加强  ⑥ 模型输入框与「获取可用模型」成组
@@ -8358,24 +8300,6 @@ html:not(.js) .svg-view__actions { display: none; }
 .settings-status__env .icon { flex: none; margin-top: 2px; color: var(--warn); }
 .settings-status__env p { margin: 0; }
 
-/* ④ 当前服务商：细边框 → 实心描边 + 底色 + 「当前」角标 */
-.ai-preset-card.is-active {
-  border-color: var(--brand);
-  background: var(--brand-soft);
-  box-shadow: inset 0 0 0 1px var(--brand);
-}
-.ai-preset-card.is-active .ai-preset__name::after {
-  content: '当前';
-  margin-left: 6px;
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: var(--brand);
-  color: var(--surface);
-  font-size: 11px;
-  font-weight: 600;
-  vertical-align: 1px;
-}
-
 /* ⑥ 模型名输入 + ▾ 下拉 + 「获取可用模型」框成一个整体（原本像两个独立元素并排） */
 #ai-settings-form .ai-inline {
   display: flex;
@@ -8399,3 +8323,7 @@ html:not(.js) .svg-view__actions { display: none; }
   background: transparent;
 }
 #ai-settings-form .ai-inline .btn:hover { background: var(--surface-2); }
+
+/* 服务商下拉（原卡片改版）：选中自动填表；说明与「拿 Key」入口跟在下方 */
+.ai-provider { margin-bottom: var(--sp-4); }
+.ai-provider__hint { display: block; margin-top: 6px; }

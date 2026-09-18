@@ -105,28 +105,40 @@
     box.hidden = !message;
   }
 
-  // ===== 1. 一键预设：把 data-* 里的地址/模型填进表单，并高亮当前选中 =====
-  function initPresets() {
-    var cards = $$('.ai-preset-card');
-    if (!cards.length) { return; }
+  // ===== 1. 服务商下拉：选中后把地址/模型/向量模型填进表单，并附上拿 Key 的入口 =====
+  function initProviderSelect() {
+    var select = document.getElementById('ai-provider');
+    if (!select) { return; }
     var baseInput = $('#ai-base-url');
     var modelInput = $('#ai-model');
     var embedInput = $('#ai-embed-model');
+    var hint = document.getElementById('ai-provider-hint');
 
-    cards.forEach(function (card) {
-      var btn = card.querySelector('.ai-preset');
-      if (!btn) { return; }
-      btn.addEventListener('click', function () {
-        if (baseInput) { baseInput.value = btn.getAttribute('data-base-url') || ''; }
-        if (modelInput) { modelInput.value = btn.getAttribute('data-model') || ''; }
-        if (embedInput) { embedInput.value = btn.getAttribute('data-embed-model') || ''; }
-        reloadModelsForBase();
-        cards.forEach(function (other) { other.classList.toggle('is-active', other === card); });
-        var nameNode = btn.querySelector('.ai-preset__name');
-        var name = nameNode ? nameNode.textContent : '预设';
-        showFeedback('已填入「' + name + '」的地址和模型，确认后点「保存配置」即可生效。', 'ok');
-        if (modelInput) { revealInDetails(modelInput); modelInput.focus(); }
-      });
+    function renderProviderHint(option) {
+      if (!hint) { return; }
+      hint.textContent = option.getAttribute('data-note') || '';
+      var keyUrl = option.getAttribute('data-key-url') || '';
+      if (!keyUrl) { return; }
+      var link = document.createElement('a');
+      link.className = 'ai-preset__key';
+      link.href = keyUrl;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = '去官网拿 Key ↗';
+      hint.appendChild(document.createTextNode(' · '));
+      hint.appendChild(link);
+    }
+
+    select.addEventListener('change', function () {
+      var option = select.options[select.selectedIndex];
+      if (!option || !option.value) { return; }
+      if (baseInput) { baseInput.value = option.getAttribute('data-base-url') || ''; }
+      if (modelInput) { modelInput.value = option.getAttribute('data-model') || ''; }
+      if (embedInput) { embedInput.value = option.getAttribute('data-embed-model') || ''; }
+      reloadModelsForBase();
+      renderProviderHint(option);
+      showFeedback('已填入「' + option.value + '」的地址和模型，确认后点「保存配置」即可生效。', 'ok');
+      if (modelInput) { revealInDetails(modelInput); modelInput.focus(); }
     });
   }
 
@@ -553,7 +565,7 @@
   function boot() {
     var form = document.getElementById('ai-settings-form');
     if (!form) { return; }
-    safe(initPresets);
+    safe(initProviderSelect);
     safe(function () { initModels(); });
     safe(function () { initProbe(form); });
     safe(function () { initEmbed(form); });
