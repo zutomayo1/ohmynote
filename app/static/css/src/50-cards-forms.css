@@ -1,0 +1,526 @@
+/* ===== 笔记详情页右上角的一排操作按钮：图标按钮贴紧成排 ===== */
+
+.menu-group {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+
+/* ===== 表单字段修饰 ===== */
+
+/* 字段撑满剩余宽度（搜索框、提问框等） */
+
+.field--grow { flex: 1 1 220px; }
+
+/* 一组复选开关：纵向排列、行距舒适（对齐由 .checkbox 负责） */
+
+.field--checks { gap: 8px; }
+
+/* 大号输入框（问笔记页），字号与高度更大 */
+
+.input--lg { padding: 12px 16px; font-size: 16px; }
+
+/* 等宽字体的 textarea（模板内容编辑），行高稍紧 */
+
+.textarea--code {
+  font-family: var(--font-mono); font-size: 13.5px;
+  line-height: 1.6; tab-size: 2; }
+
+/* ===== Markdown 工具栏：链接按钮与竖分隔线 ===== */
+
+/* <a class="md-tool md-tool--link">：去掉下划线并垂直居中 */
+
+.md-tool--link {
+  display: inline-flex; flex-wrap: wrap; align-items: center; gap: 5px;
+  color: var(--ink-2); text-decoration: none; }
+
+.md-tool--link:hover { color: var(--brand); }
+
+/* 工具栏分组之间的竖分隔线：1px、淡色、高约 18px */
+
+.md-tool__sep {
+  flex: none; width: 1px; height: 18px;
+  margin: 0 4px; background: var(--line); }
+
+/* ===== 编辑器：底部说明 + 「从模板开始」折叠块 ===== */
+
+/* 操作条右侧的「最后更新：…」：弱化、小号、自动靠右 */
+
+.editor__actions-meta {
+  margin-left: auto; font-size: 12.5px; white-space: nowrap; }
+
+/* details/summary 折叠块（与 .editor__settings 同一套视觉） */
+
+.editor__templates {
+  margin-top: 16px; border: 1px solid var(--line);
+  border-radius: var(--radius); background: var(--surface-2); }
+
+.editor__templates .template-grid--compact { margin-top: 0; padding: 0 16px 16px; }
+
+/* ===== 模板管理页：左列表、右编辑表单，≤1024px 变单列 ===== */
+
+.template-layout {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 340px);
+  gap: 28px; align-items: start; margin-top: 20px; }
+
+/* 紧凑模板卡片栅格：列更窄、间距更小 */
+
+.template-grid--compact {
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px; margin-top: 12px; }
+
+/* 模板卡片：头部 / 名称 / 说明 */
+
+.template-card__head {
+  display: flex; flex-wrap: wrap; align-items: baseline;
+  justify-content: space-between; gap: 6px; }
+
+.template-card__name {
+  color: var(--ink); font-family: var(--font-serif);
+  font-size: 16px; font-weight: 700; line-height: 1.35; }
+
+.template-card__desc {
+  color: var(--ink-2); font-family: var(--font-sans);
+  font-size: 12.5px; line-height: 1.6; }
+
+/* 模板内容预览：限高约 5 行、等宽、淡底、超出裁切 */
+
+.template-card__preview {
+  max-height: 8em; margin: 0; padding: 10px 12px;
+  overflow: hidden; border-radius: var(--radius-sm);
+  background: var(--bg-soft); color: var(--ink-2);
+  font-family: var(--font-mono); font-size: 12px; line-height: 1.6;
+  white-space: pre-wrap; word-break: break-word; }
+
+/* 卡片底部按钮组 */
+
+.template-card__actions {
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: 6px; margin-top: auto; }
+
+/* 模板页右侧编辑区：卡片化、宽屏粘性跟随（88px = 顶栏 64px + 间距） */
+
+.template-editor {
+  position: sticky; top: 88px; align-self: start; padding: 20px;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); box-shadow: var(--shadow-sm); }
+
+/* 模板表单：字段纵向排列 + 底部按钮行 */
+
+.template-form {
+  display: flex; flex-direction: column;
+  gap: 14px; margin-top: 14px; }
+
+.template-form__actions {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+/* ===== 「问笔记」示例问题：说明文字 + 一排胶囊按钮 ===== */
+
+.ask-samples {
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: 8px; margin-top: 14px; }
+
+.ask-samples form { display: inline-flex; flex-wrap: wrap; margin: 0; }
+
+.ask-samples button { cursor: pointer; }
+
+/* ===== 博客 hero 说明与筛选条（style.css 已有同名规则，保持同值） ===== */
+
+.blog-hero__desc {
+  max-width: 58ch; margin: 10px auto 0; text-align: center;
+  color: var(--ink-2); font-size: 15px; line-height: var(--lh); }
+
+.blog-filters__search {
+  display: flex; flex-wrap: wrap; flex: 1 1 260px;
+  gap: 8px; align-items: center; max-width: 420px; }
+
+.blog-filters__tags {
+  display: flex; flex-wrap: wrap; flex: 1 1 auto;
+  gap: 8px; align-items: center; }
+
+/* ===== 空状态：按钮行 + 错误页变体 ===== */
+
+.empty-state__actions {
+  display: flex; flex-wrap: wrap; justify-content: center;
+  align-items: center; gap: 10px; margin-top: 10px; }
+
+/* 错误页空状态：字号略小、上下留白更大 */
+
+.empty-state--error {
+  gap: 6px; padding-block: 96px 104px; font-size: 15px; }
+
+/* ===== 响应式：≤1024px（模板页变单列，编辑区取消粘性） ===== */
+
+@media (max-width: 1024px) {
+  .template-layout { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .template-editor { position: static; top: auto; }
+}
+
+/* ===== 响应式：≤640px（工具栏行内每个控件占满一行） ===== */
+
+@media (max-width: 640px) {
+  .toolbar__row > * { flex: 1 1 100%; }
+  .filter-bar__group--tags { flex-basis: 100%; }
+}
+
+/* C 组补充：页脚 / 登录 / 统计 / 消息条 / Markdown 任务清单 / 相邻导航（并入 style.css）
+   只用文件内已有令牌，深色模式与窄屏自动生效；不重定义 .flash .stat .icon-btn .post-nav .login-card 本体 */
+
+/* ===== 页脚内部三块 ===== */
+
+.footer-inner {
+  display: flex; flex-wrap: wrap; align-items: center;
+  justify-content: space-between; gap: 10px 20px; }
+
+.footer-brand { font-family: var(--font-serif); font-size: 15px; color: var(--ink-2); }
+
+.footer-links { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+
+.footer-links a { font-size: 13.5px; color: var(--ink-3); text-decoration: none; }
+
+.footer-links a:hover { color: var(--brand); }
+
+.footer-note { font-size: 12.5px; color: var(--ink-3); }
+
+/* ===== 登录卡片子元素 ===== */
+
+.login-card__mark {
+  width: 56px; height: 56px; margin-inline: auto; border-radius: var(--radius);
+  display: grid; place-items: center; background: var(--brand); color: var(--surface);
+  font-family: var(--font-serif); font-size: 28px; line-height: 1; box-shadow: var(--shadow-sm); }
+
+.login-card__title { margin: 0; text-align: center; font-family: var(--font-serif); font-size: 26px; }
+
+.login-card__sub { margin: 0 0 8px; text-align: center; color: var(--ink-3); font-size: 14px; }
+
+.login-card__hint {
+  margin: 4px 0 0; padding-top: 14px; border-top: 1px solid var(--line);
+  color: var(--ink-3); font-size: 12.5px; line-height: 1.75; }
+
+/* ===== 统计 ===== */
+
+.stats-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-auto-rows: 1fr; gap: 18px; margin-top: 28px; }
+
+.stats-strip--wide {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+
+/* ===== 提醒消息条（与 --ok / --error 并列） ===== */
+
+.flash--warn { border-left-color: var(--brand); background: var(--warn-soft); color: var(--ink); }
+
+/* ===== 图标按钮修饰 ===== */
+
+.icon-btn--sm { width: 28px; height: 28px; min-width: 28px; min-height: 28px; padding: 0; border-radius: 6px; }
+
+.icon-btn--danger:hover { border-color: var(--danger); background: var(--brand-soft); color: var(--danger); box-shadow: var(--shadow-sm); }
+
+/* ===== 内联 SVG 图标基类 ===== */
+
+.icon { display: inline-block; flex: none; vertical-align: -.15em; }
+
+/* ===== 上一篇（靠左） ===== */
+
+.post-nav__item--prev { text-align: left; align-self: start; }
+
+/* ===== 关于页两栏 ===== */
+
+.about-layout {
+  display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 20px; align-items: start; margin-top: 24px; }
+
+.about-card .prose { max-width: none; }
+
+.about-facts { list-style: none; margin: 18px 0 0; padding: 0; border-top: 1px solid var(--line); }
+
+.about-facts li {
+  display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
+  gap: 4px 16px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+
+.about-facts span { color: var(--ink-3); }
+
+.about-facts strong { color: var(--ink); font-weight: 600; }
+
+/* ===== Markdown 任务清单 ===== */
+
+.task-list { margin: 0; padding-left: 0; list-style: none; }
+
+.task-list-item {
+  display: flex; flex-wrap: wrap; align-items: flex-start; gap: 4px 10px;
+  margin-top: .45em; list-style: none; }
+
+.task-list .task-list { margin-top: 4px; padding-left: 26px; }
+
+.task-list-control {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  flex: none; width: 16px; height: 16px; margin-top: .35em; cursor: pointer; }
+
+/* 原生复选框视觉隐藏但保留可访问性（不可用 display:none） */
+
+.task-list-control input[type="checkbox"] {
+  position: absolute; opacity: 0; width: 16px; height: 16px; margin: 0; }
+
+.task-list-indicator {
+  display: grid; place-items: center;
+  width: 16px; height: 16px; border: 1.5px solid var(--line-strong); border-radius: 4px;
+  background: var(--surface); transition: background-color .15s ease, border-color .15s ease; }
+
+/* 自绘对勾：两条白边旋转 45°，默认隐藏 */
+
+.task-list-indicator::after {
+  content: ""; display: block; width: 9px; height: 5px; opacity: 0;
+  border-left: 2px solid var(--surface); border-bottom: 2px solid var(--surface);
+  transform: rotate(-45deg) translate(1px, -1px); }
+
+/* 相邻兄弟：结构是 input 紧跟 span.task-list-indicator */
+
+.task-list-control input:checked + .task-list-indicator { border-color: var(--brand); background: var(--brand); }
+
+.task-list-control input:checked + .task-list-indicator::after { opacity: 1; }
+
+/* 已完成项：li 上 :has 控制内联文本的删除线（::after 不受影响，对勾完好） */
+
+.task-list-item:has(input:checked) { text-decoration: line-through; color: var(--ink-3); }
+
+/* 未完成项保持正常墨色 */
+
+.task-list-item:not(:has(input:checked)) { color: var(--ink); }
+
+/* ===== ≤900px：关于页单列 ===== */
+
+@media (max-width: 900px) {
+  .about-layout { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ===== ≤640px：页脚与登录卡单列堆叠、统计两列 ===== */
+
+@media (max-width: 640px) {
+  .footer-inner { flex-direction: column; align-items: center; text-align: center; }
+  .login-card { flex-direction: column; }
+  .stats-grid { grid-template-columns: minmax(0, 1fr); }
+  .stats-strip--wide { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .post-nav__item--prev { align-self: auto; }
+}
+
+/* ===== 行式笔记列表与小工具类（标签页 / 统计页） ===== */
+
+.micro { font-size: 12.5px; line-height: 1.65; color: var(--ink-3); }
+
+.page-head--article { align-items: flex-start; }
+
+.page-head--article .page-title { margin-bottom: 6px; }
+
+.note-lines { list-style: none; margin: 0; padding: 0; }
+
+.note-line {
+  display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
+  gap: 4px 14px; padding: 9px 2px; border-bottom: 1px solid var(--line); }
+
+.note-line:last-child { border-bottom: 0; }
+
+.note-line__title {
+  flex: 1 1 240px; min-width: 0; color: var(--ink);
+  font-family: var(--font-serif); font-size: 15.5px; line-height: 1.5;
+  text-decoration: none; overflow-wrap: anywhere; }
+
+.note-line__title:hover { color: var(--brand); text-decoration: underline; text-underline-offset: 3px; }
+
+.note-line__meta { flex: none; white-space: nowrap; }
+
+/* ===== 设置页 ===== */
+
+.settings-form { display: flex; flex-direction: column; gap: 16px; margin-top: 16px; }
+
+.settings-form .field-grid { gap: 14px 20px; }
+
+.settings-form__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+
+.settings-form__actions .btn { min-height: 38px; }
+
+.card__title { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+
+.field__label .badge { margin-left: 6px; font-weight: 400; }
+
+.settings-form .micro, .card .micro { display: block; margin-top: 4px; line-height: 1.6; }
+
+.settings-form .checkbox { margin-top: 2px; }
+
+/* ===== 问笔记 ===== */
+
+.ask-layout {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  gap: 28px; align-items: start; margin-top: 22px; }
+
+.ask-main { min-width: 0; }
+
+.ask-thread { display: flex; flex-direction: column; gap: 16px; margin-top: 14px; }
+
+.ask-bubble {
+  padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); box-shadow: var(--shadow-sm); }
+
+.ask-bubble--user { border-left: 3px solid var(--brand); background: var(--brand-soft); }
+
+.ask-bubble--ai { border-left: 3px solid var(--accent); }
+
+.ask-bubble__role {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  margin-bottom: 8px; color: var(--ink-3);
+  font-family: var(--font-sans); font-size: 12.5px; font-weight: 600; letter-spacing: .02em; }
+
+.ask-bubble--user .ask-bubble__role { color: var(--brand); }
+
+.ask-bubble--ai .ask-bubble__role { color: var(--accent); }
+
+.ask-bubble__body { overflow-wrap: anywhere; }
+
+.ask-answer { margin: 0; padding: 0; }
+
+.ask-stream { white-space: pre-wrap; }
+
+.ask-engine {
+  padding: 1px 8px; border-radius: var(--radius-pill);
+  background: var(--surface-2); color: var(--ink-2);
+  font-family: var(--font-sans); font-size: 11px; font-weight: 500; }
+
+.ask-engine--semantic { background: var(--accent-soft); color: var(--accent); }
+
+.ask-engine--keyword { background: var(--warn-soft); color: var(--ink-2); }
+
+.ask-sources { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line-strong); }
+
+.ask-sources__title { margin-bottom: 8px; color: var(--ink-2); font-family: var(--font-sans); font-size: 12.5px; font-weight: 600; }
+
+.ask-source-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+
+.ask-source-card {
+  display: flex; flex-direction: column; gap: 4px; padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2);
+  text-decoration: none; transition: border-color .15s ease, box-shadow .15s ease; }
+
+.ask-source-card:hover { border-color: var(--line-strong); box-shadow: var(--shadow-sm); }
+
+.ask-source-card__title { color: var(--brand); font-family: var(--font-serif); font-size: 14px; font-weight: 600; line-height: 1.45; }
+
+.ask-source-card__snippet {
+  color: var(--ink-3); font-size: 12.5px; line-height: 1.6;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+
+.ask-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+
+.ask-actions form { display: inline-flex; margin: 0; }
+
+.ask-form { margin-top: 18px; }
+
+.ask-form.is-busy .composer-input { opacity: .7; }
+
+.ask-rail { position: sticky; top: calc(var(--header-h) + 16px); }
+
+.ask-recent { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+
+.ask-recent__item {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px 8px;
+  padding: 8px 10px; border: 1px solid transparent; border-radius: var(--radius-sm); }
+
+.ask-recent__item:hover { background: var(--bg-soft); }
+
+.ask-recent__item.is-active { border-color: var(--line-strong); background: var(--surface-2); }
+
+.ask-recent__link {
+  grid-column: 1; grid-row: 1; min-width: 0; color: var(--ink);
+  font-family: var(--font-serif); font-size: 14.5px; font-weight: 600; line-height: 1.45;
+  text-decoration: none; overflow-wrap: anywhere; }
+
+.ask-recent__link:hover { color: var(--brand); }
+
+.ask-recent__meta { grid-column: 1; grid-row: 2; }
+
+.ask-recent__item form { grid-column: 2; grid-row: 1 / span 2; display: inline-flex; margin: 0; }
+
+.ask-cursor {
+  display: inline-block; width: 7px; height: 1.05em; margin-left: 1px;
+  vertical-align: text-bottom; background: var(--accent);
+  animation: ask-blink 1s steps(1) infinite; }
+
+@keyframes ask-blink { 50% { opacity: 0; } }
+
+@media (max-width: 1024px) {
+  .ask-layout { grid-template-columns: minmax(0, 1fr); }
+  .ask-rail { position: static; } }
+
+@media (max-width: 640px) {
+  .ask-source-list { grid-template-columns: 1fr; } }
+
+/* ===== 模型选择下拉（设置页） ===== */
+
+.combo { position: relative; display: block; flex: 1 1 auto; min-width: 0; }
+
+.combo__input { padding-right: 34px; }
+
+.combo__toggle {
+  position: absolute; top: 1px; right: 1px; bottom: 1px; width: 30px;
+  border: 0; background: transparent; color: var(--ink-3); cursor: pointer;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-family: var(--font-sans); font-size: 12px; line-height: 1; }
+
+.combo__toggle:hover { color: var(--brand); background: var(--surface-2); }
+
+.combo__panel {
+  position: absolute; z-index: 40; left: 0; right: 0; top: calc(100% + 4px);
+  max-height: 260px; overflow-y: auto; padding: 4px;
+  border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+  background: var(--surface); box-shadow: var(--shadow-md); }
+
+.combo__item {
+  padding: 7px 10px; border-radius: 6px; cursor: pointer;
+  font-family: var(--font-mono); font-size: 13px; color: var(--ink-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.combo__item:hover, .combo__item.is-active { background: var(--brand-soft); color: var(--ink); }
+
+.combo__item.is-selected { color: var(--brand-dark); font-weight: 600; }
+
+.combo__empty { padding: 10px; color: var(--ink-3); font-family: var(--font-sans); font-size: 12.5px; }
+
+/* ===== 布局修正（截图评审后补的） ===== */
+
+/* 1) 博客筛选条：输入框的 width:100% 会把搜索按钮挤到下一行 */
+
+.blog-filters__search { flex-wrap: nowrap; }
+
+.blog-filters__search .input { flex: 1 1 0; width: auto; min-width: 0; }
+
+/* 2) 编辑器工具条：按钮里的「图片」等文字不要被拆成两行 */
+
+.md-tool { white-space: nowrap; }
+
+/* 3) 详情页底部：没有上一篇/下一篇时，占位不要显示成一个虚线空盒子 */
+
+.post-nav__item.is-empty { border: 0; }
+
+/* 4) 列表页筛选条：胶囊靠左，不要整排居中（.filter-bar 是纵向 flex） */
+
+/* 5) 设置页：模型输入框和「获取可用模型」按钮保持一行 */
+
+.ai-inline { flex-wrap: nowrap; }
+
+.ai-inline .btn { flex: none; }
+
+.ai-inline .combo { flex: 1 1 0; min-width: 0; }
+
+/* ===== 编辑器工具条（截图评审后重排：按组换行，图标与文字同一行） ===== */
+
+.editor__toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 4px; }
+
+.md-tool__group { display: inline-flex; align-items: center; gap: 2px; }
+
+.md-tool__group--end { margin-left: auto; }
+
+/* 原来的 inline-grid 会把图标和文字分成两行，改成 flex 一行排列 */
+
+.md-tool {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  min-width: 30px; height: 30px; padding: 0 8px; white-space: nowrap; }
+
+.md-tool svg { flex: none; }
+
+.md-tool__sep { flex: none; width: 1px; height: 18px; margin: 0 3px; background: var(--line); }
+

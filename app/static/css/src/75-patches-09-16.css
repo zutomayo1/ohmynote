@@ -1,0 +1,594 @@
+/* ===== 补丁：置顶笔记拖拽排序（2026-09-16，已合并） ===== */
+
+/* 手柄：平时淡显，悬停卡片 / 手柄时明显；抓取点在置顶卡片的左上角 */
+.note-drag {
+  position: absolute; top: 8px; left: 6px; z-index: 2;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; padding: 0;
+  border: 1px solid transparent; border-radius: 6px;
+  background: transparent; color: var(--ink-3);
+  font-family: var(--font-mono); font-size: 13px; line-height: 1;
+  cursor: grab; opacity: .3;
+  transition: opacity .15s ease, color .15s ease, background-color .15s ease, border-color .15s ease;
+}
+
+.note-card:hover .note-drag, .note-drag:hover, .note-drag:focus-visible {
+  opacity: 1; color: var(--brand); border-color: var(--line-strong); background: var(--surface-2);
+}
+
+.note-drag:active { cursor: grabbing; }
+
+/* 给手柄让出左上角的空间（置顶卡片自身有 3px 品牌左边框 + 17px 左内边距） */
+.note-card.is-pinned .note-card__head { padding-left: 20px; }
+
+.note-card.is-dragging {
+  opacity: .55; transform: scale(.98);
+  box-shadow: var(--shadow-md); border-color: var(--brand);
+}
+
+.note-card.is-dragging .note-drag { cursor: grabbing; opacity: 1; }
+
+.note-order-hint { margin: 0 0 12px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .note-drag { transition: none; }
+}
+
+/* ===== 补丁：改标题联动更新链接（2026-09-16，已合并） ===== */
+
+.rename-links { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+.rename-links__text { margin: 0; flex: 1 1 auto; min-width: 0; }
+
+.rename-links__form { margin: 0; flex: none; }
+
+/* ===== 补丁：搜索语法提示（2026-09-16，已合并） ===== */
+
+.search-syntax { margin: 6px 0 0; }
+
+.search-syntax code {
+  padding: 1px 5px; border-radius: 4px;
+  background: var(--surface-2); font-family: var(--font-mono); font-size: 11px;
+}
+
+/* ===== 补丁：搜索语法提示（2026-09-16，已合并） ===== */
+
+.search-syntax { margin: 6px 0 0; }
+
+.search-syntax code {
+  padding: 1px 5px; border-radius: 4px;
+  background: var(--surface-2); font-family: var(--font-mono); font-size: 11px;
+}
+
+
+/* ===== 补丁：博客阅读增强（2026-09-16，已合并） ===== */
+
+/* 代码块语言标签（服务端渲染，右上角复制按钮的左邻） */
+.code-lang {
+  position: absolute; top: 10px; left: 12px; z-index: 1;
+  padding: 2px 9px; border: 1px solid var(--line); border-radius: var(--radius-pill);
+  background: var(--surface); color: var(--ink-3);
+  font-family: var(--font-mono); font-size: 11px; line-height: 1.5;
+  pointer-events: none; user-select: none;
+}
+
+/* 点赞 / 阅读计数 */
+.post-like { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+
+.post-like__form { margin: 0; }
+
+.post-like__btn {
+  display: inline-flex; align-items: center; gap: 8px; padding: 8px 18px;
+  border: 1px solid var(--line-strong); border-radius: var(--radius-pill);
+  background: var(--surface); color: var(--ink);
+  font-family: var(--font-sans); font-size: 14px; cursor: pointer;
+  transition: color .15s ease, border-color .15s ease, background-color .15s ease, transform .15s ease;
+}
+
+.post-like__btn:hover, .post-like__btn:focus-visible { color: var(--brand); border-color: var(--brand); }
+
+.post-like__btn:active { transform: scale(.96); }
+
+.post-like__btn.is-liked {
+  color: #fff; background: var(--brand); border-color: var(--brand); cursor: default;
+}
+
+.post-like__icon { font-size: 15px; line-height: 1; }
+
+.post-like__btn.is-liked .post-like__icon { animation: like-pop .32s ease; }
+
+@keyframes like-pop {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.5); }
+  100% { transform: scale(1); }
+}
+
+.post-like__count { font-variant-numeric: tabular-nums; }
+
+.post-like__reads { color: var(--ink-3); font-size: 13px; }
+
+/* 图片灯箱（blog.js 构建，点击 .post-body 里的图放大） */
+.lightbox {
+  position: fixed; inset: 0; z-index: 1000; display: none;
+  align-items: center; justify-content: center; padding: 40px 32px;
+  background: rgba(0, 0, 0, .78);
+}
+
+.lightbox.is-open { display: flex; }
+
+.lightbox figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 12px; max-width: 100%; }
+
+.lightbox__img {
+  max-width: 100%; max-height: calc(100vh - 140px);
+  border-radius: var(--radius); box-shadow: var(--shadow-md);
+}
+
+.lightbox__cap { margin: 0; color: #e8e4dc; font-size: 13px; text-align: center; }
+
+.lightbox__close {
+  position: absolute; top: 16px; right: 20px; width: 40px; height: 40px;
+  border: none; border-radius: 50%; background: rgba(255, 255, 255, .14);
+  color: #fff; font-size: 20px; line-height: 1; cursor: pointer;
+}
+
+.lightbox__close:hover { background: rgba(255, 255, 255, .26); }
+
+/* TOC 滚动高亮（blog.js 切换） */
+.toc__link.is-active {
+  border-left-color: var(--brand); color: var(--brand); background: var(--surface-2);
+}
+
+/* 文章卡入场：初始态只挂在 .js 下（无 JS 不藏内容）；featured 稍慢稍深 */
+.js .blog-list .post-card { opacity: 0; transform: translateY(14px); }
+
+.js .blog-list .post-card--feature { transform: translateY(20px) scale(.985); }
+
+.js .blog-list .post-card.is-inview {
+  opacity: 1; transform: none;
+  transition: opacity .45s ease, transform .45s ease, box-shadow .2s ease, border-color .2s ease;
+}
+
+.js .blog-list .post-card--feature.is-inview { transition-duration: .55s, .55s, .2s, .2s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .js .blog-list .post-card, .js .blog-list .post-card--feature { opacity: 1; transform: none; transition: none; }
+  .post-like__btn.is-liked .post-like__icon { animation: none; }
+}
+
+
+/* ===== 补丁：语言标签悬停 + TOC 轨道 + 导入文件列表（2026-09-16，已合并） ===== */
+
+/* 1) 语言标签：常驻会压住代码首行（用户截图实证），改为与复制按钮一致的悬停显示 */
+.code-lang { opacity: 0; }
+
+.codehilite:hover .code-lang, .codehilite:focus-within .code-lang { opacity: 1; }
+
+/* 3) TOC 吸顶失效根因：.post-layout 的 align-items:start 让侧栏只有内容高，
+   sticky 没有可粘的轨道。侧栏自己拉伸到整行高，.toc 的 sticky 才生效 */
+.post-rail { align-self: stretch; }
+
+/* 2) 导入：确认文件列表（JS 渲染在虚线框内；无 JS 时不出现，表单照常提交） */
+.backup-filelist {
+  margin: 10px 14px 12px; padding: 4px 0;
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.backup-filelist__item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 12px;
+}
+
+.backup-filelist__item + .backup-filelist__item { border-top: 1px solid var(--line); }
+
+.backup-filelist__type {
+  flex: none; padding: 1px 8px; border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill); color: var(--ink-3);
+  font-family: var(--font-mono); font-size: 11px; line-height: 1.6;
+}
+
+.backup-filelist__name {
+  flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--ink); font-family: var(--font-sans); font-size: 13.5px;
+}
+
+.backup-filelist__size { flex: none; color: var(--ink-3); font-size: 12px; }
+
+.backup-filelist__remove {
+  flex: none; width: 22px; height: 22px; padding: 0;
+  border: 1px solid var(--line-strong); border-radius: 50%;
+  background: var(--surface); color: var(--ink-3);
+  font-size: 14px; line-height: 1; cursor: pointer;
+  transition: color .15s ease, border-color .15s ease;
+}
+
+.backup-filelist__remove:hover { color: var(--danger, #b3413c); border-color: var(--danger, #b3413c); }
+
+.backup-filelist__foot {
+  padding: 8px 12px; border-top: 1px solid var(--line);
+  color: var(--ink-2); font-size: 12.5px;
+}
+
+/* 导入提交中：按钮锁定 */
+.btn.is-busy { opacity: .6; pointer-events: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .btn.is-busy { transition: none; }
+}
+
+/* ===== 补丁：文章页利用两侧空白（2026-09-16，已合并） ===== */
+
+/* 版心加宽 + 正文放宽 + 目录贴右。笔记详情页（data-page="detail"）同布局，一并在内。
+   阅读行宽放宽到 800/860px（中文约 42-46 字/行），仍低于双栏可读上限。 */
+@media (min-width: 1280px) {
+  body[data-page="post"] .container, body[data-page="detail"] .container { max-width: 1320px; }
+
+  body[data-page="post"] .post-body, body[data-page="detail"] .post-body { max-width: 800px; }
+}
+
+@media (min-width: 1536px) {
+  body[data-page="post"] .container, body[data-page="detail"] .container { max-width: 1440px; }
+
+  body[data-page="post"] .post-body, body[data-page="detail"] .post-body { max-width: 860px; }
+}
+
+/* ===== 补丁：文章页左栏统一居中（2026-09-16，已合并） ===== */
+
+/* .post-main = 左栏（页头/正文/点赞/相关/上下篇全在里面），其子块与正文
+   共用同一套限宽居中——页头不再贴容器左缘，和正文视觉对齐 */
+.post-main { min-width: 0; }
+
+.post-main > * { max-width: var(--measure); margin-inline: auto; }
+
+.post-main > .post-body { width: 100%; max-width: var(--measure); margin-inline: auto; }
+
+@media (min-width: 1280px) {
+  body[data-page="post"] .post-main > *, body[data-page="detail"] .post-main > * { max-width: 800px; }
+}
+
+@media (min-width: 1536px) {
+  body[data-page="post"] .post-main > *, body[data-page="detail"] .post-main > * { max-width: 860px; }
+}
+
+
+/* ===== 补丁：文章页三栏（左博客导航 / 正文屏幕居中 / 右文章目录） ===== */
+
+.post-side { display: none; }
+
+@media (min-width: 1280px) {
+  /* 左右栏等宽 → 中栏天然居中于屏幕；原 1320 版心下正文恰为 800px */
+  body[data-page="post"] .post-layout {
+    grid-template-columns: 220px minmax(0, 1fr) 240px;
+    gap: 36px;
+  }
+
+  body[data-page="post"] .post-side {
+    align-self: start;
+    position: sticky; top: calc(var(--header-h) + 16px);
+    display: flex; flex-direction: column; gap: 12px; min-width: 0;
+    padding-right: 20px; border-right: 1px solid var(--line);
+    /* 与右侧目录一致：限高 + 内部滚动，分类树长了不超出视口 */
+    max-height: calc(100vh - var(--header-h) - 40px);
+    overflow-y: auto;
+  }
+
+  .post-side__list {
+    list-style: none; margin: 0; padding: 0;
+    display: flex; flex-direction: column; gap: 2px;
+    font-family: var(--font-sans); font-size: 13.5px;
+  }
+
+  .post-side__list a {
+    display: block; padding: 5px 8px; border-radius: var(--radius-sm);
+    color: var(--ink-2); text-decoration: none; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+    transition: color .15s ease, background-color .15s ease;
+  }
+
+  .post-side__list a:hover { color: var(--brand); background: var(--surface-2); }
+}
+
+/* ===== 补丁：左栏分类树（details 折叠，2026-09-16，已合并） ===== */
+
+.post-side__block { border-bottom: 1px solid var(--line); }
+
+.post-side__cat { border-bottom: 1px solid var(--line); padding-bottom: 1px; }
+
+.post-side__cat + .post-side__cat { margin-top: 0; }
+
+.post-side__cat-name {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 4px 6px; border-radius: var(--radius-sm); cursor: pointer;
+  color: var(--ink); font-family: var(--font-sans); font-size: 13.5px; font-weight: 600;
+  list-style: none; user-select: none;
+  transition: color .15s ease, background-color .15s ease;
+}
+
+.post-side__cat-name::-webkit-details-marker { display: none; }
+
+.post-side__cat-name:hover { color: var(--brand); background: var(--surface-2); }
+
+/* 折叠箭头：闭合朝右、展开转 90°（用伪元素画，不依赖图标字体） */
+.post-side__cat-name::after {
+  content: ""; flex: none; width: 7px; height: 7px; margin-left: auto;
+  border-right: 1.5px solid var(--ink-3); border-bottom: 1.5px solid var(--ink-3);
+  transform: rotate(-45deg);
+  transition: transform .15s ease;
+}
+
+.post-side__cat[open] .post-side__cat-name::after { transform: rotate(45deg); }
+
+.post-side__count {
+  flex: none; padding: 0 7px; border-radius: var(--radius-pill);
+  background: var(--surface-2); color: var(--ink-3);
+  font-size: 11px; line-height: 1.7; font-variant-numeric: tabular-nums;
+}
+
+.post-side__list--posts { padding-left: 6px; }
+
+.post-side__list--posts a { font-size: 13px; }
+
+.post-side__list--posts a.is-current {
+  color: var(--brand); background: var(--surface-2); font-weight: 600;
+}
+
+/* ===== 补丁：详情页正文居中于屏幕（2026-09-16，已合并） ===== */
+
+/* 详情页三栏：左（局部关系图）/ 中（正文，屏幕居中）/ 右（目录）；
+   左右等宽 → 中栏天然居中于屏幕 */
+@media (min-width: 1280px) {
+  body[data-page="detail"] .post-layout {
+    grid-template-columns: 240px minmax(0, 1fr) 240px;
+    gap: 36px;
+  }
+
+  body[data-page="detail"] .post-rail--left {
+    padding-left: 20px; border-left: 1px solid var(--line);
+  }
+}
+
+/* 窄屏单列：关系图排到正文与目录之后 */
+@media (max-width: 1279.98px) {
+  body[data-page="detail"] .post-rail--left { order: 3; }
+}
+
+/* ===== 补丁：归档页时间轴（2026-09-16，已合并） ===== */
+
+.timeline { max-width: 760px; }
+
+.timeline__year {
+  margin: 34px 0 14px; color: var(--ink);
+  font-family: var(--font-serif); font-size: 30px; font-weight: 700;
+  letter-spacing: -.01em;
+}
+
+.timeline__list { list-style: none; margin: 0; padding: 0; }
+
+/* 竖线改为**每条自己画一段**（::after），与圆点（::before）同以 item 为
+   定位基准——此前线挂列表、点挂条目，两个绝对定位基准在真实浏览器里
+   漂移错位（用户截图实证）。相邻条目的线段首尾相接成贯穿竖线。 */
+.timeline__item {
+  position: relative; display: flex; align-items: baseline; gap: 44px;
+  padding: 13px 4px 13px 0;
+}
+
+.timeline__item::after {
+  content: ""; position: absolute; left: 78px; top: 0; bottom: 0;
+  width: 2px; background: var(--line);
+}
+
+.timeline__item + .timeline__item { border-top: 1px dashed var(--line); }
+
+/* 圆点：压在竖线上，hover 放大点亮 */
+.timeline__item::before {
+  content: ""; position: absolute; left: 75px; top: 50%; z-index: 1;
+  width: 8px; height: 8px; margin-top: -4px;
+  border-radius: 50%; background: var(--surface);
+  border: 2px solid var(--ink-3); box-sizing: border-box;
+  transition: transform .15s ease, border-color .15s ease, background-color .15s ease;
+}
+
+.timeline__item:hover::before {
+  transform: scale(1.45); border-color: var(--brand); background: var(--brand-soft, var(--surface-2));
+}
+
+.timeline__date {
+  flex: none; width: 52px; text-align: right;
+  color: var(--ink-3); font-family: var(--font-mono); font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.timeline__title {
+  color: var(--ink); font-family: var(--font-serif); font-size: 16.5px; font-weight: 600;
+  line-height: 1.5; text-decoration: none;
+  transition: color .15s ease;
+}
+
+.timeline__title:hover { color: var(--brand); }
+
+/* 入场动效：JS 挂 .is-inview，初始态只在 .js 下（无 JS 不藏内容） */
+.js .timeline__item { opacity: 0; transform: translateX(-14px); }
+
+.js .timeline__item.is-inview {
+  opacity: 1; transform: none;
+  transition: opacity .4s ease, transform .4s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .js .timeline__item { opacity: 1; transform: none; transition: none; }
+  .timeline__item:hover::before { transform: none; }
+}
+
+/* ===== 补丁：归档时间轴标题悬浮放大（2026-09-16，已合并） ===== */
+
+.timeline__title {
+  display: inline-block; transform-origin: left center;
+  transition: color .15s ease, transform .18s ease;
+}
+
+.timeline__item:hover .timeline__title {
+  transform: scale(1.045); color: var(--brand);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .timeline__item:hover .timeline__title { transform: none; }
+}
+
+
+/* ===== 补丁：批量操作流（2026-09-16，已合并） ===== */
+
+.batch-flow {
+  flex-basis: 100%; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 8px 12px; border: 1px dashed var(--line-strong); border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.batch-flow__label { color: var(--ink-3); font-size: 12.5px; }
+
+.batch-flow__chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 6px 3px 10px; border: 1px solid var(--line-strong); border-radius: var(--radius-pill);
+  background: var(--surface); color: var(--ink); font-size: 12.5px;
+}
+
+.batch-flow__chip-step { color: var(--ink-3); font-family: var(--font-mono); font-size: 11px; }
+
+.batch-flow__chip-remove {
+  width: 18px; height: 18px; padding: 0; border: none; border-radius: 50%;
+  background: transparent; color: var(--ink-3); font-size: 13px; line-height: 1; cursor: pointer;
+}
+
+.batch-flow__chip-remove:hover { color: var(--danger, #b3413c); }
+
+/* ===== 补丁：专注阅读模式（2026-09-16，已合并；动画仅合成器属性） ===== */
+
+.focus-toggle {
+  position: fixed; right: 20px; bottom: 20px; z-index: 60;
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 34px; padding: 0 13px;
+  border: 1px solid var(--line-strong); border-radius: var(--radius-pill);
+  background: var(--surface); color: var(--ink-2);
+  font-family: var(--font-sans); font-size: 13px;
+  box-shadow: var(--shadow-sm); cursor: pointer;
+  transition: color .18s ease, background-color .18s ease, border-color .18s ease,
+              transform .18s ease, box-shadow .18s ease;
+}
+
+.focus-toggle:hover, .focus-toggle:focus-visible {
+  color: var(--brand); border-color: var(--brand); transform: translateY(-1px);
+}
+
+.focus-toggle:active { transform: translateY(0); }
+
+body.focus-reading .focus-toggle {
+  background: var(--brand-soft); border-color: var(--brand-soft); color: var(--brand-dark);
+}
+
+.focus-toggle svg { flex: none; }
+
+.focus-toggle__text { flex: none; }
+
+/* 动画只碰 opacity / visibility / transform（合成器属性，零回流）——
+   正文与版心完全不动，各区块在原地淡出淡入。上一版过渡网格列宽 /
+   版心宽 / 字号（布局属性，逐帧重排长文），实测仍卡，这版彻底去掉。 */
+body[data-page="post"] .site-header,
+body[data-page="post"] .site-footer,
+body[data-page="post"] .post-side,
+body[data-page="post"] .post-rail,
+body[data-page="post"] .post-after,
+body[data-page="post"] .post-nav {
+  transition: opacity .3s ease, transform .3s ease, visibility .3s ease;
+}
+
+body.focus-reading .site-header {
+  opacity: 0; visibility: hidden; pointer-events: none;
+}
+
+body.focus-reading .post-side { opacity: 0; visibility: hidden; }
+
+body.focus-reading .post-rail { opacity: 0; visibility: hidden; }
+
+body.focus-reading .post-after,
+body.focus-reading .post-nav,
+body.focus-reading .site-footer { opacity: 0; visibility: hidden; }
+
+/* ===== 补丁：主按钮底色调浅（2026-09-16，已合并） ===== */
+
+/* 用户反馈主按钮底色过深。只调亮色主题的实底填充（暗色主题由
+   [data-theme="dark"] 更高优先级规则接管，不受影响）；文字仍是
+   .btn 继承的 --ink 深色，浅底上对比更清晰。 */
+.btn--primary {
+  background: linear-gradient(180deg,
+      color-mix(in srgb, var(--brand) 60%, #fff),
+      color-mix(in srgb, var(--brand) 80%, #fff));
+  border-color: color-mix(in srgb, var(--brand) 38%, transparent);
+  box-shadow: 0 1px 2px rgba(90, 70, 45, .12),
+              0 4px 10px -4px color-mix(in srgb, var(--brand) 22%, transparent);
+}
+
+.btn--primary:hover {
+  background: linear-gradient(180deg,
+      color-mix(in srgb, var(--brand) 70%, #fff),
+      color-mix(in srgb, var(--brand) 88%, #fff));
+  border-color: color-mix(in srgb, var(--brand) 62%, transparent);
+}
+
+
+/* ===== 补丁：图谱 Shift 拉线建联（2026-09-16，已合并） ===== */
+
+.graph-link-draw {
+  stroke: var(--brand); stroke-width: 2; stroke-dasharray: 6 5;
+  stroke-linecap: round; fill: none; opacity: .85; pointer-events: none;
+}
+
+/* 确认条里两个方向按钮可能带长标题：限宽省略，悬停看全（title 由 JS 补） */
+.graph-path-actions .btn { max-width: 300px; overflow: hidden; text-overflow: ellipsis; }
+
+
+/* ===== 补丁：外观设置（方案 A，2026-09-16，已合并） ===== */
+
+/* 圆角档位：挂在 html 的 data-radius 上，覆盖默认令牌 */
+[data-radius="sm"] { --radius: 8px; --radius-sm: 5px; }
+
+[data-radius="lg"] { --radius: 18px; --radius-sm: 12px; }
+
+/* 设置页的外观主题色板 */
+fieldset.field, .appearance-picker { border: 0; padding: 0; margin: 0; min-width: 0; }
+
+fieldset.field legend.field__label { padding: 0; margin-bottom: 6px; }
+
+.appearance-swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.appearance-swatch {
+  position: relative; display: inline-flex; align-items: center; gap: 7px;
+  padding: 5px 11px 5px 7px; border: 1px solid var(--line); border-radius: var(--radius-pill);
+  background: var(--surface); cursor: pointer; user-select: none;
+  font-family: var(--font-sans); font-size: 13px; color: var(--ink-2);
+  transition: border-color .15s ease, color .15s ease;
+}
+
+.appearance-swatch:hover { border-color: var(--line-strong); color: var(--ink); }
+
+.appearance-swatch:has(input:checked) { border-color: var(--brand); color: var(--ink); font-weight: 600; }
+
+.appearance-swatch input { position: absolute; opacity: 0; pointer-events: none; }
+
+.appearance-swatch i {
+  width: 16px; height: 16px; border-radius: 50%; flex: none;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .08);
+}
+
+
+/* ===== 补丁：详情页局部关系图吸顶（2026-09-16，已合并） ===== */
+
+/* 左栏与右目录同一套约束：sticky + 限高内滚，长文下滚时关系图不再跟着滚走 */
+@media (min-width: 1280px) {
+  body[data-page="detail"] .post-rail--left {
+    align-self: start;
+    position: sticky; top: calc(var(--header-h) + 16px);
+    max-height: calc(100vh - var(--header-h) - 40px);
+    overflow-y: auto;
+  }
+}
+
+

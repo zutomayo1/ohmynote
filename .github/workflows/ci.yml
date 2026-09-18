@@ -1,0 +1,67 @@
+name: CI
+
+# 为什么有 CI：这份仓库有 1.8 万行测试 / 80+ 个测试文件，但先前完全靠人记得手动跑。
+# 这套测试是「改完就放心」的安全网，挂在 push 上才真正生效。
+#
+# 跑的就是本地那一条：python scripts/check.py
+#   语法 → 样式审计（模板 class ↔ CSS）→ 全量 pytest（并行）→ 应用冒烟 → 数据库完整性 → 环境摘要
+# 命令与本地完全一致，避免出现「本地绿、CI 红」两套口径。
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # 脚本里有中文输出；Windows runner 默认代码页不是 UTF-8
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: "utf-8"
+
+jobs:
+  check:
+    name: 自检 · ${{ matrix.os }} · Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # Windows 是本项目的开发/自用环境，Ubuntu 是 README 里的部署目标，两边都跑
+        os: [ubuntu-latest, windows-latest]
+        # 与本地 .venv 一致的版本（python -V = 3.12.13）。
+        # 想顺带验 3.13 / 3.11 就往这里加一行——没加是因为只在 3.12 上验证过。
+        python-version: ["3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: 安装依赖
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: 一键自检
+        run: python scripts/check.py
+
+      # 失败时再跑一次，留下 JUnit XML：check.py 只打印摘要，看具体哪条挂了要报告
+      - name: 失败时留 JUnit 报告
+        if: failure()
+        run: python -m pytest tests -q -n 4 --dist loadfile --junitxml=ci-junit.xml
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: junit-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: ci-junit.xml
+          if-no-files-found: ignore

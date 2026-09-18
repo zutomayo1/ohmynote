@@ -23,11 +23,13 @@ CSS 解析器碰到没闭合的 prelude 会一路吞到下一个 `{`，于是整
 
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 
 import pytest
 
 CSS_DIR = Path(__file__).resolve().parent.parent / "app" / "static" / "css"
+SRC_DIR = CSS_DIR / "src"
 
 # 本项目的样式表只用容器型 at-rule（里面装的是规则，不是声明）：
 # @media / @supports / @keyframes。若将来引入 @font-face / @page 这类
@@ -193,3 +195,54 @@ def test_scan_structure_catches_broken_rule():
         "@keyframes spin { to { transform: rotate(360deg); } }\n"
     )
     assert scan_structure(fixed) == []
+
+
+# ---------------------------------------------------------------------------
+# CSS 是「源文件 + 拼装」：app/static/css/src/*.css --(scripts/build_css.py)--> style.css
+# ---------------------------------------------------------------------------
+
+
+def _build_css():
+    """载入 scripts/build_css.py（scripts/ 是命名空间包，conftest 已把仓库根加进 sys.path）。"""
+    return importlib.import_module("scripts.build_css")
+
+
+def test_src_parts_exist_and_order_is_filename_order():
+    """源文件齐全，且顺序 = 文件名排序（00-/10-/…/76- 前缀就是拼接顺序）。"""
+    build_css = _build_css()
+    names = build_css.order()
+    assert len(names) >= 8, f"src/ 下的源文件太少：{names}"
+    assert names == sorted(names), names
+    assert names[0].startswith("00-"), names[0]
+    for name in names:
+        assert (SRC_DIR / name).stat().st_size > 0, f"{name} 是空文件"
+
+
+def test_style_css_is_up_to_date_with_src():
+    """style.css 必须是最新产物——改了 src 忘了生成、或手改 style.css 都要在这里红。"""
+    build_css = _build_css()
+    current = (CSS_DIR / "style.css").read_text(encoding="utf-8")
+    assert build_css.build() == current, (
+        "style.css 与 app/static/css/src/*.css 不一致 —— 跑 python scripts/build_css.py 重新生成"
+    )
+
+
+def test_generated_css_is_exactly_the_parts_plus_banners():
+    """产物剥掉注入的横幅后，必须**逐字符等于**源文件首尾相接的结果。
+
+    这条是「拼接保序」的钉子：顺序一乱，层叠结果就可能变（外观会动）；
+    同时也保证横幅注入/剥离是可逆的，没有吞掉真实样式。
+    """
+    build_css = _build_css()
+    parts = "".join((SRC_DIR / name).read_text(encoding="utf-8") for name in build_css.order())
+    current = (CSS_DIR / "style.css").read_text(encoding="utf-8")
+    stripped = build_css.strip_banners(current)
+    assert stripped == parts
+    # 横幅是有意注入的：产物必须比源文件长，但不该多出任何非注释行
+    assert len(current) > len(parts), "产物里没有横幅？build_css.py 的注入逻辑可能坏了"
+
+
+def test_generated_css_declares_it_is_generated():
+    """产物开头必须有「这是生成物」的告警，避免有人直接改 style.css。"""
+    head = (CSS_DIR / "style.css").read_text(encoding="utf-8")[:400]
+    assert "生成物" in head and "scripts/build_css.py" in head

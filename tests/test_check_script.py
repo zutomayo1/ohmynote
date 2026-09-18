@@ -62,7 +62,7 @@ def test_quick_mode_runs_green():
     """真跑一次 --quick：语法 + 样式 + 少量测试 + 冒烟，都必须过。
 
     例外：并行开发时新模板 class 的样式可能还没合并进 style.css，
-    这时「样式审计」那一步会（正确地）失败 —— 只有这一步允许红，其它都得绿。
+    这时「样式」那一步会（正确地）失败 —— 只有这一步允许红，其它都得绿。
     """
     process = subprocess.run(
         [sys.executable, str(SCRIPT), "--quick"],
@@ -72,12 +72,12 @@ def test_quick_mode_runs_green():
     for expected in ("语法", "样式", "测试", "冒烟", "环境"):
         assert expected in output, f"自检输出里应该有「{expected}」这一步：{output[-1500:]}"
 
-    # 汇总区里每个失败项：只允许「样式审计」失败
+    # 汇总区里每个失败项：只允许「样式」失败（它负责产物最新 + class 是否都有样式）
     failures = [
         line for line in output.splitlines()
         if line.startswith("[!!]") and line.strip()
     ]
-    unexpected = [line for line in failures if "样式审计" not in line]
+    unexpected = [line for line in failures if "样式" not in line]
     assert not unexpected, f"不该有别的失败项：{unexpected}\n{output[-2000:]}"
     if not failures:
         assert process.returncode == 0, output[-2000:]

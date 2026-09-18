@@ -7,7 +7,7 @@
     .venv\\Scripts\\python.exe scripts\\check.py --quick    # 跳过慢的（只跑快速用例）
     .venv\\Scripts\\python.exe scripts\\check.py --port 8000  # 顺手探一下已经跑起来的服务
 
-依次检查：语法 → 样式审计 → 测试 → 应用冒烟（临时数据目录，不碰你的笔记）→ 数据库完整性 → 环境摘要。
+依次检查：语法 → 样式（产物是否最新 + class 是否都有样式）→ 测试 → 应用冒烟（临时数据目录，不碰你的笔记）→ 数据库完整性 → 环境摘要。
 任何一步失败都不中断，最后统一报告，退出码 0/1 反映成败。
 """
 
@@ -81,11 +81,8 @@ def check_syntax() -> Result:
     return result
 
 
-def check_css() -> Result:
-    result = Result("样式审计")
-    code, output = _run([sys.executable, "scripts/audit_css.py"], timeout=180)
-    result.ok = code == 0
-    # 只挑真正的结论行，别把 DeprecationWarning 当成结果
+def _conclusion(output: str) -> str:
+    """只挑真正的结论行，别把 DeprecationWarning 当成结果。"""
     useful = [
         line.strip()
         for line in output.splitlines()
@@ -93,7 +90,22 @@ def check_css() -> Result:
         and not line.lstrip().startswith(("from ", "import ", "Traceback"))
         and "Warning" not in line
     ]
-    result.detail = (useful[-1] if useful else "没有输出")[:180]
+    return useful[-1][:180] if useful else "没有输出"
+
+
+def check_css() -> Result:
+    """样式两件事：产物是否最新（src/*.css → style.css）+ 模板 class 是否都有样式。"""
+    result = Result("样式")
+    build_code, build_out = _run([sys.executable, "scripts/build_css.py", "--check"], timeout=180)
+    audit_code, audit_out = _run([sys.executable, "scripts/audit_css.py"], timeout=180)
+    result.ok = build_code == 0 and audit_code == 0
+
+    problems = []
+    if build_code != 0:
+        problems.append("产物不是最新（跑 scripts/build_css.py）：" + _conclusion(build_out))
+    if audit_code != 0:
+        problems.append("模板 class 缺样式：" + _conclusion(audit_out))
+    result.detail = " | ".join(problems)[:180] if problems else _conclusion(audit_out)
     return result
 
 

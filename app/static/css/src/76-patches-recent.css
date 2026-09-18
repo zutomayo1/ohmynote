@@ -1,0 +1,468 @@
+/* ===== 补丁：自定义主题色取色器（2026-09-16，已合并） ===== */
+
+.custom-color-row { display: flex; align-items: center; gap: 8px; }
+
+.custom-color-row input[type="color"] {
+  width: 42px; height: 36px; padding: 2px; flex: none;
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--surface); cursor: pointer;
+}
+
+
+/* ===== 补丁：提示块 callout / admonition（2026-09-17） =====
+   写法（两种都支持）：
+     > [!NOTE] 标题        GitHub / Obsidian 风格，直觉写法
+     !!! note "标题"        Python-Markdown 原生
+     > [!TIP]- 标题        折叠（收起）／ + 为展开
+   展开型渲染成 div.admonition.TYPE，折叠型是 details.TYPE（pymdownx.details），
+   所以下面两组选择器要成对出现。颜色全部从既有令牌派生，六套色板与暗色自动适配。 */
+
+.admonition,
+details.note, details.tip, details.success,
+details.warning, details.danger, details.quote {
+  margin: 20px 0; padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--callout-fg, var(--brand));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--callout-fg, var(--brand)) 7%, var(--surface));
+  color: var(--ink); }
+
+.admonition.note, details.note { --callout-fg: var(--brand); }
+.admonition.tip, details.tip { --callout-fg: var(--accent); }
+.admonition.success, details.success { --callout-fg: var(--accent); }
+.admonition.warning, details.warning { --callout-fg: var(--warn); }
+.admonition.danger, details.danger { --callout-fg: var(--danger); }
+.admonition.quote, details.quote { --callout-fg: var(--ink-3); }
+
+.admonition > :last-child, details.note > :last-child, details.tip > :last-child,
+details.success > :last-child, details.warning > :last-child,
+details.danger > :last-child, details.quote > :last-child { margin-bottom: 0; }
+
+.admonition-title,
+details.note > summary, details.tip > summary, details.success > summary,
+details.warning > summary, details.danger > summary, details.quote > summary {
+  display: flex; align-items: center; gap: 7px;
+  margin: 0 0 6px; font-size: 15px; font-weight: 600; line-height: 1.5;
+  color: var(--callout-fg, var(--brand)); }
+
+.admonition-title::before,
+details.note > summary::before, details.tip > summary::before,
+details.success > summary::before, details.warning > summary::before,
+details.danger > summary::before, details.quote > summary::before {
+  content: ""; flex: none; width: 8px; height: 8px;
+  border-radius: var(--radius-pill); background: currentColor; }
+
+/* 折叠型：整行可点，去掉原生三角，用色点兼作展开指示 */
+details.note > summary, details.tip > summary, details.success > summary,
+details.warning > summary, details.danger > summary, details.quote > summary {
+  cursor: pointer; list-style: none; }
+details.note > summary::-webkit-details-marker, details.tip > summary::-webkit-details-marker,
+details.success > summary::-webkit-details-marker, details.warning > summary::-webkit-details-marker,
+details.danger > summary::-webkit-details-marker, details.quote > summary::-webkit-details-marker {
+  display: none; }
+details.note[open] > summary, details.tip[open] > summary, details.success[open] > summary,
+details.warning[open] > summary, details.danger[open] > summary, details.quote[open] > summary {
+  margin-bottom: 8px; }
+
+@media print {
+  .admonition, details.note, details.tip, details.success,
+  details.warning, details.danger, details.quote { break-inside: avoid; }
+}
+
+
+/* ===== 补丁：自绘确认对话框（2026-09-17） =====
+   替掉原生 window.confirm —— 它不跟站点主题、按钮永远只能写「确定/取消」。
+   用原生 <dialog> + showModal()，焦点陷阱 / Esc / 遮罩交给浏览器，
+   这里只管外观；遮罩沿用 --overlay（与编辑器里的插入表格对话框一致）。 */
+
+.dialog {
+  border: 1px solid var(--line-strong); border-radius: var(--radius);
+  background: var(--surface); color: var(--ink);
+  padding: 18px 20px; width: min(440px, 92vw);
+  box-shadow: var(--shadow-md); }
+
+.dialog::backdrop { background: var(--overlay); }
+
+.dialog__form { margin: 0; }
+
+.dialog__title {
+  margin: 0 0 8px; font-size: 16.5px; line-height: 1.5;
+  display: flex; align-items: center; gap: 8px; }
+
+.dialog__message {
+  margin: 0; color: var(--ink-2); font-size: 14px; line-height: 1.7;
+  white-space: pre-line; }        /* 文案里的换行照原样显示，别挤成一行 */
+
+.dialog__actions {
+  display: flex; flex-wrap: wrap; justify-content: flex-end;
+  gap: 10px; margin-top: 18px; }
+
+.dialog__actions .btn { min-height: 36px; }
+
+/* 弹窗里的主操作要「实心」：工具条上的 .btn--danger 是描边红（适合列表行内），
+   但在只有两个按钮的确认框里，破坏性动作必须一眼可辨、且比「取消」更显眼。 */
+.dialog__actions .btn--danger {
+  background: var(--danger); border-color: var(--danger); color: var(--surface); }
+.dialog__actions .btn--danger:hover { filter: brightness(1.08); }
+
+/* ===== 补丁：正文字号/字体档位（2026-09-17） =====
+   挂在 html 的 data-prose-size / data-prose-font 上（settings 页选，默认档不出属性）。
+   只作用于「读和写的正文」：.prose（阅读页/预览/说明/AI 气泡）与 .post-body；
+   卡片、按钮、表单等 UI 不跟随。编辑器 textarea 字体保持 mono（源码编辑刻意为之）。 */
+[data-prose-size="sm"] { --prose-size: 16px;   --prose-lead: 17px; }
+[data-prose-size="lg"] { --prose-size: 18.5px; --prose-lead: 19.5px; }
+[data-prose-size="xl"] { --prose-size: 20px;   --prose-lead: 21px; }
+
+[data-prose-font="sans"] { --prose-font: var(--font-sans); }
+
+.prose,
+.post-body {
+  font-size: var(--prose-size);
+  font-family: var(--prose-font);
+}
+
+/* ===== 补丁：批量导入（2026-09-17） =====
+   导入表单的「批量设置」折叠区 + drop 区里「选整个文件夹」的链接样式。 */
+.backup-batch {
+  margin: 12px 0 0; padding: 8px 14px;
+  border: 1px dashed var(--line); border-radius: var(--radius-sm);
+}
+.backup-batch > summary { cursor: pointer; color: var(--ink-2); font-size: 13.5px; }
+.backup-batch[open] > summary { margin-bottom: 10px; }
+.backup-batch .field-grid { margin-top: 4px; }
+
+.link-like { color: var(--brand); text-decoration: underline; cursor: pointer; }
+.link-like:hover { filter: brightness(1.05); }
+
+/* ===== 补丁：内联 SVG 查看容器（2026-09-17） =====
+   mermaid/draw.io 粘进正文的 <svg> 往往比正文列宽：容器横向滚动（底部滚动条），
+   右上角悬浮「放大查看 / 下载」两个按钮；无 JS 时按钮隐藏、滚动仍可用。 */
+.svg-view {
+  position: relative;
+  margin: var(--sp-5) 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.svg-view__scroll {
+  overflow-x: auto;
+  padding: 10px 12px;
+  /* 同 .combo__panel：全局 * 规则的标准属性会顶掉下面的自绘条，这里重置回 auto。
+     自绘条常驻可见，不受系统「自动隐藏滚动条」影响。 */
+  scrollbar-width: auto;
+  scrollbar-color: auto;
+}
+.svg-view__scroll::-webkit-scrollbar { height: 8px; }
+.svg-view__scroll::-webkit-scrollbar-track { background: transparent; }
+.svg-view__scroll::-webkit-scrollbar-thumb {
+  background: var(--ink-3);
+  border-radius: 4px;
+}
+.svg-view__scroll::-webkit-scrollbar-thumb:hover { background: var(--brand); }
+@supports (-moz-appearance: none) {
+  .svg-view__scroll { scrollbar-width: thin; scrollbar-color: var(--ink-3) transparent; }
+}
+.svg-view__scroll > svg { display: block; max-width: none; height: auto; }
+
+.svg-view__actions {
+  position: absolute; top: 8px; right: 8px; z-index: 2;
+  display: flex; gap: 6px;
+}
+.svg-view__btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; padding: 0;
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--ink-2); cursor: pointer;
+  box-shadow: var(--sh-1);
+}
+.svg-view__btn:hover { color: var(--brand); border-color: var(--brand); }
+.svg-view__btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+html:not(.js) .svg-view__actions { display: none; }
+
+/* 放大查看的灯箱 */
+.svg-lightbox {
+  border: none; border-radius: var(--radius); padding: 12px;
+  background: var(--surface); color: var(--ink);
+  /* 固定宽度：dialog 默认宽随内容、而 stage 里的 svg 是 width:100%，
+     会互相依赖收缩到很小（实测 194px）——必须给 dialog 定宽 */
+  width: min(1100px, 94vw);
+  max-height: 90vh;
+}
+.svg-lightbox::backdrop { background: var(--overlay); }
+.svg-lightbox__stage { overflow: auto; max-width: calc(94vw - 24px); max-height: calc(90vh - 24px); }
+.svg-lightbox__stage svg { display: block; width: 100%; height: auto; }
+.svg-lightbox__hint {
+  margin: 8px 0 0; text-align: center; color: var(--ink-3); font-size: 12.5px;
+}
+
+/* ===== 补丁：SVG 文字度量锁定（2026-09-17；2026-09-18 二修） =====
+   mermaid 导出的节点尺寸按「trebuchet ms/verdana/arial 16px、行高 ~1.3、
+   标签 p 无 margin」度量，且导出文件不携带字体信息。页面正文的衬线字体 /
+   行高 / 可调字号继承进 foreignObject 后会把内容撑高撑宽（纵向被固定高度
+   裁掉、横向 mid-word 折行）。这里按 mermaid 的度量口径统一锁定。 */
+.svg-view svg,
+.svg-lightbox svg {
+  font-family: "trebuchet ms", verdana, arial, sans-serif;
+  font-size: 16px;
+}
+.svg-view svg foreignObject div,
+.svg-view svg foreignObject span,
+.svg-view svg foreignObject p,
+.svg-lightbox svg foreignObject div,
+.svg-lightbox svg foreignObject span,
+.svg-lightbox svg foreignObject p {
+  line-height: 1.35;
+  margin: 0;
+}
+.svg-view svg foreignObject,
+.svg-lightbox svg foreignObject {
+  overflow: visible;
+}
+
+/* ===== 补丁：agent 两段式计划条（2026-09-18） =====
+   干跑产出的计划下面挂一条「按计划执行」操作条，让先审后放形成闭环。 */
+.agent-planbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-top: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px dashed var(--brand);
+  border-radius: var(--radius-sm);
+  background: var(--brand-soft);
+}
+.agent-planbar__hint {
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+/* .btn 的 display 会盖过 UA 的 [hidden]（agent 的「停止」按钮踩过）：显式兜底 */
+.btn[hidden] { display: none; }
+
+/* ===== 补丁：设置页 AI 区重排（2026-09-18；服务商已从卡片改为下拉） =====
+   「我的预设」行列表 +「连接配置」（服务商下拉 + 核心字段）。
+   下拉 option 用 data-* 带地址/模型，settings.js 只负责填表。 */
+.ai-statusline {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-4);
+  color: var(--ink-2);
+  font-size: 13.5px;
+}
+.ai-statusline__text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ai-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin: var(--sp-4) 0 var(--sp-2);
+}
+.ai-section-head .section-title { margin: 0; white-space: nowrap; }
+.ai-section-head .micro { margin: 0; text-align: right; }
+.ai-profile-list { display: grid; gap: var(--sp-2); }
+.ai-profile-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.ai-profile-row.is-active { border-color: var(--brand); background: var(--brand-soft); }
+.ai-profile-row__name { font-weight: 600; font-size: 14px; white-space: nowrap; }
+.ai-profile-row__meta {
+  flex: 1;
+  min-width: 0;
+  color: var(--ink-3);
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-profile-row__actions { display: flex; gap: var(--sp-2); flex-shrink: 0; }
+.ai-profile-row__actions form { margin: 0; }
+/* ===== 补丁：UI 评审第一轮（2026-09-18）=====
+   ① agent 非读写模式强提示  ② 本轮会话气泡化  ③ .env 告警条
+   ④ 当前服务商标识加强  ⑥ 模型输入框与「获取可用模型」成组
+   （⑤「快捷填充/连接配置」合并属模板结构调整，见 settings.html） */
+
+/* ① 模式提示：已按用户评审撤掉——三段控件本身已经表达了当前模式，额外横幅重复。
+   （原 .agent-mode-banner / .composer.is-dry / .is-ro 规则随功能一并删除） */
+
+/* ② 本轮会话气泡：任务靠右品牌底色、回答靠左描边底色，各带角色标签 */
+.agent-history__list { display: flex; flex-direction: column; gap: var(--sp-3); }
+.agent-history__item {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.agent-history__task,
+.agent-history__answer { padding: 8px 11px; font-size: 13.5px; line-height: 1.6; }
+.agent-history__task {
+  align-self: flex-end;
+  max-width: 85%;
+  margin: 0;
+  background: var(--brand-soft);
+  border-radius: var(--radius-sm) var(--radius-sm) 3px var(--radius-sm);
+}
+.agent-history__answer {
+  align-self: flex-start;
+  max-width: 92%;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm) var(--radius-sm) var(--radius-sm) 3px;
+}
+.agent-history__role {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--ink-3);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+/* ③ .env 覆盖提醒：文案回到原版，视觉上用一个带边框的盒子框住（用户评审） */
+.settings-status__env {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.settings-status__env .icon { flex: none; margin-top: 2px; color: var(--warn); }
+.settings-status__env p { margin: 0; }
+
+/* ⑥ 模型名输入 + ▾ 下拉 + 「获取可用模型」框成一个整体（原本像两个独立元素并排） */
+#ai-settings-form .ai-inline {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  overflow: hidden;
+}
+#ai-settings-form .ai-inline .combo__input {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+#ai-settings-form .ai-inline .btn {
+  border: 0;
+  border-left: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+}
+#ai-settings-form .ai-inline .btn:hover { background: var(--surface-2); }
+
+/* 服务商下拉（原卡片改版）：选中自动填表；说明与「拿 Key」入口跟在下方 */
+.ai-provider { margin-bottom: var(--sp-4); }
+.ai-provider__hint { display: block; margin-top: 6px; }
+
+/* ===== 补丁：自绘下拉面板的滚动条（2026-09-18） =====
+   .combo__panel 有 overflow-y:auto，服务商 17 家、模型列表上百项，必须滚得动、
+   还得让人**看得见**能滚。默认那条看不清，原因有两层：
+
+   1) 全站基础规则 `* { scrollbar-width: thin; scrollbar-color: ... }` 一设，
+      Chrome 就改走「标准属性」路径、**忽略全部 ::-webkit-scrollbar 自绘样式**；
+      而 Windows 上若系统开了「自动隐藏滚动条」，这条就是悬停才显形的浮层条。
+      所以这里对本元素显式重置回 auto，把自绘路径放出来。
+   2) 自绘条（::-webkit-scrollbar）是**常驻可见**的：不吃系统那条自动隐藏设置。
+
+   注意：别用 `@supports not selector(::-webkit-scrollbar)` 判断「不支持伪元素的浏览器」
+   ——Chrome 对 `selector(::-webkit-scrollbar)` 返回的也是 false，那个兜底块会在 Chrome
+   里命中，反过来把自绘样式打死。Firefox 只有它认的 -moz-appearance 能可靠区分。 */
+.combo__panel {
+  scrollbar-width: auto;         /* 放出自绘路径（覆盖全局 * 的标准属性） */
+  scrollbar-color: auto;
+  scrollbar-gutter: stable;      /* 预留槽位：出现/消失时条目不左右跳 */
+}
+.combo__panel::-webkit-scrollbar { width: 10px; height: 10px; }
+.combo__panel::-webkit-scrollbar-track { background: transparent; }
+/* 拇指用 --ink-3（中灰）：试过 --line-strong，它和面板边框**同色**，
+   整条滚动条直接并进边框里看不出来。 */
+.combo__panel::-webkit-scrollbar-thumb {
+  background: var(--ink-3);
+  border-radius: 5px;
+  border: 2px solid transparent;   /* 内缩出细拇指的观感 */
+  background-clip: padding-box;
+}
+.combo__panel::-webkit-scrollbar-thumb:hover {
+  background: var(--brand);        /* background 简写会重置 background-clip，这里要再写一次 */
+  background-clip: padding-box;
+}
+
+/* Firefox 不支持 ::-webkit-scrollbar，给它标准属性兜底 */
+@supports (-moz-appearance: none) {
+  .combo__panel {
+    scrollbar-width: thin;
+    scrollbar-color: var(--ink-3) transparent;
+  }
+}
+
+/* 下拉面板宽度收口：设置页那个服务商下拉的触发器是整行 1072px,
+   面板跟着铺满就成了「一条超长菜单 + 右边 1000px 空白」,滚动条也离文字老远。
+   菜单本来就该比触发器窄,这里只封顶不放宽（筛选栏那类窄触发器完全不受影响）。 */
+.select-combo__panel { max-width: 480px; }
+
+/* ===== 补丁：用量统计的折叠子块（2026-09-18） =====
+   用量统计内容恢复完整（10 个小节），但只让主图（最近 30 天）常显；其余 8 个
+   收进三个子折叠块，展开才看——完整和整洁不冲突。
+   块内小节标题统一压成 13px 次级标签——规则见文件末尾「块内小节标题降一级」补丁。 */
+.settings-sub {
+  margin: 16px 0 0;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+}
+.settings-sub__summary {
+  display: flex; align-items: center; gap: 7px; list-style: none;
+  padding: 3px 0; color: var(--ink-2); cursor: pointer;
+  font-family: var(--font-sans); font-size: 13.5px; font-weight: 600; }
+.settings-sub__summary::-webkit-details-marker { display: none; }
+.settings-sub__summary::before { content: '▸'; color: var(--ink-3); font-size: 11px; }
+.settings-sub[open] > .settings-sub__summary { color: var(--brand); }
+.settings-sub[open] > .settings-sub__summary::before { transform: rotate(90deg); }
+.settings-sub__body { padding: 2px 0 4px 14px; }
+
+/* ===== 补丁：设置页折叠块里的入场动画（2026-09-18） =====
+   `main .prose { animation: ink-rise }` 是给「页面加载」用的轻入场（页头/卡片/正文）。
+   但用量统计那 4 张表格也包在 .prose 里，而且整体默认收起——于是每次展开都重放一次
+   「淡入 + 上移」。看数字是「瞥一眼」的动作，不值当；折叠块里的 .prose 一律关掉，
+   页面加载时的正文动效不受影响（选择器优先级更高，只覆盖这一层）。
+   同类问题已一并处理：图表柱子的 chart-rise / chart-grow-x 与按模型条的 usage-bar
+   也是每次展开重放，已整段删除（2026-09-18）。 */
+main .settings-block .prose { animation: none; }
+
+/* ===== 补丁：「存为预设」那一格（2026-09-18 第三次调整） =====
+   它和保存/测试共用同一张 AI 表单（formaction 分流到预设接口），但位置从「独占一行」
+   改到「超时」右边那个空着的半格——输入框 + 按钮贴着排，和上面「通用模型名」那行的
+   「combo + 获取可用模型」同一个形状，看着才像一格正常字段（不再是多出来的一条）。
+   注：类名沿用 .ai-profile-save（不叫 .ai-preset——那个前缀已经是「服务商密钥链接」
+       .ai-preset__key 的块名，撞上会串味）。「分任务模型 / 安全与隐私 / 向量检索」
+       已还原成顶层块，子块摘要右侧的状态文案（.settings-sub__note）随之作废，已删。 */
+.ai-profile-save { display: flex; gap: 8px; align-items: center; }
+.ai-profile-save .input { width: auto; flex: 1 1 auto; min-width: 0; }
+.ai-profile-save .btn { flex: none; white-space: nowrap; }
+
+/* ===== 补丁：设置页「块内小节标题」降一级（2026-09-18） =====
+   折叠块自己已经有摘要行了（粗体 + 状态徽标），块内再来一个 22px 衬线大字标题
+   （「连接配置」「本月质量」这种），等于顶着两个标题、大小还跟页面级一样 ——
+   用户反馈「连接配置几个字太大了显得很突兀」。统一压成 13px 次级标签。
+   页面级的分组标题（.settings-group「站点与账号」）不在 .settings-block 里，
+   仍是原来的大字，不受影响。 */
+.settings-block .section-title {
+  margin: 20px 0 10px; padding-bottom: 0; border-bottom: 0;
+  color: var(--ink-2); font-family: var(--font-sans);
+  font-size: 13px; font-weight: 600; line-height: 1.5; }
+
+/* 「连接配置」那行是 flex（左标题、右说明），标题自己不带外边距 */
+.ai-section-head > .section-title { margin: 0; white-space: nowrap; }

@@ -1,7 +1,10 @@
 # 墨痕 InkNote · 个人笔记 + 博客
 
+[![CI](https://github.com/zutomayo1/ohmynote/actions/workflows/ci.yml/badge.svg)](https://github.com/zutomayo1/ohmynote/actions/workflows/ci.yml)
+
 一个自己用的笔记站：**Markdown 写笔记，勾一下公开就变成博客**。
-后端 FastAPI + SQLite，前端服务端渲染（Jinja2 + 少量原生 JS），没有构建步骤、没有前端框架、不引用任何 CDN。
+后端 FastAPI + SQLite，前端服务端渲染（Jinja2 + 少量原生 JS），没有前端框架、不引用任何 CDN，
+也**不需要在跑之前构建**（CSS 由 `scripts/build_css.py` 把 `src/` 下的分节拼成单文件，产物已提交）。
 
 > 解决的问题：记了就忘、格式混乱 —— 所以核心是「写起来顺、找得到、能对外展示」。
 
@@ -390,16 +393,19 @@ inknote/
 │   │   └── ai_usage.py          用量统计（每次调用记一笔）
 │   ├── templates/               24 个 Jinja 模板（base + 页面 + 片段宏 + 设置页 + 使用说明页）
 │   └── static/
-│       ├── css/style.css        设计令牌与全部样式（含深色主题、响应式、打印）
+│       ├── css/src/              **样式源文件（改样式改这里）**：14 个按主题/日期分节的文件，
+│       │                        文件名前缀 00-/10-/…/76- 就是拼接与层叠顺序
+│       ├── css/style.css        生成物：src/ 拼接而成（唯一被引用的样式表，含深色主题、响应式、打印）
 │       ├── css/highlight.css    代码高亮配色（脚本生成）
 │       ├── favicon.svg          站点图标
 │       └── js/app.js（598 行）、editor.js（1334 行）、settings.js（498 行）、ask.js（318 行）、batch.js（249 行）原生 JS，无依赖
 ├── docs/                        6 份：前端契约（frontend-contract.md）+ 各轮并行开发的接口冻结（round3/4/5、ai、new-features）
 ├── scripts/
+│   ├── build_css.py             把 css/src/*.css 拼成 style.css（--check 只校验是否最新）
 │   ├── build_highlight_css.py   用 Pygments 生成 highlight.css
 │   ├── audit_css.py             交叉审计：模板 class 是否都有样式
 │   └── check.py                 自检脚本（--quick 跑一组快速检查）
-├── tests/                       conftest.py + 37 个测试文件，共 616 个 pytest 用例
+├── tests/                       conftest.py + 83 个测试文件，共 1168 个 pytest 用例
 └── data/                        运行期生成：inknote.db、uploads/、backups/、logs/、.secret
 ```
 
@@ -538,7 +544,8 @@ data/
   `repo.list_notes` 内部也会再夹一次页码，保证任何调用方都塞不进巨大的 `OFFSET`。
 - **CSP**：默认 `default-src 'self'`，脚本只允许自身与每次请求随机生成的 nonce，页面里没有内联事件处理器。
 - **上传校验**：扩展名白名单（**拒绝 SVG**，避免 XSS）+ 文件头签名校验（PNG/JPEG/GIF/BMP/WebP/AVIF）+ 体积上限 + 内容 SHA256 前 16 位命名去重，静态目录单独挂载。
-- **无构建**：CSS/JS 都是源码即产物，静态资源用文件 mtime 算出的 `?v=` 破缓存。
+- **跑之前不用构建**：JS 是源码即产物；CSS 由 `scripts/build_css.py` 把 `app/static/css/src/*.css`
+  按文件名顺序拼成 `style.css`（产物已提交，克隆下来直接能跑，静态资源用文件 mtime 算出的 `?v=` 破缓存）。
 
 ---
 
@@ -546,11 +553,15 @@ data/
 
 ```bash
 pip install -r requirements-dev.txt
-python -m pytest tests -n 8 --dist loadfile -q   # 770 个用例，约 24 秒（并行）
-python -m pytest tests -q                        # 同样的用例，串行跑约 100 秒
-python scripts/audit_css.py               # 模板里用到的 class 是否都有样式
-python scripts/build_highlight_css.py     # 重新生成代码高亮配色
+python scripts/check.py                          # 一条命令：语法 + 样式 + 全量测试 + 冒烟 + 数据库 + 环境（约 27 秒）
+python -m pytest tests -n 8 --dist loadfile -q   # 只跑测试：1168 个用例，约 22 秒（并行）
+python scripts/build_css.py                      # 改过 app/static/css/src/*.css 后重新生成 style.css
+python scripts/build_css.py --check              # 只校验产物是否最新（check.py 与 CI 都会跑）
 ```
+
+> **CI**：`.github/workflows/ci.yml` 在 push 与 PR 上跑 `python scripts/check.py`，
+> Ubuntu + Windows 两个 runner 各一遍（Python 3.12）；失败会留一份 JUnit 报告 artifact 方便定位。
+> 与本地完全同一条命令，避免「本地绿、CI 红」两套口径。
 
 > 并行用 `pytest-xdist`。`--dist loadfile` 不能省：同一个文件的用例必须落在同一个 worker，
 > 否则文件内共享的 session 库 / 登录态会被拆到不同进程，出现「单独跑绿、并行跑红」的假失败。

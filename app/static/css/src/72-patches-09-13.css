@@ -1,0 +1,844 @@
+/* ===== 补丁：公式与 mermaid（2026-09-13，按需加载 enrich.js 时使用） ===== */
+.mermaid {
+  margin: 20px auto; padding: 16px; border: 1px solid var(--line);
+  border-radius: var(--radius-sm); background: var(--surface-2);
+  overflow-x: auto; text-align: center; line-height: 0; }
+
+.mermaid svg { max-width: 100%; height: auto; }
+
+/* 画不出来的图：退回成可读的源码块，别留一片空白 */
+.mermaid-error {
+  white-space: pre-wrap; text-align: left; line-height: 1.65;
+  font-family: var(--font-mono); font-size: 13.5px; color: var(--ink-2); }
+
+/* 宽公式横向滚动，不撑破版心 */
+.prose .katex-display { overflow-x: auto; overflow-y: hidden; padding: 2px 0; }
+
+/* ===== 补丁：键盘导航选中态 + 快捷键帮助浮层（2026-09-13） ===== */
+.note-card.kbd-active {
+  outline: 2px solid var(--brand); outline-offset: 2px;
+  border-radius: var(--radius-sm); }
+
+.kbd-help {
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); color: var(--ink);
+  padding: 20px 22px; min-width: 320px; max-width: 92vw;
+  box-shadow: var(--shadow-md); }
+
+.kbd-help::backdrop { background: var(--overlay); }
+
+.kbd-help__head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px; }
+
+.kbd-help__title { margin: 0; font-size: 16px; font-weight: 700; }
+
+.kbd-help__close {
+  border: 1px solid var(--line); border-radius: var(--radius-pill);
+  background: var(--surface-2); color: var(--ink-2);
+  width: 26px; height: 26px; line-height: 1; cursor: pointer; }
+
+.kbd-help__close:hover { color: var(--ink); border-color: var(--line-strong); }
+
+.kbd-help__list { margin: 0; }
+
+.kbd-help__row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+
+.kbd-help__row:last-child { border-bottom: none; }
+
+/* 分组标题行（dt 有文字、dd 为空） */
+.kbd-help__row dt { color: var(--ink-3); font-size: 12.5px; font-weight: 700; }
+.kbd-help__row dt + dd:empty { display: none; }
+
+.kbd-help__row dd { margin: 0; font-size: 13.5px; color: var(--ink-2); }
+
+.kbd-help kbd {
+  display: inline-block; padding: 1px 6px; margin: 0 1px;
+  border: 1px solid var(--line-strong); border-bottom-width: 2px;
+  border-radius: 6px; background: var(--surface-2);
+  font-family: var(--font-mono); font-size: 12px; color: var(--ink); }
+
+/* ===== 补丁：移动端长词/长串溢出（2026-09-13，手机视口实测发现） ===== */
+/* 正文、卡片摘要里不带空格的超长单词/URL 会把页面撑出横向滚动 */
+.prose, .note-card, .post-card, .card__summary, .post-summary, .page-sub {
+  overflow-wrap: anywhere; }
+
+/* ===== 补丁：预设「更多服务商」折叠块（2026-09-13） ===== */
+/* ===== 补丁：设置页重排（2026-09-13，分组标题 + 统一折叠视觉） ===== */
+/* 分组成员标题：把十几个折叠块分成「AI / 站点与账号 / 参考」三组 */
+.settings-group { margin-top: 30px; }
+
+/* 折叠块的箭头随展开状态旋转，收起/展开一目了然 */
+.settings-block .settings-block__chevron { transition: transform .15s ease; }
+.settings-block[open] > .settings-block__summary .settings-block__chevron { transform: rotate(90deg); }
+
+/* 相邻折叠块间距统一，不再忽大忽小 */
+.settings-block { margin-bottom: 10px; }
+.settings-block:last-child { margin-bottom: 0; }
+
+/* 表单操作条：分隔线 + 底色，表明它是整个 AI 表单的全局按钮，不是上面某个折叠块的 */
+.settings-form__actions {
+  border-top: 1px solid var(--line);
+  margin-top: 14px; padding-top: 14px; }
+
+/* 表单操作条：分隔线 + 底色，表明它是整个 AI 表单的全局按钮，不是上面某个折叠块的 */
+.settings-form__actions {
+  border-top: 1px solid var(--line);
+  margin-top: 14px; padding-top: 14px; }
+
+/* ===== 补丁：模型下拉免费徽章（2026-09-13） ===== */
+.combo__item { display: flex; align-items: center; gap: 8px; }
+.combo__label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.combo__free {
+  flex: none; padding: 1px 6px; border-radius: var(--radius-pill);
+  background: var(--accent-soft); color: var(--accent);
+  font-size: 11px; line-height: 1.5; }
+
+/* ===== 补丁：笔记助手页（2026-09-13） ===== */
+/* 布局改由「双栏补丁（2026-09-14）」负责（grid 双栏），这里不再锁阅读栏宽度 */
+/* .agent-input 的样式由「命令输入台」补丁统一管（无边框、卡内输入区） */
+
+.agent-steps { margin: 0 0 14px; padding-left: 0; list-style: none; }
+.agent-steps__item {
+  padding: 7px 0; border-bottom: 1px dashed var(--line);
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px;
+  font-size: 14px; color: var(--ink); }
+.agent-steps__item:last-child { border-bottom: none; }
+.agent-steps__detail {
+  font-family: var(--font-mono); font-size: 12px; color: var(--ink-3);
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.agent-answer {
+  padding: 14px 16px; border: 1px solid var(--line); border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm); background: var(--surface-2);
+  white-space: pre-wrap; line-height: 1.7; }
+.agent-answer--error { border-left-color: var(--danger); }
+
+/* 紧凑芯片流：原来每个示例独占一整行，7 个示例 400px 高、右侧一半全空 */
+.agent-examples { margin-bottom: 22px; }
+.agent-examples__list {
+  margin: 0; padding: 0; list-style: none;
+  display: flex; flex-wrap: wrap; gap: 8px; }
+.agent-example {
+  padding: 6px 12px;
+  border: 1px solid var(--line); border-radius: var(--radius-pill);
+  background: var(--surface); color: var(--ink-2); cursor: pointer;
+  font-size: 13px; transition: border-color .12s ease, color .12s ease; }
+.agent-example:hover { border-color: var(--brand); color: var(--brand); }
+
+/* ===== 补丁：agent 执行进度（2026-09-13） ===== */
+.agent-steps__pending {
+  color: var(--ink-3);
+  font-style: italic;
+  list-style: none;
+  padding: 8px 2px;
+  animation: agent-blink 1.2s ease-in-out infinite;
+}
+@keyframes agent-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* ===== 补丁：助手会话记忆（2026-09-13） ===== */
+.agent-history { margin-bottom: 0; }
+.agent-history__list { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+.agent-history__item {
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--surface); }
+.agent-history__task { font-size: 13.5px; color: var(--ink); margin-bottom: 4px; }
+.agent-history__answer { font-size: 13px; color: var(--ink-2); }
+
+/* ===== 补丁：agent 历史任务与涉及笔记（2026-09-13） ===== */
+.agent-notes { margin-top: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.agent-notes__head { font-size: 12.5px; color: var(--ink-3); }
+.agent-notes__chip {
+  padding: 2px 9px; border: 1px solid var(--line); border-radius: var(--radius-pill);
+  background: var(--surface); color: var(--ink-2);
+  font-size: 12.5px; text-decoration: none; }
+.agent-notes__chip:hover { border-color: var(--brand); color: var(--brand); }
+
+/* 历史任务：默认折叠（details），展开后一行一条 —— 完整步骤链在 title 里悬停可看。
+   原来 8 条记录整条工具链平铺占半屏，是这页「乱」的最大来源 */
+.agent-runs { margin-bottom: 0; }
+
+.agent-runs__summary {
+  display: flex; align-items: center; gap: 10px; cursor: pointer;
+  list-style: none; padding: 4px 0; }
+.agent-runs__summary::-webkit-details-marker { display: none; }
+.agent-runs__summary::marker { content: ""; }
+.agent-runs__summary .section-title { margin: 0; }
+.agent-runs__summary:hover .section-title { color: var(--brand); }
+
+/* 折叠状态提示条数；展开后照旧显示总数 */
+.agent-runs__count {
+  min-width: 20px; padding: 0 7px; border-radius: var(--radius-pill);
+  background: var(--surface-2); color: var(--ink-3);
+  font-family: var(--font-sans); font-size: 12px; line-height: 18px;
+  text-align: center; font-variant-numeric: tabular-nums; }
+.agent-runs__count:empty { display: none; }
+
+.agent-runs__summary .btn { margin-left: auto; }
+
+.agent-runs__list { margin: 10px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+
+.agent-runs__item {
+  display: flex; align-items: baseline; gap: 10px; min-width: 0;
+  padding: 6px 10px; border-radius: var(--radius-sm);
+  transition: background-color .12s ease; }
+.agent-runs__item:hover { background: var(--bg-soft); }
+.agent-runs__item--fail .agent-runs__head { color: var(--danger); }
+
+.agent-runs__at {
+  flex: none; color: var(--ink-3);
+  font-family: var(--font-sans); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+.agent-runs__head {
+  flex: 1 1 auto; min-width: 0; overflow: hidden;
+  font-size: 13.5px; color: var(--ink);
+  white-space: nowrap; text-overflow: ellipsis; }
+
+.agent-runs__mark { flex: none; font-size: 12.5px; color: var(--accent); }
+.agent-runs__item--fail .agent-runs__mark { color: var(--danger); }
+
+/* ===== 补丁：模板变量与默认模板（2026-09-13） ===== */
+.template-card__default { display: inline; }
+.tpl-vars { margin-bottom: 8px; line-height: 1.8; }
+.tpl-vars code { margin-right: 4px; }
+
+/* ===== 补丁：任务清单点击回写（2026-09-13） ===== */
+/* 只有可回写的详情页（容器带 data-task-note）才显示可点光标 */
+[data-task-note] .task-list-item .task-list-control { cursor: pointer; }
+
+.task-list-item input.task-busy {
+  opacity: 0.45; }
+
+/* =====================================================================
+   ===== 补丁：视觉美化打磨（2026-09-13） =====
+   目标：保持「纸上墨迹」品牌不变，给整体加质感与层次——
+   纸纹背景 / 卡片 hover 反馈 / 按钮细节 / 排印点缀 / 轻入场动效。
+   全部只用既有令牌，暗色自动适配；动效均包在
+   prefers-reduced-motion: no-preference 内（不与文件末尾的减弱规则冲突）。
+   ===================================================================== */
+
+/* --- 1. 纸张质感背景：极淡的墨点纹理 + 顶部一抹暖光 --- */
+body {
+  background:
+    radial-gradient(1100px 340px at 50% -120px, var(--brand-soft), transparent 68%),
+    radial-gradient(color-mix(in srgb, var(--ink) 4%, transparent) 1px, transparent 1.2px),
+    var(--bg);
+  background-size: auto, 22px 22px, auto;
+  background-attachment: fixed, fixed, fixed; }
+
+/* 暗色下墨点换浅色、暖光更淡——从令牌派生，随配色预设自动适配 */
+[data-theme="dark"] body {
+  background:
+    radial-gradient(1100px 340px at 50% -120px, color-mix(in srgb, var(--brand) 9%, transparent), transparent 68%),
+    radial-gradient(color-mix(in srgb, var(--ink) 3%, transparent) 1px, transparent 1.2px),
+    var(--bg);
+  background-size: auto, 22px 22px, auto; }
+
+/* 选中文字用品牌色，细节里的品牌感 */
+::selection { background: var(--brand); color: var(--surface); }
+
+/* 细滚动条，配色随主题 */
+* { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+*::-webkit-scrollbar { width: 9px; height: 9px; }
+*::-webkit-scrollbar-thumb {
+  background: var(--line-strong); border-radius: var(--radius-pill);
+  border: 2px solid transparent; background-clip: content-box; }
+*::-webkit-scrollbar-thumb:hover { background-color: var(--ink-3); }
+*::-webkit-scrollbar-track { background: transparent; }
+
+/* --- 2. 顶栏：更柔和的落影 + 导航下划线动效 --- */
+.site-header {
+  border-bottom-color: transparent;
+  box-shadow: 0 1px 0 rgba(90, 70, 45, .06), 0 6px 18px -14px rgba(90, 70, 45, .25); }
+
+[data-theme="dark"] .site-header {
+  box-shadow: 0 1px 0 rgba(0, 0, 0, .3), 0 6px 18px -14px rgba(0, 0, 0, .6); }
+
+.nav-link { position: relative; transition: color .18s ease, background-color .18s ease; }
+
+.nav-link::after {
+  content: ""; position: absolute; left: 50%; bottom: 2px;
+  width: 0; height: 2px; border-radius: var(--radius-pill);
+  background: var(--brand); transform: translateX(-50%);
+  transition: width .2s ease; }
+
+.nav-link.is-active::after { width: 18px; }
+
+/* 悬停的短横只给未选中的链接：选中的那条本来就带 18px 下划线，
+   再被 hover 压回 12px 会在鼠标移上去的一瞬间缩一下，看着像抖了一下 */
+.nav-link:not(.is-active):hover::after { width: 12px; }
+
+/* --- 3. 卡片体系：边框更轻、hover 带一点品牌倾向的层次 --- */
+.note-card, .stat, .card {
+  border-color: color-mix(in srgb, var(--line) 78%, transparent); }
+
+.note-card:hover {
+  border-color: color-mix(in srgb, var(--brand) 32%, var(--line));
+  transform: translateY(-2px); }
+
+.card__title a { transition: color .15s ease; }
+
+/* 统计卡：左侧品牌色小竖条 + 悬浮反馈，打破四张白卡的呆板 */
+.stat {
+  position: relative; overflow: hidden;
+  transition: box-shadow .2s ease, transform .2s ease, border-color .2s ease; }
+
+.stat::before {
+  content: ""; position: absolute; left: 0; top: 14px; bottom: 14px;
+  width: 3px; border-radius: var(--radius-pill);
+  background: linear-gradient(180deg, var(--brand), color-mix(in srgb, var(--brand) 40%, transparent)); }
+
+.stat:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--brand) 30%, var(--line));
+  box-shadow: var(--shadow-md); }
+
+.stat__value { letter-spacing: .01em; }
+.stat__value small { font-size: 15px; color: var(--ink-3); margin-left: 2px; }
+
+/* --- 4. 按钮：主按钮渐变 + 悬浮/按压反馈 --- */
+.btn { transition: box-shadow .18s ease, transform .18s ease, background-color .18s ease, border-color .18s ease, color .18s ease; }
+
+.btn--primary {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--brand) 92%, #fff 8%), var(--brand));
+  box-shadow: 0 1px 2px rgba(90, 70, 45, .18), 0 4px 10px -4px rgba(181, 83, 60, .45); }
+
+.btn--primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(90, 70, 45, .2), 0 8px 18px -6px rgba(181, 83, 60, .55); }
+
+.btn--primary:active { transform: translateY(0); box-shadow: 0 1px 2px rgba(90, 70, 45, .2); }
+
+[data-theme="dark"] .btn--primary {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--brand) 86%, #fff 14%), var(--brand));
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .4), 0 8px 18px -6px rgba(0, 0, 0, .5); }
+
+.btn--ghost:hover { border-color: var(--line-strong); background: var(--surface-2); }
+
+/* --- 5. 页面标题：一点点排印装饰，衬线大标题更「墨迹」 --- */
+.page-title { letter-spacing: .015em; }
+
+.page-title::after {
+  content: ""; display: block; margin-top: 10px;
+  width: 44px; height: 3px; border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, var(--brand), color-mix(in srgb, var(--brand) 25%, transparent)); }
+
+/* --- 6. 正文微调：引用块落款、表格行悬停 --- */
+.prose blockquote { transition: border-color .2s ease; }
+.prose tr { transition: background-color .15s ease; }
+.prose tbody tr:hover { background: color-mix(in srgb, var(--surface-2) 62%, transparent); }
+
+/* --- 7. 轻入场动效（减弱动效的用户完全无感） --- */
+/* fill 必须用 backwards 不能用 both：both 的 forwards 会把末帧的
+   transform: translateY(0) 永远留在元素上，而任何 transform（哪怕是恒等值）
+   都会创建层叠上下文 —— 页头里的「更多」菜单 z-index 就被困住，
+   被后写的吸顶目录整个盖住（2026-09-14 用户截图实锤）。backwards 只在
+   动画开始前应用 from 帧，结束后元素回归无 transform 的自然状态。 */
+@media (prefers-reduced-motion: no-preference) {
+  main .page-head, main .stats-strip, main .note-grid, main .prose {
+    animation: ink-rise .4s ease backwards; }
+
+  main .note-grid { animation-delay: .05s; }
+  main .prose { animation-delay: .03s; }
+
+  @keyframes ink-rise {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); } }
+}
+
+/* ===== 补丁：写作热力图（2026-09-13） ===== */
+.heatmap-card { overflow: hidden; }
+
+/* 从旧到新、最新在最右（GitHub 惯例）。
+   原来用 row-reverse，结果最新的跑到了最左边——整年几乎全空时，
+   仅有的几个记录日出现在最左端，看上去「热力图是空的/没渲染」 */
+.heatmap {
+  display: flex; flex-direction: row; gap: 3px;
+  overflow-x: auto; padding: 6px 2px 2px; }
+
+.heatmap__week { display: grid; grid-template-rows: repeat(7, 11px); gap: 3px; }
+
+.hm-cell {
+  width: 11px; height: 11px; border-radius: 3px; flex: none;
+  background: var(--surface-2); }
+
+.hm-l1 { background: color-mix(in srgb, var(--brand) 22%, var(--surface)); }
+.hm-l2 { background: color-mix(in srgb, var(--brand) 45%, var(--surface)); }
+.hm-l3 { background: color-mix(in srgb, var(--brand) 70%, var(--surface)); }
+.hm-l4 { background: var(--brand); }
+
+.hm-blank { visibility: hidden; }
+
+.heatmap__legend {
+  display: flex; align-items: center; justify-content: flex-end; gap: 4px;
+  margin-top: 10px; color: var(--ink-3); font-family: var(--font-sans); font-size: 11.5px; }
+.heatmap__legend .hm-cell { width: 9px; height: 9px; }
+.hm-l0 { background: var(--surface-2); }
+
+/* ===== 补丁：专注写作模式（2026-09-13） ===== */
+.editor__focus-toggle { margin-left: auto; }
+.editor__focus-toggle[aria-pressed="true"] { color: var(--brand); border-color: var(--brand); }
+
+body.editor-focus .site-header,
+body.editor-focus .site-footer,
+body.editor-focus .editor__toolbar,
+body.editor-focus .editor__settings { display: none; }
+
+body.editor-focus .site-main { max-width: none; padding-inline: 24px; }
+
+body.editor-focus .editor {
+  max-width: min(1160px, 94vw); margin: 0 auto; padding-top: 42px; }
+
+/* 单栏写作/预览时收窄到可读行宽；分栏保持宽版 */
+body.editor-focus .editor:not(:has(.editor__split[data-layout="split"])) {
+  max-width: 900px; }
+
+body.editor-focus .editor__textarea {
+  font-size: 18px; line-height: 1.9; }
+
+body.editor-focus .editor__bar {
+  position: sticky; top: 10px; z-index: 5;
+  background: var(--header-bg); backdrop-filter: blur(8px);
+  border-radius: var(--radius-sm); }
+
+@media (prefers-reduced-motion: no-preference) {
+  body.editor-focus .editor { transition: max-width .25s ease, padding-top .25s ease; }
+}
+
+/* ===== 补丁：配色预设（2026-09-13） ===== */
+/* 与 data-theme 正交：data-palette 只换色相，亮暗由主题层负责。
+   每套预设在亮/暗下各覆盖一组核心令牌；未设置属性 = 墨迹原色。 */
+
+/* --- 竹青（青绿系） --- */
+[data-palette="bamboo"] {
+  --bg: #F2F5F0; --bg-soft: #E7EEE5; --surface: #FBFCFA; --surface-2: #EDF3EC;
+  --ink: #262E28; --ink-2: #4E5C51; --ink-3: #7D8B7F; --line: #D8E2D6;
+  --line-strong: #C1D2BF;
+  --brand: #3D7A5F; --brand-dark: #2E5F49; --brand-soft: #DFEDE5;
+  --accent: #8A6D3B; --accent-soft: #F0E8D8;
+  --header-bg: rgba(242, 245, 240, .82); }
+
+[data-palette="bamboo"][data-theme="dark"] {
+  --bg: #171E19; --bg-soft: #1D2620; --surface: #212B24; --surface-2: #2A362E;
+  --ink: #DFE9DF; --ink-2: #B2C2B4; --ink-3: #8A9A8C; --line: #31402F;
+  --line-strong: #3E5040;
+  --brand: #7FB69B; --brand-dark: #A5CDB8; --brand-soft: #24352C;
+  --header-bg: rgba(23, 30, 25, .82); }
+
+/* --- 墨蓝（蓝灰系） --- */
+[data-palette="ocean"] {
+  --bg: #F0F3F7; --bg-soft: #E4EAF2; --surface: #FBFCFE; --surface-2: #EAEFF6;
+  --ink: #242A33; --ink-2: #4B5563; --ink-3: #7B8594; --line: #D5DDE8;
+  --line-strong: #BFCBD9;
+  --brand: #3B5BA5; --brand-dark: #2C4680; --brand-soft: #DEE7F5;
+  --accent: #B5533C; --accent-soft: #F2E2DA;
+  --header-bg: rgba(240, 243, 247, .82); }
+
+[data-palette="ocean"][data-theme="dark"] {
+  --bg: #161A21; --bg-soft: #1C212B; --surface: #202632; --surface-2: #29303E;
+  --ink: #DEE4EE; --ink-2: #B0BACC; --ink-3: #8791A2; --line: #2F3846;
+  --line-strong: #3D4757;
+  --brand: #8FA6D9; --brand-dark: #B0C2E8; --brand-soft: #232C3D;
+  --header-bg: rgba(22, 26, 33, .82); }
+
+/* --- 切换器 --- */
+.nav-palette {
+  display: flex; align-items: center; gap: 2px;
+  padding: 4px 8px; margin-top: 6px;
+  border-top: 1px solid var(--line); }
+
+.nav-palette__opt { font-size: 12.5px; padding: 3px 9px; }
+
+.nav-palette__opt.is-active {
+  color: var(--brand); background: var(--brand-soft); border-radius: var(--radius-pill); }
+
+/* ===== 补丁：空状态插画 + 加载骨架（2026-09-13） ===== */
+.empty-state__art {
+  color: var(--ink-3); margin-bottom: 12px; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .empty-state__art .empty-art { animation: art-float 3.2s ease-in-out infinite; }
+
+  @keyframes art-float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-4px); } }
+}
+
+/* 骨架占位：SSR 之外的异步场景（agent 执行 / ask 首响） */
+.skeleton {
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--surface-2) 25%,
+    color-mix(in srgb, var(--ink) 7%, var(--surface-2)) 50%, var(--surface-2) 75%);
+  background-size: 200% 100%; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .skeleton { animation: skeleton-sweep 1.3s ease infinite; }
+
+  @keyframes skeleton-sweep {
+    from { background-position: 200% 0; }
+    to { background-position: -200% 0; } }
+}
+
+.skeleton--text { height: 13px; margin: 9px 0; }
+.skeleton--text.w60 { width: 60%; }
+.skeleton--text.w80 { width: 80%; }
+.skeleton--card {
+  height: 72px; border: 1px solid var(--line); border-radius: var(--radius-sm);
+  margin: 10px 0; }
+
+/* ===== 补丁：配色预设扩充（2026-09-13） ===== */
+/* 新增霞紫 / 琥珀 / 石墨，机制同前：data-palette × data-theme 各一组令牌。 */
+
+/* --- 霞紫（藕荷紫系） --- */
+[data-palette="plum"] {
+  --bg: #F6F2F6; --bg-soft: #EDE6EE; --surface: #FDFBFD; --surface-2: #F2EBF2;
+  --ink: #2D2730; --ink-2: #5A4F5C; --ink-3: #8B7F8D; --line: #E2D8E2;
+  --line-strong: #D0C2D0;
+  --brand: #8E4A7E; --brand-dark: #6F3A62; --brand-soft: #EFE0EA;
+  --accent: #4A6C5A; --accent-soft: #E4EDE7;
+  --header-bg: rgba(246, 242, 246, .82); }
+
+[data-palette="plum"][data-theme="dark"] {
+  --bg: #1E1A1E; --bg-soft: #252025; --surface: #292329; --surface-2: #332C33;
+  --ink: #E9E0E8; --ink-2: #C3B5C1; --ink-3: #968896; --line: #3D343C;
+  --line-strong: #4A404A;
+  --brand: #C48FB8; --brand-dark: #D9AECE; --brand-soft: #332433;
+  --header-bg: rgba(30, 26, 30, .82); }
+
+/* --- 琥珀（暖橙黄系） --- */
+[data-palette="amber"] {
+  --bg: #F8F3E9; --bg-soft: #F0E7D5; --surface: #FEFBF4; --surface-2: #F4ECDC;
+  --ink: #33291C; --ink-2: #63543C; --ink-3: #94836A; --line: #E6DAC2;
+  --line-strong: #D5C4A2;
+  --brand: #B8742E; --brand-dark: #94591F; --brand-soft: #F2E3CE;
+  --accent: #4A6C5A; --accent-soft: #E4EDE7;
+  --header-bg: rgba(248, 243, 233, .82); }
+
+[data-palette="amber"][data-theme="dark"] {
+  --bg: #211B12; --bg-soft: #282016; --surface: #2C2418; --surface-2: #362D1F;
+  --ink: #EDE4D2; --ink-2: #C9BCA2; --ink-3: #9C8F76; --line: #40351F;
+  --line-strong: #4E4229;
+  --brand: #D9A85C; --brand-dark: #E8C288; --brand-soft: #362A16;
+  --header-bg: rgba(33, 27, 18, .82); }
+
+/* --- 石墨（冷灰极简） --- */
+[data-palette="slate"] {
+  --bg: #F3F4F5; --bg-soft: #E9EBED; --surface: #FCFCFD; --surface-2: #EDF0F2;
+  --ink: #26292D; --ink-2: #51565C; --ink-3: #7E848B; --line: #DCE0E4;
+  --line-strong: #C6CCD2;
+  --brand: #4E5D6C; --brand-dark: #3A4652; --brand-soft: #E1E7EC;
+  --accent: #B5533C; --accent-soft: #F2E2DA;
+  --header-bg: rgba(243, 244, 245, .82); }
+
+[data-palette="slate"][data-theme="dark"] {
+  --bg: #1A1C1F; --bg-soft: #212327; --surface: #25272B; --surface-2: #2F3237;
+  --ink: #E2E5E8; --ink-2: #B6BBC1; --ink-3: #8C9198; --line: #34383D;
+  --line-strong: #42474D;
+  --brand: #9FB0C0; --brand-dark: #C2D0DC; --brand-soft: #262B31;
+  --header-bg: rgba(26, 28, 31, .82); }
+
+/* ===== 补丁：导航配色组挤压修复（2026-09-13） ===== */
+/* 1) 导航链接永不逐字断行（窄屏被压缩时只会横向滚动，不会竖排） */
+.site-nav .nav-link { white-space: nowrap; flex: none; }
+
+/* 2) 配色组：下拉里（<1024）显示文字；≥1024 打散进导航行时只显示色点，
+      六个色点约 120px，不再把左侧链接挤成竖排 */
+.nav-palette__dot { display: none; width: 11px; height: 11px; border-radius: 50%;
+  background: var(--dot, var(--brand)); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .12); }
+
+.nav-palette__opt.is-active .nav-palette__dot {
+  box-shadow: 0 0 0 2px var(--brand-soft), inset 0 0 0 1px rgba(0, 0, 0, .12); }
+
+@media (min-width: 1024px) {
+  .nav-palette {
+    display: inline-flex; align-items: center; gap: 2px;
+    margin: 0 0 0 8px; padding: 0 4px;
+    border-top: 0; border-left: 1px solid var(--line); }
+
+  .nav-palette__dot { display: inline-block; }
+  .nav-palette__text { display: none; }
+  .nav-palette__opt { padding: 8px 5px; font-size: 0; }
+}
+
+/* ===== 补丁：配色切换器改下拉（2026-09-13，替代色点方案） ===== */
+/* 样式完全复用全站 .select / .select--sm，这里只管布局 */
+.nav-palette { display: flex; align-items: center; }
+
+@media (max-width: 1023px) {
+  /* 下拉菜单里：占满整行宽度，与其它菜单项对齐 */
+  .nav-palette { padding: 4px 8px; margin-top: 6px; border-top: 1px solid var(--line); }
+  .nav-palette .select { width: 100%; } }
+
+@media (min-width: 1024px) {
+  /* 导航行内：紧凑单控件，不挤压其它链接 */
+  .nav-palette { margin: 0 0 0 8px; padding: 0; } }
+
+/* ===== 补丁：配色自定义下拉（2026-09-13，每个选项带主题色点） ===== */
+/* toggle 显示「当前配色色点 + 名称」；菜单六项各带该配色自己的色点，
+   当前项勾选高亮；圆角面板 + 阴影 + 开合动效。 */
+
+.palette-dd { position: relative; display: inline-flex; }
+
+.palette-dd__toggle {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 12px; border: 0; border-radius: var(--radius-sm);
+  background: transparent; color: var(--ink-2);
+  font-family: var(--font-sans); font-size: 14px; font-weight: 500;
+  cursor: pointer; transition: color .15s ease, background-color .15s ease; }
+
+.palette-dd__toggle:hover { background: var(--brand-soft); color: var(--ink); }
+
+.palette-dd.is-open .palette-dd__toggle { color: var(--brand); }
+
+.palette-dd__label { letter-spacing: .02em; color: var(--brand); }
+
+/* --- 编辑器：写入 pane 聚焦反馈（聚焦侧顶部亮一条品牌色，分栏方向一目了然） --- */
+.editor__pane { position: relative; }
+
+.editor__pane--write::before {
+  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: var(--brand); opacity: 0; transition: opacity .2s ease; }
+
+.editor__pane--write:focus-within::before { opacity: .85; }
+
+.editor__textarea:focus { outline: none; }
+
+.palette-dd__caret { font-size: 10px; color: var(--ink-3);
+  transition: transform .18s ease; }
+
+.palette-dd.is-open .palette-dd__caret { transform: rotate(180deg); }
+
+.palette-dd__menu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 70;
+  min-width: 8.5em; padding: 5px;
+  border: 1px solid var(--line-strong); border-radius: var(--radius);
+  background: var(--surface); box-shadow: var(--shadow-md);
+  display: flex; flex-direction: column; gap: 2px; }
+
+.palette-dd.is-open .palette-dd__menu { display: flex; }
+.palette-dd:not(.is-open) .palette-dd__menu { display: none; }
+
+.palette-dd__opt {
+  display: flex; align-items: center; gap: 7px; white-space: nowrap;
+  padding: 8px 10px; border: 0; border-radius: var(--radius-sm);
+  background: transparent; color: var(--ink); text-align: left;
+  font-family: var(--font-sans); font-size: 13.5px;
+  cursor: pointer; transition: background-color .15s ease; }
+
+.palette-dd__opt:hover { background: var(--surface-2); }
+
+.palette-dd__check { color: var(--brand); opacity: 0; flex: none; margin-left: -2px; }
+
+.palette-dd__opt.is-active { background: var(--brand-soft); color: var(--brand); font-weight: 600; }
+.palette-dd__opt.is-active .palette-dd__check { opacity: 1; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .palette-dd__menu { animation: palette-pop .16s ease; }
+
+  @keyframes palette-pop {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); } }
+}
+
+/* 宽屏嵌入导航行；<1024 在「更多」下拉里靠右但不出屏 */
+@media (min-width: 1024px) {
+  .palette-dd { margin: 0 0 0 8px; } }
+
+/* ===== 补丁：配色面板右侧预览条（2026-09-13） ===== */
+/* 每项右侧一枚 34×14 渐变胶囊（该配色 brand→浅色），填充面板右半边的空 */
+.palette-dd__preview {
+  width: 34px; height: 14px; border-radius: var(--radius-pill); flex: none;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .08);
+  transition: transform .15s ease; }
+
+.palette-dd__opt:hover .palette-dd__preview { transform: scaleX(1.12); }
+
+.palette-dd__opt.is-active .palette-dd__preview {
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .08), 0 0 0 2px var(--brand-soft); }
+
+/* 勾选图标挪到预览条左边，不再孤悬最右 */
+.palette-dd__check { order: 1; }
+.palette-dd__preview { order: 2; }
+
+/* ===== 补丁：菜单内配色控件改菜单项风格（2026-09-13） ===== */
+/* <1024 时配色切换器在「更多」下拉里，应与其它菜单项同风格（纯文字、无胶囊） */
+@media (max-width: 1023px) {
+  .palette-dd { display: block; }
+
+  .palette-dd__toggle { width: 100%; }
+
+  /* 面板相对菜单项弹出，贴齐菜单左缘 */
+  .palette-dd__menu { position: static; right: auto; box-shadow: none;
+    border: 0; background: transparent; padding: 0 0 0 20px; }
+  .palette-dd.is-open .palette-dd__menu { display: flex; }
+}
+
+/* ===== 补丁：footer 贴底 + 全局布局（2026-09-13） ===== */
+/* 内容不足一屏时 footer 悬在半空很难看：body 纵向 flex，main 吃满剩余高度 */
+body {
+  display: flex; flex-direction: column; min-height: 100vh; }
+
+.site-main {
+  flex: 1 0 auto;
+  display: flex; flex-direction: column; }
+
+/* main 里的直接内容块在纵向 flex 下占满宽度（container 自身管对齐） */
+.site-main > * { width: 100%; }
+
+.site-footer { flex-shrink: 0; }
+
+.offline-banner, .toast-wrap, dialog { flex-shrink: 0; }
+
+/* ===== 补丁：分栏拖拽把手（2026-09-13） ===== */
+/* 分栏三列：写 | 把手 | 预览；--split 由拖拽设置（左列 fr 值） */
+.editor__split[data-layout="split"] {
+  grid-template-columns: minmax(0, var(--split, 1fr)) 6px minmax(0, 1fr); }
+
+.editor__divider {
+  cursor: col-resize; background: var(--line);
+  transition: background-color .15s ease, width .15s ease; }
+
+.editor__divider:hover,
+body.split-dragging .editor__divider { background: var(--brand); }
+
+/* 拖动中：全站禁止选中，光标统一 */
+body.split-dragging { user-select: none; -webkit-user-select: none; cursor: col-resize; }
+body.split-dragging .editor__textarea { pointer-events: none; }
+
+/* 单栏（写作/预览模式）与窄屏：把手隐藏，恢复单列 */
+.editor__split[data-layout="write"],
+.editor__split[data-layout="preview"],
+.editor__split[data-layout="split"] { grid-template-columns: minmax(0, var(--split, 1fr)) 6px minmax(0, 1fr); }
+
+.editor__split[data-layout="write"],
+.editor__split[data-layout="preview"] { grid-template-columns: minmax(0, 1fr); }
+
+.editor__split[data-layout="write"] .editor__divider,
+.editor__split[data-layout="preview"] .editor__divider { display: none; }
+
+@media (max-width: 900px) {
+  .editor__divider { display: none; }
+  .editor__split[data-layout="split"] { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ===== 补丁：标签自动着色（2026-09-13） ===== */
+/* 按标签名 md5 哈希到 8 个柔和色组（tag-c0..c7 / tag-pill--c0..c7），
+   亮暗各一组；同色系（低饱和底 + 同色相深字），不与品牌色抢。 */
+
+.note-tag.tag-c0 { background: hsl(6 48% 93%); color: hsl(6 42% 36%); }
+.note-tag.tag-c1 { background: hsl(38 55% 92%); color: hsl(38 45% 34%); }
+.note-tag.tag-c2 { background: hsl(75 40% 92%); color: hsl(75 38% 30%); }
+.note-tag.tag-c3 { background: hsl(130 35% 92%); color: hsl(130 35% 30%); }
+.note-tag.tag-c4 { background: hsl(175 38% 91%); color: hsl(175 38% 29%); }
+.note-tag.tag-c5 { background: hsl(215 42% 92%); color: hsl(215 40% 34%); }
+.note-tag.tag-c6 { background: hsl(270 38% 93%); color: hsl(270 36% 36%); }
+.note-tag.tag-c7 { background: hsl(330 42% 93%); color: hsl(330 40% 38%); }
+
+.tag-pill--c0 { background: hsl(6 48% 93%); color: hsl(6 42% 36%); }
+.tag-pill--c1 { background: hsl(38 55% 92%); color: hsl(38 45% 34%); }
+.tag-pill--c2 { background: hsl(75 40% 92%); color: hsl(75 38% 30%); }
+.tag-pill--c3 { background: hsl(130 35% 92%); color: hsl(130 35% 30%); }
+.tag-pill--c4 { background: hsl(175 38% 91%); color: hsl(175 38% 29%); }
+.tag-pill--c5 { background: hsl(215 42% 92%); color: hsl(215 40% 34%); }
+.tag-pill--c6 { background: hsl(270 38% 93%); color: hsl(270 36% 36%); }
+.tag-pill--c7 { background: hsl(330 42% 93%); color: hsl(330 40% 38%); }
+
+[data-theme="dark"] .note-tag.tag-c0 { background: hsl(6 30% 24%); color: hsl(6 44% 78%); }
+[data-theme="dark"] .note-tag.tag-c1 { background: hsl(38 30% 24%); color: hsl(38 48% 78%); }
+[data-theme="dark"] .note-tag.tag-c2 { background: hsl(75 26% 23%); color: hsl(75 40% 76%); }
+[data-theme="dark"] .note-tag.tag-c3 { background: hsl(130 26% 22%); color: hsl(130 36% 76%); }
+[data-theme="dark"] .note-tag.tag-c4 { background: hsl(175 28% 21%); color: hsl(175 38% 76%); }
+[data-theme="dark"] .note-tag.tag-c5 { background: hsl(215 30% 23%); color: hsl(215 42% 78%); }
+[data-theme="dark"] .note-tag.tag-c6 { background: hsl(270 28% 24%); color: hsl(270 38% 80%); }
+[data-theme="dark"] .note-tag.tag-c7 { background: hsl(330 30% 24%); color: hsl(330 42% 80%); }
+
+[data-theme="dark"] .tag-pill--c0 { background: hsl(6 30% 24%); color: hsl(6 44% 78%); }
+[data-theme="dark"] .tag-pill--c1 { background: hsl(38 30% 24%); color: hsl(38 48% 78%); }
+[data-theme="dark"] .tag-pill--c2 { background: hsl(75 26% 23%); color: hsl(75 40% 76%); }
+[data-theme="dark"] .tag-pill--c3 { background: hsl(130 26% 22%); color: hsl(130 36% 76%); }
+[data-theme="dark"] .tag-pill--c4 { background: hsl(175 28% 21%); color: hsl(175 38% 76%); }
+[data-theme="dark"] .tag-pill--c5 { background: hsl(215 30% 23%); color: hsl(215 42% 78%); }
+[data-theme="dark"] .tag-pill--c6 { background: hsl(270 28% 24%); color: hsl(270 38% 80%); }
+[data-theme="dark"] .tag-pill--c7 { background: hsl(330 30% 24%); color: hsl(330 42% 80%); }
+
+/* is-active 选中态（标签页）保持品牌色优先 */
+.tag-pill.is-active.tag-pill--c0, .tag-pill.is-active.tag-pill--c1,
+.tag-pill.is-active.tag-pill--c2, .tag-pill.is-active.tag-pill--c3,
+.tag-pill.is-active.tag-pill--c4, .tag-pill.is-active.tag-pill--c5,
+.tag-pill.is-active.tag-pill--c6, .tag-pill.is-active.tag-pill--c7 {
+  background: var(--brand); color: var(--surface); }
+
+/* ===== 补丁：那年今日（2026-09-13） ===== */
+.onthisday {
+  display: flex; align-items: baseline; gap: 10px;
+  margin-top: 18px; padding: 12px 16px;
+  border: 1px solid color-mix(in srgb, var(--brand) 25%, var(--line));
+  border-left: 3px solid var(--brand);
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--brand-soft), transparent 70%);
+  font-size: 14px; color: var(--ink-2); }
+
+.onthisday__icon { flex: none; }
+
+.onthisday__body strong { color: var(--brand); margin-right: 6px; }
+
+.onthisday__body a {
+  color: var(--ink); font-weight: 600; text-decoration: none;
+  border-bottom: 1px dashed var(--line-strong); }
+
+.onthisday__body a:hover { color: var(--brand); border-bottom-color: var(--brand); }
+
+/* ===== 补丁：用量按模型拆分（2026-09-13） ===== */
+.ai-usage-model { margin-bottom: 12px; }
+.ai-usage-model:last-child { margin-bottom: 0; }
+
+.ai-usage-model__head {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px;
+  margin-bottom: 5px; font-size: 13px; }
+
+.ai-usage-model__head code { font-family: var(--font-mono); font-size: 12.5px; }
+
+.ai-usage-model__bar {
+  height: 7px; border-radius: var(--radius-pill);
+  background: var(--surface-2); overflow: hidden; }
+
+.ai-usage-model__bar span {
+  display: block; height: 100%; border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, var(--brand), color-mix(in srgb, var(--brand) 45%, var(--surface)));
+  transition: width .3s ease; }
+
+/* ===== 补丁：用量柱状图增强（2026-09-13） ===== */
+/* 堆叠双色：输入（浅）/输出（深）；柱顶数值；稀疏日期轴 */
+.ai-usage-legend {
+  display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 10px;
+  font-size: 12.5px; color: var(--ink-2); }
+
+.ai-usage-legend__swatch {
+  display: inline-block; width: 10px; height: 10px;
+  border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+
+.ai-usage-legend__swatch--prompt { background: color-mix(in srgb, var(--brand) 32%, var(--surface)); }
+.ai-usage-legend__swatch--completion { background: var(--brand); }
+
+.ai-chart__col { position: relative; display: flex; flex-direction: column; justify-content: flex-end; }
+
+.ai-chart__value {
+  position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
+  font-family: var(--font-sans); font-size: 10px; color: var(--ink-3);
+  white-space: nowrap; }
+
+.ai-chart__bar { display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; }
+
+.ai-chart__seg { display: block; width: 100%; }
+
+.ai-chart__seg--prompt { background: color-mix(in srgb, var(--brand) 32%, var(--surface)); }
+
+.ai-chart__seg--completion { background: var(--brand); }
+
+.ai-chart__axis span { font-size: 11px; }
+

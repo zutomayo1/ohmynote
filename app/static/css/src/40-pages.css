@@ -1,0 +1,360 @@
+/* ===== 命令面板 ===== */
+
+.palette {
+  position: fixed; inset: 0; z-index: 300; display: flex;
+  align-items: flex-start; justify-content: center; padding: 12vh 16px 16px; }
+
+.palette[hidden] { display: none; }
+
+.palette__backdrop {
+  position: absolute; inset: 0; background: var(--overlay);
+  -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); }
+
+.palette__box {
+  position: relative; z-index: 1; display: flex; flex-direction: column; width: min(640px, 100%);
+  max-height: 70vh; border: 1px solid var(--line-strong); border-radius: var(--radius);
+  background: var(--surface); box-shadow: var(--shadow-md); overflow: hidden; animation: panel-in .16s ease-out; }
+
+.palette__box:focus-within { border-color: var(--brand); box-shadow: var(--shadow-md), var(--ring); }
+
+.palette__form {
+  display: flex; align-items: center; padding: 12px 16px;
+  border-bottom: 1px solid var(--line); background: var(--surface); }
+
+.palette__input {
+  flex: 1; width: 100%; padding: 8px 4px; border: none;
+  background: transparent; color: var(--ink); font-family: var(--font-sans); font-size: 17px; }
+
+.palette__input::placeholder { color: var(--ink-3); }
+
+.palette__input:focus { outline: none; }
+
+.palette__results { flex: 1; padding: 8px; overflow-y: auto; }
+
+.palette__item {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  padding: 10px 12px; border-radius: var(--radius-sm); color: var(--ink); text-decoration: none; }
+
+.palette__item:hover { background: var(--bg-soft); }
+
+.palette__item.is-active { background: var(--brand-soft); }
+
+.palette__item.is-active .palette__item-title { color: var(--brand); }
+
+/* 标题优先（占它需要的宽度），摘录最多 45%、超出省略：
+   原来 meta 是 flex:none 且不限长，1300px 的摘录把标题挤成一个字一行 */
+.palette__item-title {
+  flex: 1 1 auto; min-width: 0; overflow: hidden;
+  font-family: var(--font-serif); font-size: 15px; font-weight: 600;
+  white-space: nowrap; text-overflow: ellipsis; }
+
+.palette__item-meta {
+  flex: 0 1 45%; min-width: 0; overflow: hidden; text-align: right;
+  color: var(--ink-3); font-family: var(--font-sans); font-size: 12px;
+  white-space: nowrap; text-overflow: ellipsis; }
+
+.palette__hint {
+  display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 10px 16px;
+  border-top: 1px solid var(--line); background: var(--bg-soft);
+  color: var(--ink-3); font-family: var(--font-sans); font-size: 12px; }
+
+.palette__hint kbd { font-size: .72em; }
+
+/* ===== 登录页 ===== */
+
+.login-page {
+  display: grid; place-items: center; min-height: 100vh;
+  padding: 24px; background: var(--bg); }
+
+.login-card {
+  display: flex; flex-direction: column; gap: 14px; width: min(380px, 100%);
+  padding: 32px 28px; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); box-shadow: var(--shadow-md); }
+
+.login-card h1 { font-family: var(--font-serif); font-size: 24px; text-align: center; }
+
+.login-card .btn { width: 100%; }
+
+/* ===== 问笔记 / AI ===== */
+
+.ai-answer {
+  margin-top: 20px; padding: 20px 22px; border: 1px solid var(--line); border-left: 3px solid var(--accent);
+  border-radius: var(--radius); background: var(--accent-soft); color: var(--ink);
+  font-family: var(--font-serif); line-height: var(--lh); }
+
+.source-list {
+  display: flex; flex-direction: column; gap: 8px; list-style: none;
+  padding: 0; margin-top: 16px; font-family: var(--font-sans); font-size: 13.5px; }
+
+.source-item { padding: 10px 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); }
+
+.source-item a { color: var(--brand); }
+
+/* ===== 模板库 ===== */
+
+.template-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; margin-top: 20px; }
+
+.template-card {
+  display: flex; flex-direction: column; gap: 8px; padding: 18px;
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
+  box-shadow: var(--shadow-sm); transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease; }
+
+.template-card:hover { border-color: var(--line-strong); box-shadow: var(--shadow-md); transform: translateY(-2px); }
+
+.template-card .btn { align-self: flex-start; margin-top: auto; }
+
+/* ===== 标签云 ===== */
+
+.tag-cloud { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 20px; }
+
+/* ===== 离线横幅 ===== */
+
+.offline-banner {
+  padding: 8px 16px; border-bottom: 1px solid var(--line); background: var(--warn-soft);
+  color: var(--ink-2); font-family: var(--font-sans); font-size: 13px; text-align: center; }
+
+.offline-banner[hidden] { display: none; }
+
+/* ===== 响应式：1200px（右栏收窄） ===== */
+
+@media (max-width: 1200px) {
+  .container { padding-inline: 20px; }
+  .post-layout { grid-template-columns: minmax(0, 1fr) 220px; gap: 28px; }
+}
+
+/* ===== 响应式：1024px（正文 + 目录 变单列） ===== */
+
+@media (max-width: 1024px) {
+  .post-layout { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+
+  .post-body { max-width: none; }
+
+  .toc { position: static; max-height: none; }
+
+  .stats-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* ===== 响应式：900px（编辑器单栏、导航两行） ===== */
+
+@media (max-width: 900px) {
+  .site-header__inner { flex-wrap: wrap; row-gap: 6px; }
+  .brand { margin-right: auto; }
+  .site-nav {
+    order: 3; width: 100%; margin-inline: 0; overflow-x: auto;
+    padding-bottom: 2px; }
+
+  .header-actions { margin-left: auto; }
+
+  .editor__split, .editor__split[data-layout="split"] { grid-template-columns: minmax(0, 1fr); }
+
+  .editor__split { min-height: 0; }
+
+  .editor__pane--write { border-right: none; border-bottom: 1px solid var(--line); }
+
+  .editor__textarea { min-height: 360px; }
+
+  /* 底部操作区吸底 */
+  .editor__actions {
+    position: sticky; bottom: 0; z-index: 30; margin-top: 12px;
+    padding: 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--header-bg);
+    box-shadow: var(--shadow-md); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+  .editor__actions .btn { flex: 1 1 auto; }
+
+  .field-grid { grid-template-columns: 1fr; }
+
+  .post-nav { grid-template-columns: 1fr; }
+}
+
+/* ===== 响应式：640px ===== */
+
+@media (max-width: 640px) {
+  body { font-size: 16px; }
+
+  .container { padding-inline: 16px; }
+
+  .site-main { padding-block: 24px 56px; }
+
+  .page-head { flex-direction: column; align-items: flex-start; }
+
+  .page-title { font-size: 24px; }
+
+  .post-title { font-size: 26px; }
+
+  .blog-hero { padding: 32px 0 24px; }
+
+  .blog-hero__title { font-size: 32px; }
+
+  .stats-strip { grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  .stat { padding: 13px 14px; }
+
+  .stat__value { font-size: 24px; }
+
+  .toolbar { flex-direction: column; align-items: stretch; }
+
+  .toolbar .input, .toolbar .select { width: 100%; min-width: 0; }
+
+  .note-grid { grid-template-columns: 1fr; }
+
+  .note-card { padding: 16px 16px 14px; }
+
+  .note-card.is-pinned { padding-left: 13px; }
+
+  .toast-wrap { bottom: 16px; }
+}
+
+/* ===== 宽屏：笔记 / 博客 两列卡片流（≥980px） ===== */
+
+@media (min-width: 980px) {
+  .note-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .blog-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .post-card--feature { grid-column: 1 / -1; }
+}
+
+/* ===== 动效关键帧 ===== */
+
+@keyframes ink-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .25; }
+}
+
+@keyframes panel-in {
+  from { opacity: 0; transform: translateY(-6px) scale(.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* A 组补充：博客卡片 / 归档 / 标签云与详情侧栏（并入 style.css）
+   只用 style.css 已有令牌；不重定义已有类本体，所有 flex 行均可换行。 */
+
+/* ===== 区块标题 ===== */
+
+.section-title {
+  margin: 32px 0 14px; padding-bottom: 8px; border-bottom: 1px solid var(--line);
+  color: var(--ink); font-family: var(--font-serif); font-size: 22px;
+  font-weight: 700; line-height: 1.3; letter-spacing: -.01em; }
+
+/* ===== 博客卡片 ===== */
+
+.post-card__meta { color: var(--ink-3); font-size: 12.5px; }
+
+.post-card__title {
+  color: var(--ink); font-family: var(--font-serif);
+  font-size: 21px; font-weight: 700; line-height: 1.3;
+  letter-spacing: -.005em; }
+
+.post-card__summary {
+  margin: 0; color: var(--ink-2);
+  font-family: var(--font-serif); font-size: 15px;
+  line-height: var(--lh); }
+
+.post-card__foot {
+  display: flex; flex-wrap: wrap; align-items: center;
+  justify-content: space-between; gap: 10px 14px;
+  margin-top: auto; padding-top: 16px; border-top: 1px solid var(--line); }
+
+.post-card__more {
+  display: inline-block; margin-left: auto; color: var(--brand);
+  font-family: var(--font-sans); font-size: 13.5px; font-weight: 600;
+  white-space: nowrap; transition: color .15s ease, transform .15s ease; }
+
+.post-card__more:hover { color: var(--brand-dark); transform: translateX(3px); }
+
+/* ===== 搜索结果摘要 ===== */
+
+.card__summary--snippet {
+  padding-left: 14px; border-left: 3px solid var(--line-strong);
+  font-style: italic; }
+
+.card__summary--snippet mark {
+  padding: 0 .16em; border-radius: var(--radius-sm);
+  background: var(--warn-soft); color: var(--ink); }
+
+/* ===== 徽章与标签行 ===== */
+
+.badge--saved {
+  flex-wrap: wrap; border-color: transparent;
+  background: var(--accent-soft); color: var(--accent); }
+
+/* ===== 归档列表 ===== */
+
+.archive-list--compact { gap: 0; margin-top: 10px; }
+
+.archive-list--inline {
+  flex-direction: row; flex-wrap: wrap;
+  align-items: baseline; gap: 8px 20px;
+  margin-top: 14px; }
+
+.archive-list--inline .archive-month {
+  margin-top: 0; padding-bottom: 0; border-bottom: 0; }
+
+.archive-month__label {
+  color: var(--ink); font-family: var(--font-serif);
+  font-size: 15px; font-weight: 600; text-decoration: none; }
+
+.archive-month__label:hover { color: var(--brand); }
+
+.archive-year__label {
+  margin: 0 0 10px; padding-bottom: 8px; border-bottom: 1px solid var(--line);
+  color: var(--ink); font-family: var(--font-serif);
+  font-size: 21px; font-weight: 700; line-height: 1.3; }
+
+.archive-note {
+  display: flex; flex-wrap: wrap; align-items: baseline;
+  justify-content: space-between; gap: 4px 16px;
+  padding: 7px 2px; border-bottom: 1px solid var(--line); }
+
+.archive-note__title {
+  flex: 1 1 240px; min-width: 0; color: var(--ink);
+  font-family: var(--font-serif); font-size: 15px; line-height: 1.5;
+  text-decoration: none; overflow-wrap: anywhere; }
+
+.archive-note__date {
+  flex: none; color: var(--ink-3);
+  font-family: var(--font-sans); font-size: 12.5px;
+  white-space: nowrap; }
+
+/* ===== 标签云 / 标签分组 ===== */
+
+.tag-group { margin-bottom: 32px; }
+
+/* ===== 详情侧栏 ===== */
+
+.rail-block__more {
+  display: inline-block; margin-top: 10px; color: var(--brand);
+  font-family: var(--font-sans); font-size: 13px; font-weight: 600; }
+
+.rail-block__more:hover { color: var(--brand-dark); }
+
+.related__action {
+  display: inline-block; align-self: flex-start; color: var(--brand);
+  font-family: var(--font-sans); font-size: 12px; font-weight: 600;
+  white-space: nowrap; }
+
+.related__action:hover { color: var(--brand-dark); }
+
+/* ===== 博客首页底部归档 ===== */
+
+.blog-archive {
+  margin-top: 40px; padding-top: 24px;
+  border-top: 1px solid var(--line); }
+
+/* B 组补充：表单 / 编辑器 / 模板管理页 / 筛选条（并入 style.css 时追加到文件末尾）
+   只用本文件已有令牌，深色模式与窄屏自动生效；不重定义 .btn .field .input .md-tool 等本体 */
+
+/* ===== 筛选条：位于工具栏下方的 chip 行，可换行 ===== */
+
+.filter-bar {
+  display: flex; flex-direction: column; flex-wrap: wrap;
+  gap: 10px; margin-top: 14px; }
+
+/* 筛选条里的一行：flex + wrap + gap */
+
+.filter-bar__group {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+/* 标签组：占满整行，标签在组内换行排列 */
+
+.filter-bar__group--tags { flex: 1 1 100%; }
+
+/* ===== 工具栏里的一行：搜索框 + 下拉 + 按钮 ===== */
+

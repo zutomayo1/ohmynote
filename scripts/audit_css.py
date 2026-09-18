@@ -17,9 +17,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-os.environ.setdefault("INKNOTE_DATA_DIR", tempfile.mkdtemp(prefix="inknote-audit-"))
-os.environ.setdefault("INKNOTE_SECRET", "audit-secret-key-0123456789")
-os.environ.setdefault("INKNOTE_PASSWORD", "audit-password")
+# 硬设（不用 setdefault）：本脚本会起一次应用并写数据（种子笔记、自动备份）。
+# 若被当子进程调用（tests/test_check_script.py 会跑 check.py），继承来的
+# INKNOTE_DATA_DIR 会指向**测试会话共享库**——既可能撞 database is locked，
+# 又会把测试数据搅乱。所以这里始终用自己的临时目录。
+os.environ["INKNOTE_DATA_DIR"] = tempfile.mkdtemp(prefix="inknote-audit-")
+os.environ["INKNOTE_SECRET"] = "audit-secret-key-0123456789"
+os.environ["INKNOTE_PASSWORD"] = "audit-password"
+os.environ.pop("INKNOTE_PASSWORD_HASH", None)   # 别被 .env 里的哈希顶掉密码
+for key in ("INKNOTE_AI_BASE_URL", "INKNOTE_AI_MODEL", "INKNOTE_AI_API_KEY"):
+    os.environ.pop(key, None)                   # 审计不该受本机 AI 配置影响
 
 # JS 生成的、不在 HTML 源码里的状态类
 JS_STATE_CLASSES = {
