@@ -286,6 +286,10 @@ def test_settings_page_has_no_nested_forms(auth_client):
     assert outer_block.count("<form") == 0, "AI 表单里又出现了 form 标签（会被浏览器丢弃）"
     assert "profiles/apply" not in outer_block
     assert "profiles/delete" not in outer_block
+    # 预设列表在 AI 表单之外 → 整块排在「AI 服务」标题之前（2026-09-18：换服务商比配置常用）。
+    # 注意按块标题定位：页面顶部状态条里也有「AI 服务」字样，纯文本 index 会踩到它。
+    assert (page.text.index('settings-block__title">我的预设<')
+            < page.text.index('settings-block__title">AI 服务<'))
 
 
 # ---------------------------------------------------------------------------

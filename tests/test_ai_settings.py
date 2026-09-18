@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import json
+import re
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -130,6 +131,24 @@ def test_settings_page_renders_presets_and_sections(auth_client):
     assert "combo__toggle" in page.text
     assert "datalist" not in page.text.lower()
     assert 'id="ai-fetch-models"' in page.text
+
+    # 2026-09-18 第三次整理：三个高级设置还原成顶层块（不再塞在「AI 服务」里当子折叠块），
+    # 「我的预设」整块挪到 AI 服务之前 —— 顺序与层级都钉住
+    titles = re.findall(r'settings-block__title[^>]*>([^<]+)<', page.text)
+    assert titles[:5] == ["我的预设", "AI 服务", "分任务模型", "安全与隐私", "向量检索"], titles
+    assert page.text.count("settings-sub__summary") == 3, "子折叠块只剩「用量统计」里那 3 个"
+    # 「存为预设」贴在「超时」右边（DOM 顺序：超时 → 预设名 → 动作行）
+    assert (page.text.index('name="timeout"') < page.text.index('name="profile_name"')
+            < page.text.index("保存配置"))
+
+    # 2026-09-18 第三次整理：三个高级设置还原成顶层块（不再塞在「AI 服务」里当子折叠块），
+    # 「我的预设」整块挪到 AI 服务之前 —— 顺序与层级都钉住
+    titles = re.findall(r'settings-block__title[^>]*>([^<]+)<', page.text)
+    assert titles[:5] == ["我的预设", "AI 服务", "分任务模型", "安全与隐私", "向量检索"], titles
+    assert page.text.count("settings-sub__summary") == 3, "子折叠块只剩「用量统计」里那 3 个"
+    # 「存为预设」贴在「超时」右边（DOM 顺序：超时 → 预设名 → 动作行）
+    assert (page.text.index('name="timeout"') < page.text.index('name="profile_name"')
+            < page.text.index("保存配置"))
 
     # 分任务模型 + 实际生效的模型
     assert 'name="model_summary"' in page.text
