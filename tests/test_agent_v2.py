@@ -670,3 +670,102 @@ def test_registry_describes_new_tools(db_conn):
         assert name in agent_service._WRITE_TOOLS
     for name in ("replace_in_note", "rewrite_section", "bulk_set_category"):
         assert name in agent_service._ALL_CONFIRMABLE
+
+
+# ---------------------------------------------------------------------------
+# 2026-09-18 深夜：全面升级——跨篇替换 / 写作节奏 / 每步计时 / 步数预算
+# ---------------------------------------------------------------------------
+
+def test_bulk_replace_text_confirm_flow(db_conn, monkeypatch):
+    """跨篇替换：机制层总确认 → 确认后逐篇落地；缺的跳过、没命中的计 0。"""
+    ids = [agent_service.repo.create_note(
+        db_conn, title=f"跨篇 {i}", content="这里有旧词，还有旧词。")["id"] for i in range(3)]
+    ids.append(999999)   # 不存在：执行时跳过
+    chat = ScriptedChat([
+        json.dumps({"action": "bulk_replace_text",
+                    "params": {"note_ids": ids, "find": "旧词", "replace_with": "新词"}},
+                   ensure_ascii=False),
+        json.dumps({"action": "final", "answer": "等确认。"}, ensure_ascii=False),
+    ])
+    monkeypatch.setattr(agent_service.ai, "is_enabled", lambda: True)
+    monkeypatch.setattr(agent_service.ai, "chat", chat)
+    result = agent_service.run_agent(db_conn, "把这几篇里的旧词都换掉")
+    assert "等待用户确认" in result["steps"][0]["summary"]
+    assert "旧词" in agent_service.repo.get_note(db_conn, ids[0])["content"]   # 没执行
+    pending = agent_service._get_pending_op(db_conn)
+    assert pending and pending["action"] == "bulk_replace_text"
+    done = agent_service.execute_pending(db_conn, pending["id"])
+    assert done["ok"] is True
+    out = done["result"]
+    assert out["replaced_total"] == 6 and out["notes_changed"] == 3
+    assert out["notes_skipped"] == 1 and out["results"][-1]["missing"] is True
+    for nid in ids[:3]:
+        assert "旧词" not in agent_service.repo.get_note(db_conn, nid)["content"]
+    agent_service._clear_pending_op(db_conn)
+
+
+def test_bulk_replace_text_validation(db_conn):
+    run = _tools(db_conn)["bulk_replace_text"]["run"]
+    assert "error" in run({"find": "x", "replace_with": "y"})
+    assert "error" in run({"note_ids": [1], "find": "", "replace_with": "y"})
+    assert "error" in run({"note_ids": [1], "find": "x", "replace_with": "x"})
+    assert "error" in run({"note_ids": [], "find": "x", "replace_with": "y"})
+    # 非法 id：_as_int 直接抛异常，循环层捕获后回喂「参数不合法」
+    with pytest.raises((TypeError, ValueError)):
+        run({"note_ids": ["abc"], "find": "x", "replace_with": "y"})
+
+
+def test_bulk_replace_text_blocked_in_read_only(db_conn, monkeypatch):
+    note = agent_service.repo.create_note(db_conn, title="只读跨篇", content="原文。")
+    chat = ScriptedChat([
+        json.dumps({"action": "bulk_replace_text",
+                    "params": {"note_ids": [note["id"]], "find": "原文", "replace_with": "改"}},
+                   ensure_ascii=False),
+        json.dumps({"action": "final", "answer": "只读。"}, ensure_ascii=False),
+    ])
+    monkeypatch.setattr(agent_service.ai, "is_enabled", lambda: True)
+    monkeypatch.setattr(agent_service.ai, "chat", chat)
+    result = agent_service.run_agent(db_conn, "跨篇改", read_only=True)
+    assert any("已拦截写操作 bulk_replace_text" in s["summary"] for s in result["steps"])
+    assert agent_service.repo.get_note(db_conn, note["id"])["content"] == "原文。"
+
+
+def test_writing_activity_tool(db_conn):
+    """按创建日期聚合篇数与字数；给出最忙的一天。"""
+    from datetime import date, timedelta
+    # 用未来日期做数据桶：其它用例都在「今天」建笔记，只有这个桶是我们独占的
+    day_a = (date.today() + timedelta(days=3)).isoformat()   # 两篇
+    day_b = (date.today() + timedelta(days=1)).isoformat()   # 一篇
+    agent_service.repo.create_note(db_conn, title="桶A的 1", content="五字五字五字五字五字",
+                                   created_at=f"{day_a} 10:00:00")
+    agent_service.repo.create_note(db_conn, title="桶A的 2", content="三字三字三字",
+                                   created_at=f"{day_a} 18:00:00")
+    agent_service.repo.create_note(db_conn, title="桶B", content="一笔",
+                                   created_at=f"{day_b} 09:00:00")
+    out = _tools(db_conn)["writing_activity"]["run"]({"days": 30})
+    by_date = {x["date"]: x for x in out["series"]}
+    assert by_date[day_a]["notes"] == 2 and by_date[day_a]["words"] >= 16
+    assert by_date[day_b]["notes"] == 1
+    # 共享库里别的用例可能把「今天」堆得更高：只断言 max 逻辑不小于我们已知的数据桶
+    assert out["busiest_day"]["notes"] >= by_date[day_a]["notes"]
+    assert out["most_words_day"]["words"] >= by_date[day_a]["words"]
+
+
+def test_steps_carry_duration(db_conn, monkeypatch):
+    """每一步（含执行历史落库）都带 duration_ms，且总步数预算提到 20。"""
+    assert agent_service.MAX_STEPS == 20
+    note = agent_service.repo.create_note(db_conn, title="计时", content="x")
+    chat = ScriptedChat([
+        json.dumps({"action": "read_note", "params": {"note_id": note["id"]}},
+                   ensure_ascii=False),
+        json.dumps({"action": "final", "answer": "读完。"}, ensure_ascii=False),
+    ])
+    monkeypatch.setattr(agent_service.ai, "is_enabled", lambda: True)
+    monkeypatch.setattr(agent_service.ai, "chat", chat)
+    result = agent_service.run_agent(db_conn, "读一下")
+    assert result["steps"]
+    for step in result["steps"]:
+        assert isinstance(step["duration_ms"], int) and step["duration_ms"] >= 0
+    # 执行历史（审计落库）也保留每步耗时
+    runs = agent_service.list_runs(db_conn, limit=1)
+    assert runs and all("duration_ms" in s for s in runs[0]["steps"])

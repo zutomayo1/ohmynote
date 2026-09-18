@@ -29,7 +29,7 @@ from . import ai
 
 logger = logging.getLogger("inknote.agent")
 
-MAX_STEPS = 16               # 单次任务最多几步（原来 6：读一篇 + 写回就撞墙）
+MAX_STEPS = 20               # 单次任务最多几步（原来 6 → 16 → 20：整理类任务常在十几步）
 READ_WINDOW = 8000           # read_note 一次给模型看多少字（绝大多数笔记一次读完）
 READ_WINDOW_MAX = 30000      # read_note 单次上限（长笔记可以显式要更多）
 OBSERVE_LIMIT = 1200         # 一般工具结果给模型看多少字符
@@ -92,7 +92,7 @@ def request_cancel(run_id: str) -> bool:
 _WRITE_TOOLS = frozenset({
     "create_note", "update_note", "add_tags", "remove_tags", "set_category",
     "publish_note", "archive_note", "trash_note", "restore_note", "pin_note", "star_note",
-    "bulk_add_tags", "bulk_remove_tags", "bulk_set_category", "append_note",
+    "bulk_add_tags", "bulk_remove_tags", "bulk_set_category", "bulk_replace_text", "append_note",
     "replace_in_note", "prepend_note", "rewrite_section",
     "restore_version", "merge_notes",
 })
@@ -100,7 +100,7 @@ _WRITE_TOOLS = frozenset({
 # 这些写操作不可逆或影响面大，机制层强制「先确认再执行」：
 # 模型调用只会生成一张确认卡片（meta: agent.pending），用户在页面点「确认执行」
 # 才真正落地（execute_pending，绕过模型）——提示词约束之外的最后一道闸
-_CONFIRM_TOOLS = frozenset({"trash_note", "publish_note", "merge_notes"})
+_CONFIRM_TOOLS = frozenset({"trash_note", "publish_note", "merge_notes", "bulk_replace_text"})
 # 确认卡片的文案按动作生成：会发生什么、怎么后悔（不再写死回收站一套话）
 _CONFIRM_META = {
     "trash_note": {
@@ -122,6 +122,10 @@ _CONFIRM_META = {
     "rewrite_section": {
         "label": "重写小节",
         "consequence": "将重写该小节的内容（标题行保留、其余小节不动，原文存版本历史）",
+    },
+    "bulk_replace_text": {
+        "label": "跨篇替换正文",
+        "consequence": "将把所选笔记正文里的匹配片段全部替换为新内容（逐篇存版本历史）",
     },
 }
 PENDING_TTL_SECONDS = 600      # 确认卡片有效期：10 分钟没用就作废
@@ -211,6 +215,10 @@ SYSTEM_PROMPT = """你是墨痕笔记应用里的笔记助手 Agent。用户用�
   开头插入用 prepend_note、「加一段」用 append_note、重写某一节用 rewrite_section；
   只有结构大调才用 update_note 整篇重写（整篇重写可能触发确认卡片）。
   整理重复笔记：find_similar 找相似 → read_note 确认 → merge_notes 合并。
+- **批量与统计**：跨多篇替换正文用 bulk_replace_text（影响面大，总会先生成确认卡片，不要重复调用）；
+  「最近哪天写得最多 / 我的写作节奏」这类问题用 writing_activity。
+- **收尾汇报**：answer 里说清做了什么、动过哪几篇（带标题）；一次动了多篇时逐篇说明结果，
+  有跳过或没改动的也说明原因。
 - **危险操作**：移入回收站、发布到博客、合并笔记（以及超大范围的改写/批量操作）会先生成
   确认卡片并结束本轮任务，不会直接执行——不要重复调用，等用户在页面上确认。
 - **信息不够就反问**：任务含糊到无法安全执行（比如"改一下那篇笔记"但搜不到明确目标），
@@ -716,6 +724,68 @@ def _make_tools(conn: sqlite3.Connection) -> dict[str, dict[str, Any]]:
                 "hint": "按相似度从高到低；确认内容重复后可用 merge_notes 合并（会生成确认卡片）。"
                         "engine=keyword 表示未配置向量模型，按共同标签/分类/互链打分。"}
 
+    def bulk_replace_text(params: dict) -> dict:
+        """跨多篇查找替换正文（逐字匹配，每篇全替换）。影响面大，机制层总是先确认再执行。"""
+        ids = params.get("note_ids")
+        if not isinstance(ids, list):
+            return {"error": "note_ids 必须是 id 列表（先用 search_notes 找到它们）"}
+        note_ids: list[int] = []
+        for raw in ids[:50]:
+            value = _as_int(raw)
+            if value > 0:
+                note_ids.append(value)
+        note_ids = list(dict.fromkeys(note_ids))[:50]
+        if not note_ids:
+            return {"error": "note_ids 里没有合法的笔记 id"}
+        find = str(params.get("find") or "")
+        replace_with = str(params.get("replace_with") or "")
+        if not find:
+            return {"error": "find 不能为空（要与正文逐字一致，包括空格与换行）"}
+        if find == replace_with:
+            return {"error": "find 与 replace_with 相同，没有要替换的"}
+        results: list[dict[str, Any]] = []
+        total = 0
+        for note_id in note_ids:
+            note = repo.get_note(conn, note_id)
+            if note is None:
+                results.append({"note_id": note_id, "missing": True})
+                continue
+            old = str(note.get("content") or "")
+            n = old.count(find)
+            if n == 0:
+                results.append({"note_id": note_id, "title": note.get("title"), "replaced": 0})
+                continue
+            new = old.replace(find, replace_with)
+            repo.update_note(conn, note_id, content=new, reason="agent")
+            total += n
+            results.append({"note_id": note_id, "title": note.get("title"), "replaced": n})
+        return {"replaced_total": total,
+                "notes_changed": len([r for r in results if r.get("replaced")]),
+                "notes_skipped": len([r for r in results if not r.get("replaced")]),
+                "results": results,
+                "note": "每篇替换前的正文都存了版本历史；replaced=0 表示这篇里没有该片段"}
+
+    def writing_activity(params: dict) -> dict:
+        """最近的写作节奏：每天新建几篇、各多少字（回答「最近哪天写得最多」这类问题）。"""
+        days = min(max(_opt_int(params.get("days"), 30), 1), 371)
+        import datetime as _dt
+        since = (_dt.date.today() - _dt.timedelta(days=days - 1)).isoformat()
+        counts = repo.daily_note_counts(conn, days=days)
+        words: dict[str, int] = {}
+        for note in repo.all_notes(conn, sort="updated"):
+            d = str(note.get("created_at") or "")[:10]
+            if d >= since:
+                words[d] = words.get(d, 0) + int(note.get("word_count") or 0)
+        series = [{"date": d, "notes": counts.get(d, 0), "words": words.get(d, 0)}
+                  for d in sorted(set(counts) | set(words)) if d >= since]
+        best_notes = max(series, key=lambda x: (x["notes"], x["words"])) if series else None
+        best_words = max(series, key=lambda x: x["words"]) if series else None
+        return {"days": days, "series": series[-60:],
+                "total_notes": sum(x["notes"] for x in series),
+                "total_words": sum(x["words"] for x in series),
+                "busiest_day": best_notes, "most_words_day": best_words,
+                "hint": "notes=当天新建篇数、words=当天新建笔记的字数（按创建日期算，不含回收站）。"}
+
     def list_trash(params: dict) -> dict:
         limit = min(max(_opt_int(params.get("limit"), 10), 1), 30)
         notes, total = repo.list_notes(conn, page=1, per_page=limit, include_deleted=True)
@@ -974,6 +1044,22 @@ def _make_tools(conn: sqlite3.Connection) -> dict[str, dict[str, Any]]:
                            "确认重复后配合 merge_notes 合并",
             "params": {"note_id": "必填", "limit": "可选，默认 6，最多 10"},
             "run": find_similar,
+        },
+        "bulk_replace_text": {
+            "description": "跨多篇笔记查找替换正文（逐字匹配，每篇全替换）。影响面大：总会先生成确认卡片，"
+                           "用户在页面上确认后才真正执行",
+            "params": {
+                "note_ids": "必填，id 列表（先用 search_notes 找到）",
+                "find": "要找的原文（逐字一致）",
+                "replace_with": "替换成什么（留空 = 删除该片段）",
+            },
+            "run": bulk_replace_text,
+        },
+        "writing_activity": {
+            "description": "最近 N 天的写作节奏：每天新建几篇、各多少字，并直接给出最忙的一天",
+            "params": {"days": "可选，默认 30，最多 371"},
+            "run": writing_activity,
+            "observe_limit": 3000,
         },
         "list_trash": {
             "description": "列出回收站里的笔记（含剩余可恢复天数）",
@@ -1275,7 +1361,8 @@ def _record_run(
             "dry_run": bool(dry_run),
             "cancelled": bool(cancelled),
             "duration_ms": int(duration_ms or 0),
-            "steps": [{"tool": s.get("tool"), "summary": s.get("summary")} for s in steps][:MAX_STEPS],
+            "steps": [{"tool": s.get("tool"), "summary": s.get("summary"),
+                       "duration_ms": s.get("duration_ms")} for s in steps][:MAX_STEPS],
             "notes": [{"id": n.get("id"), "title": n.get("title")}
                       for n in _notes_list(involved or {})],
         })
@@ -1672,7 +1759,9 @@ def iter_agent_events(
                 if cancel_event.is_set():
                     stop_round = True
                     break
+                step_started = time.perf_counter()
                 observation, summary, confirm_info = _execute_one(sub_action, sub_params)
+                step_ms = int((time.perf_counter() - step_started) * 1000)
                 if isinstance(observation, dict):
                     _collect(observation.get("note_id"), observation.get("title"))
                     _collect(observation.get("id"), observation.get("title"))
@@ -1681,11 +1770,13 @@ def iter_agent_events(
                             _collect(item.get("id"), item.get("title"))
                     if observation.get("merged"):
                         _collect(observation.get("target_id"), observation.get("target_title"))
-                step = {"tool": sub_action, "summary": summary, "params": sub_params}
+                step = {"tool": sub_action, "summary": summary, "params": sub_params,
+                        "duration_ms": step_ms}
                 steps.append(step)
                 # 先把这一步推给前端，再准备下一轮——这就是「流式」的核心
                 event: dict[str, Any] = {"type": "step", "tool": sub_action, "summary": summary,
-                                         "params": sub_params, "notes": _notes_list(involved),
+                                         "params": sub_params, "duration_ms": step_ms,
+                                         "notes": _notes_list(involved),
                                          "run_id": run_id}
                 if confirm_info:
                     event["confirm"] = confirm_info

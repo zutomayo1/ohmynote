@@ -289,7 +289,10 @@
       li.className = 'agent-steps__item';
       var head = document.createElement('span');
       head.className = 'agent-steps__tool';
-      head.textContent = (index + 1) + '. ' + (item.summary || item.tool || '');
+      var dur = (typeof item.duration_ms === 'number' && item.duration_ms >= 0)
+        ? ' · ' + (item.duration_ms / 1000).toFixed(item.duration_ms < 9950 ? 1 : 0) + 's'
+        : '';
+      head.textContent = (index + 1) + '. ' + (item.summary || item.tool || '') + dur;
       li.appendChild(head);
       if (item.tool) {
         var detail = document.createElement('code');
