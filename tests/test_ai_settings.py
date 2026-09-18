@@ -108,15 +108,16 @@ def test_settings_page_renders_presets_and_sections(auth_client):
     page = auth_client.get("/settings")
     assert page.status_code == 200
 
-    # 预设：免费/常用的三个平铺，其余收进「更多服务商」折叠块
+    # 预设：全部服务商平铺成紧凑卡片（2026-09-18 起不再分「更多服务商」折叠）
     for name in ("硅基流动", "智谱 GLM", "本地 Ollama", "DeepSeek", "OpenAI", "通义千问"):
         assert name in page.text
     assert 'data-base-url="https://api.deepseek.com/v1"' in page.text
     assert 'data-model="deepseek-chat"' in page.text
-    assert "去 DeepSeek 拿 Key" in page.text
+    assert 'title="去 DeepSeek 官网获取密钥"' in page.text
+    assert "Key ↗" in page.text
     assert 'data-embed-model="BAAI/bge-m3"' in page.text  # 硅基流动免费向量
-    assert "更多服务商（DeepSeek / OpenAI / 通义千问）" in page.text
-    assert 'class="ai-presets-more"' in page.text
+    assert 'class="ai-presets ai-presets--compact"' in page.text
+    assert "ai-presets-more" not in page.text
     assert page.text.count('badge badge--saved') >= 3  # 免费 / 对话免费 / 离线免费
 
     # 模型选择：自绘下拉面板（不再用 <datalist>，那控件点一下不弹、只做前缀匹配）

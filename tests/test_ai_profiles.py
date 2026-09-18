@@ -175,13 +175,18 @@ def _csrf(client) -> str:
 
 
 def test_profile_endpoints_need_auth(client):
-    """HTML 路由未登录是 303 去登录页（TestClient 默认跟随重定向，这里关掉看真实状态码）。"""
-    assert client.post("/settings/ai/profiles/save", json={"name": "x"},
-                       follow_redirects=False).status_code == 303
-    assert client.post("/settings/ai/profiles/apply", json={"name": "x"},
-                       follow_redirects=False).status_code == 303
-    assert client.post("/settings/ai/profiles/delete", json={"name": "x"},
-                       follow_redirects=False).status_code == 303
+    """HTML 路由未登录是 303 去登录页。
+
+    注意：client 是 session 级 fixture，可能被其它用例的 auth_client 登录过——
+    必须造一个全新实例（干净 cookie）才能测「未登录」；已登录但缺 CSRF 是 403。
+    """
+    fresh = client.__class__(client.app)
+    assert fresh.post("/settings/ai/profiles/save", json={"name": "x"},
+                      follow_redirects=False).status_code == 303
+    assert fresh.post("/settings/ai/profiles/apply", json={"name": "x"},
+                      follow_redirects=False).status_code == 303
+    assert fresh.post("/settings/ai/profiles/delete", json={"name": "x"},
+                      follow_redirects=False).status_code == 303
 
 
 def test_profile_flow_over_http(auth_client, conn):
