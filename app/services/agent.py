@@ -1181,9 +1181,9 @@ def iter_agent_events(
         messages.append({"role": "system", "content": recap})
     plan_text = str(confirmed_plan or "").strip()[:PLAN_MAX_CHARS]
     if plan_text:
-        # 两段式任务流的后半段：用户在干跑里审阅过这份计划，这里严格照做
+        # 两段式任务流的后半段：用户在计划里审阅过这份计划，这里严格照做
         messages.append({"role": "system", "content":
-            "用户已在干跑中审阅并确认了以下计划，请严格按计划执行：可以微调参数，"
+            "用户已在计划中审阅并确认了以下计划，请严格按计划执行：可以微调参数，"
             "不要扩大范围、不要添加计划之外的大动作。\n" + plan_text})
     messages.extend(_clean_history(history))
     messages.append({"role": "user", "content": task})
@@ -1243,15 +1243,15 @@ def iter_agent_events(
             }
             summary = f"跳过重复的 {action} 调用"
         elif dry_run:
-            # 干跑：所有工具都只「说要做什么」，不真正执行。模型会拿到固定的规划提示，
+            # 计划：所有工具都只「说要做什么」，不真正执行。模型会拿到固定的规划提示，
             # 想清楚全部步骤后用 final 输出「将要做的事」清单 —— 适合先审后放。
             repeat_streak = 0
             observation = {
                 "dry_run": True,
-                "note": "干跑模式：本工具没有被真正调用。请继续规划后续步骤；"
+                "note": "计划模式：本工具没有被真正调用。请继续规划后续步骤；"
                         "全部想清楚后用 final 输出「将要做的事」清单（不要声称已执行）。",
             }
-            summary = f"（干跑）将执行 {action}"
+            summary = f"（计划）将执行 {action}"
             seen_calls.add(signature)
         elif read_only and action in _WRITE_TOOLS:
             repeat_streak = 0

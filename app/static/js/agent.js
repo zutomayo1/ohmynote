@@ -141,7 +141,7 @@
         at.textContent = String(run.at || '').slice(5, 16).replace('T', ' ');
         var task = document.createElement('span');
         task.className = 'agent-runs__head';
-        var modeLabel = run.dry_run ? '[干跑] ' : (run.read_only ? '[只读] ' : '');
+        var modeLabel = run.dry_run ? '[计划] ' : (run.read_only ? '[只读] ' : '');
         task.textContent = modeLabel + run.task;
         var mark = document.createElement('span');
         mark.className = 'agent-runs__mark';
@@ -210,7 +210,7 @@
       statusEl.className = 'ai-status' + (kind ? ' ai-status--' + kind : '');
     }
 
-    // ===== 执行模式切换（读写 / 只读 / 干跑） =====
+    // ===== 执行模式切换（读写 / 只读 / 计划） =====
     var MODE_KEY = HISTORY_KEY + '.mode';
     var modeBox = document.getElementById('agent-mode');
     var currentMode = 'rw';
@@ -412,7 +412,7 @@
       runTask(task, null);
     });
 
-    // ===== 两段式任务流：干跑产出的计划审阅后可以一键真正执行 =====
+    // ===== 两段式任务流：计划产出的计划审阅后可以一键真正执行 =====
     var lastPlan = '';
     var lastPlanTask = '';
     var planBar = null;

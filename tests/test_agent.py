@@ -651,13 +651,13 @@ def test_agent_history_section_is_collapsible(auth_client):
 
 
 # ---------------------------------------------------------------------------
-# 执行模式（读写 / 只读 / 干跑）与历史任务单条删除
+# 执行模式（读写 / 只读 / 计划）与历史任务单条删除
 # ---------------------------------------------------------------------------
 def test_agent_dry_run_does_not_execute_tools(db_conn, seeded_note, monkeypatch):
-    """干跑模式：工具只「说要做什么」，绝不真正执行；结束时给规划清单。"""
+    """计划模式：工具只「说要做什么」，绝不真正执行；结束时给规划清单。"""
     script = ScriptedChat([
         json.dumps({"action": "update_note",
-                    "params": {"note_id": seeded_note, "content": "被干跑改掉的内容"}},
+                    "params": {"note_id": seeded_note, "content": "被计划改掉的内容"}},
                    ensure_ascii=False),
         json.dumps({"action": "final", "answer": "将要做：更新这篇笔记的正文"}, ensure_ascii=False),
     ])
@@ -668,12 +668,12 @@ def test_agent_dry_run_does_not_execute_tools(db_conn, seeded_note, monkeypatch)
     assert result["ok"] is True
     assert "将要做" in result["answer"]
     # 工具没有被真正执行：正文原封不动
-    assert agent_service.repo.get_note(db_conn, seeded_note)["content"] != "被干跑改掉的内容"
-    assert any("（干跑）" in step["summary"] for step in result["steps"])
+    assert agent_service.repo.get_note(db_conn, seeded_note)["content"] != "被计划改掉的内容"
+    assert any("（计划）" in step["summary"] for step in result["steps"])
 
 
 def test_agent_read_only_still_blocks_writes(db_conn, seeded_note, monkeypatch):
-    """只读模式照旧：写操作被拦（回归，防止干跑分支挡在它前面）。"""
+    """只读模式照旧：写操作被拦（回归，防止计划分支挡在它前面）。"""
     script = ScriptedChat([
         json.dumps({"action": "update_note",
                     "params": {"note_id": seeded_note, "content": "只读下不该写入"}},
