@@ -139,11 +139,15 @@ def test_describe_reflects_last_run_and_result(db_conn, monkeypatch):
     assert info["last_result"]["at"] == info["last_run"]
 
 
-def test_settings_page_shows_tidy_block(auth_client):
-    """设置页渲染包含「夜间整理」标题。"""
+def test_settings_page_no_longer_renders_tidy_block(auth_client):
+    """设置页不再显示「夜间整理」块（2026-09-18 整理）。
+
+    那一块是纯只读状态：开关在 .env 的 INKNOTE_TIDY 里，页面上改不了任何东西，
+    却占一个折叠块。自动化本身没动——状态与执行结果仍由本文件其余测试覆盖。
+    """
     response = auth_client.get("/settings")
     assert response.status_code == 200
-    assert "夜间整理" in response.text
+    assert "夜间整理" not in response.text
 
 
 def test_describe_tolerates_corrupt_last_result(db_conn):

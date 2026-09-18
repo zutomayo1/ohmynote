@@ -135,7 +135,8 @@ def test_settings_page_renders_presets_and_sections(auth_client):
     assert 'name="model_summary"' in page.text
     assert 'name="model_tags"' in page.text
     assert 'name="model_answer"' in page.text
-    assert "实际生效" in page.text
+    # 2026-09-18：三行重复的「实际生效：xxx」压成一行（都在跟随通用模型时是同一句话）
+    assert "留空则用通用模型" in page.text
 
     # 两个开关 + 向量模型
     assert 'name="local_only"' in page.text
@@ -205,8 +206,10 @@ def test_task_model_falls_back_to_general_model(auth_client, csrf, fake_ai):
     described = ai.describe()
     assert described["tasks"] == {"summary": "only-model", "tags": "only-model", "answer": "only-model"}
     page = auth_client.get("/settings")
-    # 三个任务的「实际生效」都显示通用模型
-    assert page.text.count("only-model") >= 4
+    # 分任务模型区的说明里点名了通用模型（三个任务留空都跟随它）
+    marker = page.text.find("留空则用通用模型")
+    assert marker != -1, "分任务模型区没有「留空则用通用模型」的说明"
+    assert "only-model" in page.text[marker:marker + 160], "说明里没给出实际生效的模型名"
 
 
 def test_blank_api_key_keeps_saved_key(auth_client, csrf, fake_ai):
@@ -410,11 +413,15 @@ def test_usage_summary_page_and_reset(auth_client, csrf, fake_ai):
     assert "摘要" in page.text
     assert "ai-chart__bar" in page.text
     assert "最近 30 天" in page.text
-    # 详情：概览四卡 / 质量 / 明细 / 交叉 / 时间规律 / 月度趋势 / 导出
+    # 完整版（2026-09-18 复评后恢复）：10 个小节都在
     for needle in ("今日", "本周", "本月", "累计", "本月质量", "平均耗时",
-                   "最近 20 次调用", "模型 × 任务", "时间规律", "近 6 个月",
-                   "导出 CSV 明细"):
+                   "按模型拆分", "按任务拆分", "最近 30 天（按天）", "导出 CSV 明细",
+                   "最近 20 次调用", "模型 × 任务", "时间规律",
+                   "近 6 个月", "近 14 天明细"):
         assert needle in page.text, f"用量统计里应该有「{needle}」"
+    # 「最近的失败」只在真有失败记录时才渲染（这个用例的调用全是成功的）
+    # 其中 8 个收进 3 个折叠子块：内容全在，只是不一路铺到底
+    assert page.text.count("settings-sub__summary") == 3
 
     # 重置按钮：清空后页面回到「还没有调用记录」
     reset = auth_client.post(

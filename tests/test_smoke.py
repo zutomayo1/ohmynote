@@ -858,8 +858,25 @@ def test_settings_page_renders(auth_client):
     response = auth_client.get("/settings")
     assert response.status_code == 200
     assert "AI 服务" in response.text
-    assert "常见服务商怎么填" in response.text
+    assert "站点信息" in response.text
+    # 2026-09-18 整理：17 家服务商速查表删了（下拉已能一键填地址/模型并给 Key 链接），
+    # 外观从「站点信息」里拆成独立块
+    assert "常见服务商怎么填" not in response.text
+    assert "其它选项（仍在" not in response.text
+    assert "外观" in response.text
     assert "未启用" in response.text or "已启用" in response.text
+
+
+def test_settings_page_stays_lean(auth_client):
+    """设置页块数守卫：整理过一轮，别又一块块堆回去（2026-09-18 从 13 块降到 11/12 块）。
+
+    那天删了「常见服务商怎么填」（下拉已能一键填）、「其它选项（.env）」，
+    并把「外观」从「站点信息」里拆出来——所以块数不是越少越好，但要有个上限。
+    """
+    page = auth_client.get("/settings")
+    titles = re.findall(r'settings-block__title[^>]*>([^<]+)<', page.text)
+    assert len(titles) <= 12, f"设置页又膨胀到 {len(titles)} 块：{titles}"
+    assert "站点信息" in titles and "外观" in titles, titles
 
 
 def test_settings_page_needs_login(client):

@@ -2257,12 +2257,6 @@ img { border-radius: var(--radius-sm); }
 
 .settings-block--primary > .settings-block__body { padding-bottom: 22px; }
 
-/* ---------- 服务商速查表 ---------- */
-
-.settings-ref { margin-top: 12px; }
-
-.settings-ref table { width: 100%; }
-
 /* ---------- 窄屏：摘要换行，别把状态挤没 ---------- */
 
 @media (max-width: 720px) {
@@ -2753,10 +2747,6 @@ a.archive-month__label:hover { color: var(--brand); }
   background: var(--warn-soft); color: var(--ink); font-weight: 600; }
 
 .ai-status--error { color: var(--danger); }
-
-.ai-effective { display: block; margin-top: 2px; color: var(--ink-3); font-family: var(--font-sans); font-size: 12.5px; }
-
-.ai-effective code { color: var(--ink-2); }
 
 /* 带说明的开关（local_only / redact） */
 
@@ -5924,6 +5914,7 @@ body.split-dragging .editor__textarea { pointer-events: none; }
     transform-origin: left;
     animation: chart-grow-x .5s cubic-bezier(.22, .68, .36, 1) both;
     animation-delay: calc(var(--i, 0) * 55ms); }
+
 }
 
 /* ---------- 窄屏：柱顶数值太挤就只留给悬停 ---------- */
@@ -8379,3 +8370,25 @@ html:not(.js) .svg-view__actions { display: none; }
    面板跟着铺满就成了「一条超长菜单 + 右边 1000px 空白」,滚动条也离文字老远。
    菜单本来就该比触发器窄,这里只封顶不放宽（筛选栏那类窄触发器完全不受影响）。 */
 .select-combo__panel { max-width: 480px; }
+
+/* ===== 补丁：用量统计的折叠子块（2026-09-18） =====
+   用量统计内容恢复完整（10 个小节），但只让主图（最近 30 天）常显；其余 8 个
+   收进三个子折叠块，展开才看——完整和整洁不冲突。
+   子块里的小标题按「次级标题」排，不用页面级的 22px 衬线大字。 */
+.settings-sub {
+  margin: 16px 0 0;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+}
+.settings-sub__summary {
+  display: flex; align-items: center; gap: 7px; list-style: none;
+  padding: 3px 0; color: var(--ink-2); cursor: pointer;
+  font-family: var(--font-sans); font-size: 13.5px; font-weight: 600; }
+.settings-sub__summary::-webkit-details-marker { display: none; }
+.settings-sub__summary::before { content: '▸'; color: var(--ink-3); font-size: 11px; }
+.settings-sub[open] > .settings-sub__summary { color: var(--brand); }
+.settings-sub[open] > .settings-sub__summary::before { transform: rotate(90deg); }
+.settings-sub__body { padding: 2px 0 4px 14px; }
+.settings-sub__body .section-title {
+  margin: 16px 0 8px; padding-bottom: 0; border-bottom: 0;
+  color: var(--ink-2); font-family: var(--font-sans); font-size: 13px; font-weight: 600; }
