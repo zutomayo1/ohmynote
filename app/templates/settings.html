@@ -76,14 +76,13 @@
   <summary class="settings-block__summary">
     <span class="settings-block__chevron" aria-hidden="true">▸</span>
     <span class="settings-block__title">我的预设</span>
-    <span class="settings-block__note">存下整套「地址 + 密钥 + 模型」，换服务商一键切换，不用再抄密钥</span>
+    <span class="settings-block__note">换服务商一键切换，不用再抄密钥</span>
     <span class="settings-block__state">
       {% if ai_profiles %}<span class="badge badge--saved">{{ ai_profiles | length }} 份</span>{% else %}<span class="badge badge--draft">还没有</span>{% endif %}
     </span>
   </summary>
   <div class="settings-block__body">
     <div class="ai-section-head">
-      <p class="micro">先把下面「AI 服务」配好并保存，再回到这里点「存当前配置」存成预设。</p>
       <form class="ai-profile-save" method="post" action="/settings/ai/profiles/save">
         <input type="hidden" name="_csrf" value="{{ csrf }}">
         <input class="input" type="text" name="name" maxlength="40" required
@@ -114,7 +113,7 @@
         {% endfor %}
       </div>
     {% else %}
-      <p class="micro">还没有预设。配好一家并保存后，点右上角「存当前配置」；以后换服务商点「启用」就行。</p>
+      <p class="micro">还没有预设。配好 AI 服务后点右上角「存当前配置」。</p>
     {% endif %}
   </div>
 </details>
@@ -131,21 +130,12 @@
     <summary class="settings-block__summary">
       <span class="settings-block__chevron" aria-hidden="true">▸</span>
       <span class="settings-block__title">AI 服务</span>
-      <span class="settings-block__note">填地址和模型名就能用；本地模型通常不用密钥</span>
+      <span class="settings-block__note">填地址和模型名即可；本地模型不用密钥</span>
       <span class="settings-block__state">
         {% if ai.enabled %}<span class="badge badge--saved">已启用</span>{% else %}<span class="badge badge--draft">未启用</span>{% endif %}
       </span>
     </summary>
     <div class="settings-block__body">
-      <p class="ai-statusline">
-        {% if ai.enabled %}
-          <span class="badge badge--saved">已启用</span>
-          <span class="ai-statusline__text"><code>{{ ai.model }}</code> · {{ ai.base_url }}{% if ai.has_key %} · 密钥 {{ ai.key_mask }}{% endif %}</span>
-        {% else %}
-          <span class="badge badge--draft">未启用</span>
-          <span class="ai-statusline__text">按下面 1 → 2 填好，点底部「保存配置」即可；常用配置可以在上面的「我的预设」里存下来一键切换。</span>
-        {% endif %}
-      </p>
 
       {# 「我的预设」不在这里——HTML 不允许嵌套 form，它在外层表单之外单独立块。
           这个折叠块里只剩「填表 → 保存」的字段，保持单一表单结构。 #}
@@ -171,7 +161,7 @@
       {%- endmacro %}
       <div class="ai-section-head">
         <h3 class="section-title">1 · 连接配置</h3>
-        <p class="micro">① 点卡片自动填地址和模型 · ② 粘贴密钥 → 点底部「保存配置」生效</p>
+        <p class="micro">点卡片自动填地址和模型；密钥需自备。</p>
       </div>
       <div class="ai-presets ai-presets--compact" role="group" aria-label="服务商快捷填充">
         {% for p in ai.providers %}{{ preset_card(p) }}{% endfor %}
@@ -181,7 +171,7 @@
           <span class="field__label">Base URL {{ src('base_url') }}</span>
           <input class="input" type="text" name="base_url" id="ai-base-url" value="{{ ai.base_url }}"
                  placeholder="例如 https://api.deepseek.com/v1" autocomplete="off" spellcheck="false">
-          <span class="micro">填到 <code>/v1</code> 为止即可，程序会自己接 <code>/chat/completions</code></span>
+          <span class="micro">填到 <code>/v1</code> 为止即可</span>
         </label>
 
         <label class="field field--wide">
@@ -189,7 +179,7 @@
           <input class="input" type="password" name="api_key" id="ai-api-key" value=""
                  placeholder="{{ ('已保存：' ~ ai.key_mask ~ '，留空表示不修改') if ai.has_key else '本地模型可以留空' }}"
                  autocomplete="new-password" spellcheck="false">
-          <span class="micro">只存在你自己电脑的数据库里（明文，和放在 .env 一样）；页面上不会回显完整密钥</span>
+          <span class="micro">只存本机数据库，页面不回显完整密钥</span>
         </label>
 
         <div class="field field--wide">
@@ -224,7 +214,7 @@
       <span class="settings-block__note">{{ task_note() }}</span>
     </summary>
     <div class="settings-block__body">
-      <p class="micro">想让便宜模型干简单的活？可以给每个任务单独指定；留空就回退到上面的通用模型。</p>
+      <p class="micro">留空则跟随通用模型。</p>
       <div class="field-grid">
         <div class="field">
           <label class="field__label" for="ai-model-summary">摘要用模型 {{ src('model_summary') }}</label>
@@ -324,7 +314,7 @@
           <button class="combo__toggle" type="button" aria-label="展开可选模型列表" tabindex="-1">▾</button>
           <div class="combo__panel" role="listbox" hidden></div>
         </span>
-        <span class="micro">给「问笔记」做语义检索用；留空就退回关键词检索</span>
+        <span class="micro">留空则退回关键词检索</span>
       </div>
       <div class="ai-embed" id="ai-embed"
            data-status-url="/api/ai/embed/status"
@@ -337,7 +327,7 @@
           <div class="ai-progress__bar" id="ai-embed-progress-bar"></div>
         </div>
         <p class="ai-embed__hint micro" id="ai-embed-hint">
-          这个区块需要 JavaScript 才能显示进度；直接访问 <a href="/api/ai/embed/status">/api/ai/embed/status</a> 也能看到原始状态。
+          需要 JavaScript 显示进度；原始状态见 <a href="/api/ai/embed/status">/api/ai/embed/status</a>。
         </p>
       </div>
     </div>
@@ -352,8 +342,7 @@
     </button>
   </div>
   <p class="micro">
-    「测试连接」会逐步体检地址、密钥、模型名，<strong>不会保存</strong>；「保存配置」才会写进去并立即生效。
-    没开 JavaScript 时「测试连接」会走普通表单提交，结果以顶部提示条展示。
+    「测试连接」只体检不保存；「保存配置」才生效。
   </p>
 
   <div class="ai-probe" id="ai-probe-result" hidden aria-live="polite"></div>
@@ -371,7 +360,7 @@
       <span class="settings-block__note">{% for task, info in prompts.items() %}{{ info.label }}{{ ' / ' if not loop.last }}{% endfor %} · 已自定义 {{ prompt_custom_count }} 项</span>
     </summary>
     <div class="settings-block__body">
-      <p class="micro">下面是发给 AI 的「用户消息」模板，<code>{...}</code> 是会被替换的占位符；留空表示不改这一项，点「恢复默认」清除全部自定义。占位符写错或缺了会自动回退内置默认。</p>
+      <p class="micro">发给 AI 的用户消息模板；<code>{...}</code> 是占位符，留空表示不改这一项。</p>
       <div class="ai-prompts">
         {% for task, info in prompts.items() %}
           <div class="ai-prompt">
@@ -482,7 +471,6 @@
       </div>
     </div>
     {% if not usage.quality.avg_latency_ms %}
-      <p class="micro muted">耗时是从这次升级之后才开始记的，之前的调用没有这一项。</p>
     {% endif %}
 
     {# ---------- 最近 20 次调用：最直接的「明细」 ---------- #}
@@ -788,12 +776,12 @@
       </span>
     </summary>
     <div class="settings-block__body">
-      <p class="micro">保存后立即生效（不用重启）；本页保存的值优先于 <code>.env</code>，想回到 <code>.env</code> 点下面的「恢复 .env 默认值」。</p>
+      <p class="micro">保存后立即生效；本页优先于 <code>.env</code>。</p>
       <div class="field-grid">
         <label class="field field--wide">
           <span class="field__label">站点名 {{ src_of(site.sources.get('site_title')) }}</span>
           <input class="input" type="text" name="site_title" value="{{ site_form_values.get('site_title', '') }}" maxlength="60" required>
-          <span class="micro">最多 60 个字，显示在浏览器标题、页头与页脚</span>
+          <span class="micro">最多 60 个字</span>
         </label>
 
         <label class="field">
@@ -810,13 +798,13 @@
         <label class="field field--wide">
           <span class="field__label">站点描述 {{ src_of(site.sources.get('site_description')) }}</span>
           <textarea class="textarea" name="site_description" rows="2">{{ site_form_values.get('site_description', '') }}</textarea>
-          <span class="micro">用于首页与文章页的 <code>meta description</code></span>
+          <span class="micro">首页与文章页的 <code>meta description</code></span>
         </label>
 
         <label class="field field--wide">
           <span class="field__label">对外地址 {{ src_of(site.sources.get('base_url')) }}</span>
           <input class="input" type="text" name="base_url" value="{{ site_form_values.get('base_url', '') }}" placeholder="例如 https://notes.example.com" spellcheck="false">
-          <span class="micro">影响 RSS / sitemap / 分享链接里的完整网址</span>
+          <span class="micro">RSS / sitemap / 分享链接的网址</span>
         </label>
 
         <label class="field">
@@ -848,7 +836,7 @@
             <label class="appearance-swatch"><input type="radio" name="appearance_palette" value="amber"{% if cur_palette == 'amber' %} checked{% endif %}><i style="background:#B8742E"></i>琥珀</label>
             <label class="appearance-swatch"><input type="radio" name="appearance_palette" value="slate"{% if cur_palette == 'slate' %} checked{% endif %}><i style="background:#4E5D6C"></i>石墨</label>
           </div>
-          <span class="micro">改的是全站默认；你在浏览器右上角下拉里选过的会覆盖它</span>
+          <span class="micro">全站默认；个人选择会覆盖它</span>
         </fieldset>
 
         <label class="field">
@@ -857,7 +845,7 @@
             <input type="color" id="appearance-custom-picker" value="{{ site_form_values.get('appearance_custom', site.appearance_custom) or '#B5533C' }}" aria-label="自定义主题色取色器">
             <input class="input" type="text" name="appearance_custom" id="appearance-custom-text" value="{{ site_form_values.get('appearance_custom', site.appearance_custom) }}" placeholder="#B5533C，留空 = 不启用" spellcheck="false">
           </span>
-          <span class="micro">#RRGGBB；启用后生成整套配色（背景 / 文字 / 边框 / 强调色跟随，亮暗各一组），优先于外观主题，页头色板下拉暂时隐藏；取色时全站实时预览</span>
+          <span class="micro">自动生成整套配色，优先于外观主题</span>
         </label>
 
         <label class="field">
@@ -867,7 +855,7 @@
             <option value="light"{% if cur_mode == 'light' %} selected{% endif %}>默认浅色</option>
             <option value="dark"{% if cur_mode == 'dark' %} selected{% endif %}>默认深色</option>
           </select>
-          <span class="micro">访客没手动切换过时按这个来；页头的月亮按钮仍可随时切换</span>
+          <span class="micro">访客未手动切换时生效</span>
         </label>
 
         <label class="field">
@@ -877,7 +865,7 @@
             <option value="md"{% if cur_radius == 'md' %} selected{% endif %}>默认</option>
             <option value="lg"{% if cur_radius == 'lg' %} selected{% endif %}>大圆角</option>
           </select>
-          <span class="micro">卡片、按钮、输入框的整体圆角大小</span>
+          <span class="micro">全站圆角大小</span>
         </label>
 
         <label class="field">
@@ -888,7 +876,7 @@
             <option value="lg"{% if cur_prose_size == 'lg' %} selected{% endif %}>大 18.5px</option>
             <option value="xl"{% if cur_prose_size == 'xl' %} selected{% endif %}>特大 20px</option>
           </select>
-          <span class="micro">阅读页与编辑器正文的字号（选完这里就能预览）</span>
+          <span class="micro">正文与编辑器字号</span>
         </label>
 
         <label class="field">
@@ -897,13 +885,13 @@
             <option value="serif"{% if cur_prose_font == 'serif' %} selected{% endif %}>衬线（默认）</option>
             <option value="sans"{% if cur_prose_font == 'sans' %} selected{% endif %}>无衬线</option>
           </select>
-          <span class="micro">衬线适合长文阅读；无衬线更「屏幕感」。编辑器源码保持等宽</span>
+          <span class="micro">衬线适合长文，无衬线更屏幕感</span>
         </label>
 
         <div class="field field--wide settings-form__actions">
           <button class="btn btn--ghost btn--danger" type="submit" name="reset_appearance" value="1"
                   data-confirm="只恢复外观默认值（主题色 / 色板 / 明暗模式 / 圆角）？站点名、简介、每页条数等不会动。" data-confirm-ok="恢复外观">只恢复外观默认值</button>
-          <span class="micro">只清外观这一组；浏览器右上角下拉里选过的色板仍会覆盖站点默认</span>
+          <span class="micro">只清外观设置</span>
         </div>
       </div>
     </div>
@@ -931,9 +919,7 @@
     </summary>
     <div class="settings-block__body">
       <p class="micro">
-        改完<strong>立即生效</strong>，下次登录请用新密码。会话 cookie 是 HMAC 签名的、跟口令无关，
-        所以<strong>已经登录的设备不会被踢下线</strong>；想让全部设备重新登录，改 <code>.env</code> 里的
-        <code>INKNOTE_SECRET</code> 再重启服务。
+        改完立即生效。已登录的设备不会被踢下线；想让全部设备重新登录，改 <code>.env</code> 的 <code>INKNOTE_SECRET</code> 再重启。
       </p>
       <div class="field-grid">
         <label class="field field--wide">

@@ -97,7 +97,7 @@
         <button class="btn btn--primary" type="submit" id="ask-send">{{ icon('send', 15) }} 提问</button>
       </div>
     </form>
-    <p class="micro muted ask-disclaimer">回答来自你自己的笔记；AI 可能出错，重要结论请点开来源核对。</p>
+    <p class="micro muted ask-disclaimer">回答来自你的笔记；重要结论请核对来源。</p>
 
     {% if sample_questions %}
       <div class="ask-samples">
@@ -144,12 +144,12 @@
 
     <section class="rail-block">
       <h2 class="rail-block__title">{{ icon('search', 15) }} 怎么找来源</h2>
-      <p class="micro muted">每次提问都会先在你的笔记里检索：配了向量模型时优先用语义检索，不可用则回退到关键词全文检索。回答上会标出用的是哪一种。</p>
+      <p class="micro muted">回答前会先检索你的笔记：配了向量模型优先语义检索，否则关键词检索。</p>
     </section>
 
     <section class="rail-block">
       <h2 class="rail-block__title">{{ icon('lock', 15) }} 隐私</h2>
-      <p class="micro muted">问题和检索到的笔记片段会发送给你配置的 AI 服务；没有配置 AI 时只在本地检索、不联网。可在设置里开启「只允许本机模型」。</p>
+      <p class="micro muted">问题和命中片段会发给你的 AI 服务；未配置时只在本地检索。</p>
     </section>
   </aside>
 </div>

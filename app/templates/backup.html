@@ -39,10 +39,7 @@
       <a class="btn btn--primary" href="/export/zip" data-no-prerender>{{ icon('download', 16) }} 下载 zip（Markdown 打包）</a>
       <a class="btn btn--ghost" href="/export/json" data-no-prerender>{{ icon('download', 16) }} 下载 JSON（结构化）</a>
     </div>
-    <p class="micro">
-      zip 内含 <code>index.md</code>、<code>notes/</code>（每篇一个 .md）、
-      <code>notes.json</code>、<code>README.txt</code>。
-    </p>
+    <p class="micro">zip 内含每篇一个 <code>.md</code> 与 <code>index.md</code>。</p>
   </div>
 
   <div class="backup-card">
@@ -100,7 +97,7 @@
               <option value="saved">已保存</option>
               <option value="draft">草稿</option>
             </select>
-            <span class="micro">比如「已保存 + 私密」= 导入即定稿、不上博客</span>
+            <span class="micro">例：已保存 + 私密 = 定稿不上博客</span>
           </label>
           <label class="field">
             <span class="field__label">置顶</span>
@@ -230,8 +227,7 @@
           <input class="input" type="text" name="url" value="{{ remote.url }}" spellcheck="false"
                  placeholder="例如 https://dav.jianguoyun.com/dav/我的坚果云/inknote/">
           <span class="micro">
-            坚果云：根目录列的是你的同步文件夹，稳妥写法是放在「我的坚果云」下面；
-            目录不存在会自动创建（中文名会自动转码，直接粘中文即可）。
+            坚果云：建议放「我的坚果云」目录下；目录不存在会自动创建。
           </span>
         </label>
         <label class="field">
@@ -254,7 +250,7 @@
         <label class="field">
           <span class="field__label">远端保留份数</span>
           <input class="input" type="number" name="keep" min="1" max="100" value="{{ remote.keep }}">
-          <span class="micro">只清理我们自己传上去的旧副本，别的文件一律不动</span>
+          <span class="micro">只清理自己上传的旧副本。</span>
         </label>
         <label class="field field--wide">
           <span class="field__label">
@@ -262,8 +258,7 @@
             上传完整备份（含 AI 密钥、登录口令哈希、以及这里的 WebDAV 口令）
           </span>
           <span class="micro">
-            默认关闭：远端副本会先抹掉这些密钥 —— 更安全，但万一要用远端副本恢复，
-            需要重新填 AI 密钥与登录口令。
+            远端副本会抹掉这些密钥；用它恢复时需要重新填写。
           </span>
         </label>
       </div>
@@ -276,7 +271,7 @@
       </div>
     </form>
     <p class="backup-card__note micro">
-      「测试连接」只读目录、不做任何写入；「清空配置」只清本机保存的地址与口令，远端文件不动。
+      「测试连接」只读不写；「清空配置」只清本机配置。
     </p>
   </section>
 

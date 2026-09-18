@@ -8298,6 +8298,8 @@ html:not(.js) .svg-view__actions { display: none; }
 }
 .ai-presets--compact .ai-preset__note,
 .ai-presets--compact .ai-preset__key { white-space: nowrap; font-size: 12px; }
+/* 说明文字收进悬浮提示（title）：卡片只留「名字 + 标签 + Key」，别把一行塞满 */
+.ai-presets--compact .ai-preset__note { display: none; }
 
 /* ===== 补丁：UI 评审第一轮（2026-09-18）=====
    ① agent 非读写模式强提示  ② 本轮会话气泡化  ③ .env 告警条
