@@ -1325,89 +1325,24 @@
       setTimeout(function () { URL.revokeObjectURL(link.href); }, 2000);
     }
 
-    function saveSvgFallback(svg) {
-      saveBlob(new Blob([svg.outerHTML], { type: 'image/svg+xml;charset=utf-8' }), baseName() + '.svg');
-    }
-
-    function downloadAsPng(svg) {
-      // 画 PNG：Chrome 对含 foreignObject 的 SVG 走 <img>+canvas 时**不渲染里面的
-      // HTML**（mermaid 的文字全在 foreignObject 里）→ PNG 只有色块没有字。
-      // 所以先把 foreignObject 的文字逐行转成原生 <text>（取渲染位置/颜色/字号），
-      // 再序列化画布。个别浏览器仍可能污染画布，抛错时回退下载 .svg 源文件。
+    function downloadSvg(svg) {
+      // 直接下载 SVG 源文件：foreignObject（mermaid 的文字容器）原样保留，
+      // 浏览器打开即为完整图。不做 PNG 画布转换——Chrome 的 <img>+canvas
+      // 不渲染 foreignObject 里的 HTML，文字转换换算坐标系又太脆（2026-09-18 弃）。
+      // 内嵌一段度量锁定样式：独立文件没有页面 CSS，mermaid 按自身字体度量的
+      // 节点尺寸遇本机字体回退会把行撑高出界，不加这段两行标签的第二行会被裁。
       var clone = svg.cloneNode(true);
-      var svgRect = svg.getBoundingClientRect();
-      var inverse = svg.getScreenCTM();
-      if (inverse) { inverse = inverse.inverse(); }
-      var foreignObjects = clone.querySelectorAll('foreignObject');
-      var sourceObjects = svg.querySelectorAll('foreignObject');
-      for (var index = 0; index < foreignObjects.length; index++) {
-        var fo = foreignObjects[index];
-        var sourceFo = sourceObjects[index];
-        var group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        var walker = document.createTreeWalker(sourceFo, NodeFilter.SHOW_TEXT);
-        var textNode;
-        while ((textNode = walker.nextNode())) {
-          var value = textNode.textContent;
-          if (!value.trim()) { continue; }
-          var range = document.createRange();
-          range.selectNodeContents(textNode);
-          var rects = range.getClientRects();
-          var style = getComputedStyle(textNode.parentElement || sourceFo);
-          for (var r = 0; r < rects.length; r++) {
-            var rect = rects[r];
-            if (rect.width < 1 || rect.height < 1) { continue; }
-            // 视口坐标 → svg 用户坐标（用当前屏幕变换矩阵逆变换）
-            var cx = rect.left + rect.width / 2;
-            var baseline = rect.top + rect.height / 2 + (parseFloat(style.fontSize) || 14) * 0.35;
-            if (inverse) {
-              var point = new DOMPoint(cx, baseline).matrixTransform(inverse);
-              cx = point.x; baseline = point.y;
-            } else {
-              cx -= svgRect.left; baseline -= svgRect.top;
-            }
-            var element = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            element.setAttribute('x', cx.toFixed(1));
-            element.setAttribute('y', baseline.toFixed(1));
-            element.setAttribute('text-anchor', 'middle');
-            element.setAttribute('fill', style.color);
-            element.setAttribute('font-size', style.fontSize);
-            element.setAttribute('font-family', style.fontFamily);
-            if (style.fontWeight && style.fontWeight !== '400') { element.setAttribute('font-weight', style.fontWeight); }
-            element.textContent = value;
-            group.appendChild(element);
-          }
-        }
-        if (group.firstChild) { fo.parentNode.replaceChild(group, fo); }
-      }
-
+      var lock = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+      lock.textContent =
+        'svg { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; font-size: 16px; }' +
+        'foreignObject { overflow: visible; }' +
+        'foreignObject div, foreignObject span, foreignObject p { line-height: 1.35; margin: 0; }';
+      clone.appendChild(lock);
       var serialized = new XMLSerializer().serializeToString(clone);
       if (serialized.indexOf('xmlns=') === -1) {
         serialized = serialized.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
       }
-      var viewBox = svg.viewBox && svg.viewBox.baseVal;
-      var width = (viewBox && viewBox.width) || svg.clientWidth || 800;
-      var height = (viewBox && viewBox.height) || svg.clientHeight || 400;
-      var scale = 2;   // 2 倍清晰度
-      var image = new Image();
-      image.onload = function () {
-        var canvas = document.createElement('canvas');
-        canvas.width = Math.round(width * scale);
-        canvas.height = Math.round(height * scale);
-        var context = canvas.getContext('2d');
-        context.fillStyle = getComputedStyle(document.body).backgroundColor || '#ffffff';
-        context.fillRect(0, 0, canvas.width, canvas.height);
-        context.drawImage(image, 0, 0, canvas.width, canvas.height);
-        try {
-          canvas.toBlob(function (blob) {
-            if (blob && blob.size > 2000) { saveBlob(blob, baseName() + '.png'); }
-            else { saveSvgFallback(svg); }   // 内容异常小：可能文字没画上，退回 SVG 源文件
-          }, 'image/png');
-        } catch (error) {
-          saveSvgFallback(svg);   // 画布被污染：退回 SVG 源文件
-        }
-      };
-      image.onerror = function () { saveSvgFallback(svg); };
-      image.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(serialized);
+      saveBlob(new Blob([serialized], { type: 'image/svg+xml;charset=utf-8' }), baseName() + '.svg');
     }
 
     document.addEventListener('click', function (event) {
@@ -1426,7 +1361,7 @@
       if (dlBtn) {
         var svg2 = figureSvg(dlBtn);
         if (!svg2) { return; }
-        downloadAsPng(svg2);
+        downloadSvg(svg2);
       }
     });
   }
