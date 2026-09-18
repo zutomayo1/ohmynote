@@ -63,10 +63,15 @@
   /* 强调 / 语义 */
   --brand: #B5533C; --brand-dark: #8F3F2C; --brand-soft: #F2E2DA; --accent: #4A6C5A;
   --accent-soft: #E4EDE7; --warn: #8A6D3B; --warn-soft: #F6E7C8; --danger: #A83B2E;
-  /* 阴影 / 圆角 */
-  --shadow-sm: 0 1px 2px rgba(90, 70, 45, .05), 0 1px 3px rgba(90, 70, 45, .06);
-  --shadow-md: 0 2px 6px rgba(90, 70, 45, .07), 0 10px 24px -12px rgba(90, 70, 45, .18);
+  /* 阴影 / 圆角 —— 阴影做「纸片」：贴边一条更实的接触影 + 后面一层更散的落影 */
+  --shadow-sm: 0 .5px 0 rgba(90, 70, 45, .12), 0 1px 2px rgba(90, 70, 45, .06), 0 2px 6px -3px rgba(90, 70, 45, .10);
+  --shadow-md: 0 .5px 0 rgba(90, 70, 45, .12), 0 2px 6px rgba(90, 70, 45, .08), 0 12px 28px -14px rgba(90, 70, 45, .24);
   --radius: 12px; --radius-sm: 8px; --radius-pill: 999px;
+  /* 材质：纸纹颗粒（内联 SVG feTurbulence，无外部资源）与书页折痕。
+     强度刻意压到「凑近才看得见」：亮色 5%、暗色 3.5%（黑底亮噪点更容易显脏）。
+     想整体关掉材质层：把两处 --grain 置 none + 删掉 76-patches-recent 里的「材质层」分节。 */
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+  --fold: linear-gradient(to right, rgba(90, 70, 45, .075), rgba(90, 70, 45, 0));
   /* 字体 / 度量 */
   --font-serif: Georgia, "Source Serif Pro", "Noto Serif SC", "Source Han Serif SC", "Songti SC", SimSun, serif;
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
@@ -88,6 +93,8 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, .38), 0 2px 6px rgba(0, 0, 0, .3);
   --shadow-md: 0 4px 10px rgba(0, 0, 0, .45), 0 16px 36px -14px rgba(0, 0, 0, .7);
   --header-bg: rgba(31, 27, 23, .82); --overlay: rgba(0, 0, 0, .62);
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+  --fold: linear-gradient(to right, rgba(255, 255, 255, .055), rgba(255, 255, 255, 0));
   color-scheme: dark; }
 
 /* ===== 重置 ===== */

@@ -246,13 +246,29 @@ def test_mask_never_reveals_password():
 # ---------------------------------------------------------------------------
 
 
+def _probe_steady(cfg: dict, tries: int = 3) -> dict:
+    """并行负载下本机回环偶发连不上（实测 -n8 约 1/10）：只对传输层失败重试。
+
+    这条测的是「401 要给人话」这类语义，不是「本机套接字永远稳定」——所以只在
+    消息是「连不上远端 / 网络错误」时重试；401 / 404 是服务器的确定答复，直接返回。
+    真回归（probe 永远连不上）三次都失败，照样红，不会被这里掩盖。
+    """
+    result: dict = {}
+    for _ in range(tries):
+        result = remote_backup.probe(cfg)
+        msg = result.get("message", "")
+        if "连不上远端" not in msg and "网络错误" not in msg:
+            return result
+    return result
+
+
 def test_probe_ok_and_auth_failure(auth_client, dav):
     with db_mod.db() as conn:
         remote_backup.reset(conn)
-        good = remote_backup.probe(_cfg(dav))
+        good = _probe_steady(_cfg(dav))
         assert good["ok"], good["message"]
 
-        bad = remote_backup.probe(_cfg(dav, password="wrong"))
+        bad = _probe_steady(_cfg(dav, password="wrong"))
         assert not bad["ok"]
         assert "密码" in bad["message"], bad["message"]
 

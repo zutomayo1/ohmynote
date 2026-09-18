@@ -225,19 +225,21 @@
 /* --- 1. 纸张质感背景：极淡的墨点纹理 + 顶部一抹暖光 --- */
 body {
   background:
+    var(--grain),
     radial-gradient(1100px 340px at 50% -120px, var(--brand-soft), transparent 68%),
     radial-gradient(color-mix(in srgb, var(--ink) 4%, transparent) 1px, transparent 1.2px),
     var(--bg);
-  background-size: auto, 22px 22px, auto;
-  background-attachment: fixed, fixed, fixed; }
+  background-size: 180px 180px, auto, 22px 22px, auto;
+  background-attachment: fixed, fixed, fixed, fixed; }
 
 /* 暗色下墨点换浅色、暖光更淡——从令牌派生，随配色预设自动适配 */
 [data-theme="dark"] body {
   background:
+    var(--grain),
     radial-gradient(1100px 340px at 50% -120px, color-mix(in srgb, var(--brand) 9%, transparent), transparent 68%),
     radial-gradient(color-mix(in srgb, var(--ink) 3%, transparent) 1px, transparent 1.2px),
     var(--bg);
-  background-size: auto, 22px 22px, auto; }
+  background-size: 180px 180px, auto, 22px 22px, auto; }
 
 /* 选中文字用品牌色，细节里的品牌感 */
 ::selection { background: var(--brand); color: var(--surface); }

@@ -466,3 +466,49 @@ main .settings-block .prose { animation: none; }
 
 /* 「连接配置」那行是 flex（左标题、右说明），标题自己不带外边距 */
 .ai-section-head > .section-title { margin: 0; white-space: nowrap; }
+
+
+/* ===== 补丁：材质层 —— 纸纹颗粒 / 装订线 / 书页排版细节（2026-09-18） =====
+   风格定位是「摊开在米白纸张上的精装书」，此前只到色板（米白 + 衬线）。
+   这一层把材质补上；全部走令牌（--grain / --fold 在 00-base），想整体回退
+   把两处 --grain 置 none、删掉本节即可。强度刻意压到「凑近才看得见」。
+
+   1) 纸纹铺在底纸与卡片上。body / .card 的 background 简写都在更早的文件里，
+      这里用长手属性只覆写图片层；颗粒瓦片 180px，重复铺贴，不抢文字清晰度。 */
+/* body 的颗粒叠在「暖光 + 墨点网格」之上——那组层在 72-patches 的 body 规则里，
+   这里不动它（直接覆写 background-image 会把暖光和墨点整层顶掉）。 */
+.card, .note-card { background-image: var(--grain); }
+
+/* 2) 书页的「订口窄、切口宽」：宽屏三栏阅读页（博客文章 / 笔记详情）的正文列
+      左缘给一道极淡的页折渐变，正文从订口起排 —— 不对称，但幅度很小。 */
+@media (min-width: 1280px) {
+  body[data-page="post"] .post-body,
+  body[data-page="detail"] .post-body {
+    /* 折痕做成背景层（不用 ::before：test_css_rules 守卫不许重复定义伪元素，
+       而且少一个绝对定位元素） */
+    background-image: var(--fold);
+    background-repeat: no-repeat;
+    background-size: 22px 100%;
+    background-position: left top;
+    padding-left: 26px;
+  }
+}
+
+/* 3) 引用块：从「色块标注」回到书页的「双细线标界」——去底色与圆角，
+      左缘双线（3px double），保留斜体与次级墨色。 */
+.prose blockquote, .post-body blockquote {
+  background: none; border-radius: 0;
+  border-left: 3px double var(--line-strong);
+}
+
+/* 4) 分节符：整宽横线换成居中渐隐的短线（书页分节的呼吸感） */
+.prose hr, .post-body hr {
+  border: 0; height: 1px; width: min(190px, 42%); margin: 2.4em auto;
+  background: linear-gradient(to right, transparent, var(--line-strong), transparent);
+}
+
+/* 5) 打印：颗粒与折痕都是屏幕材质，纸上不要 */
+@media print {
+  body { background-image: none; }   /* 72-patches 的 body 是多层背景，长手置 none 即可全关 */
+  .card, .note-card, .post-body { background-image: none; }
+}

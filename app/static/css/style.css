@@ -81,10 +81,15 @@
   /* 强调 / 语义 */
   --brand: #B5533C; --brand-dark: #8F3F2C; --brand-soft: #F2E2DA; --accent: #4A6C5A;
   --accent-soft: #E4EDE7; --warn: #8A6D3B; --warn-soft: #F6E7C8; --danger: #A83B2E;
-  /* 阴影 / 圆角 */
-  --shadow-sm: 0 1px 2px rgba(90, 70, 45, .05), 0 1px 3px rgba(90, 70, 45, .06);
-  --shadow-md: 0 2px 6px rgba(90, 70, 45, .07), 0 10px 24px -12px rgba(90, 70, 45, .18);
+  /* 阴影 / 圆角 —— 阴影做「纸片」：贴边一条更实的接触影 + 后面一层更散的落影 */
+  --shadow-sm: 0 .5px 0 rgba(90, 70, 45, .12), 0 1px 2px rgba(90, 70, 45, .06), 0 2px 6px -3px rgba(90, 70, 45, .10);
+  --shadow-md: 0 .5px 0 rgba(90, 70, 45, .12), 0 2px 6px rgba(90, 70, 45, .08), 0 12px 28px -14px rgba(90, 70, 45, .24);
   --radius: 12px; --radius-sm: 8px; --radius-pill: 999px;
+  /* 材质：纸纹颗粒（内联 SVG feTurbulence，无外部资源）与书页折痕。
+     强度刻意压到「凑近才看得见」：亮色 5%、暗色 3.5%（黑底亮噪点更容易显脏）。
+     想整体关掉材质层：把两处 --grain 置 none + 删掉 76-patches-recent 里的「材质层」分节。 */
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+  --fold: linear-gradient(to right, rgba(90, 70, 45, .075), rgba(90, 70, 45, 0));
   /* 字体 / 度量 */
   --font-serif: Georgia, "Source Serif Pro", "Noto Serif SC", "Source Han Serif SC", "Songti SC", SimSun, serif;
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
@@ -106,6 +111,8 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, .38), 0 2px 6px rgba(0, 0, 0, .3);
   --shadow-md: 0 4px 10px rgba(0, 0, 0, .45), 0 16px 36px -14px rgba(0, 0, 0, .7);
   --header-bg: rgba(31, 27, 23, .82); --overlay: rgba(0, 0, 0, .62);
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+  --fold: linear-gradient(to right, rgba(255, 255, 255, .055), rgba(255, 255, 255, 0));
   color-scheme: dark; }
 
 /* ===== 重置 ===== */
@@ -3928,9 +3935,9 @@ a.archive-month__label:hover { color: var(--brand); }
      默认 = 跟随全局字阶与衬线栈。编辑器 textarea 只跟字号、字体保持 mono */
   --prose-size: 17px; --prose-lead: var(--fs-lead); --prose-font: var(--font-serif);
 
-  /* 阴影：三档就够（贴地 / 悬浮 / 浮层） */
-  --sh-1: 0 1px 2px rgba(60, 42, 30, .04);
-  --sh-2: 0 4px 14px rgba(60, 42, 30, .07);
+  /* 阴影：三档就够（贴地 / 悬浮 / 浮层）——「纸片」：贴边一条更实的接触影 + 落影 */
+  --sh-1: 0 .5px 0 rgba(60, 42, 30, .10), 0 1px 2px rgba(60, 42, 30, .04);
+  --sh-2: 0 .5px 0 rgba(60, 42, 30, .10), 0 4px 14px rgba(60, 42, 30, .07);
   --sh-3: 0 12px 32px rgba(60, 42, 30, .12);
 
   /* 黏土色阶：hover / 选中 / 标签底 / 引用块共用，避免到处写 rgba */
@@ -4943,19 +4950,21 @@ body { transition: background-color .12s ease, color .12s ease; }
 /* --- 1. 纸张质感背景：极淡的墨点纹理 + 顶部一抹暖光 --- */
 body {
   background:
+    var(--grain),
     radial-gradient(1100px 340px at 50% -120px, var(--brand-soft), transparent 68%),
     radial-gradient(color-mix(in srgb, var(--ink) 4%, transparent) 1px, transparent 1.2px),
     var(--bg);
-  background-size: auto, 22px 22px, auto;
-  background-attachment: fixed, fixed, fixed; }
+  background-size: 180px 180px, auto, 22px 22px, auto;
+  background-attachment: fixed, fixed, fixed, fixed; }
 
 /* 暗色下墨点换浅色、暖光更淡——从令牌派生，随配色预设自动适配 */
 [data-theme="dark"] body {
   background:
+    var(--grain),
     radial-gradient(1100px 340px at 50% -120px, color-mix(in srgb, var(--brand) 9%, transparent), transparent 68%),
     radial-gradient(color-mix(in srgb, var(--ink) 3%, transparent) 1px, transparent 1.2px),
     var(--bg);
-  background-size: auto, 22px 22px, auto; }
+  background-size: 180px 180px, auto, 22px 22px, auto; }
 
 /* 选中文字用品牌色，细节里的品牌感 */
 ::selection { background: var(--brand); color: var(--surface); }
@@ -8530,3 +8539,49 @@ main .settings-block .prose { animation: none; }
 
 /* 「连接配置」那行是 flex（左标题、右说明），标题自己不带外边距 */
 .ai-section-head > .section-title { margin: 0; white-space: nowrap; }
+
+
+/* ===== 补丁：材质层 —— 纸纹颗粒 / 装订线 / 书页排版细节（2026-09-18） =====
+   风格定位是「摊开在米白纸张上的精装书」，此前只到色板（米白 + 衬线）。
+   这一层把材质补上；全部走令牌（--grain / --fold 在 00-base），想整体回退
+   把两处 --grain 置 none、删掉本节即可。强度刻意压到「凑近才看得见」。
+
+   1) 纸纹铺在底纸与卡片上。body / .card 的 background 简写都在更早的文件里，
+      这里用长手属性只覆写图片层；颗粒瓦片 180px，重复铺贴，不抢文字清晰度。 */
+/* body 的颗粒叠在「暖光 + 墨点网格」之上——那组层在 72-patches 的 body 规则里，
+   这里不动它（直接覆写 background-image 会把暖光和墨点整层顶掉）。 */
+.card, .note-card { background-image: var(--grain); }
+
+/* 2) 书页的「订口窄、切口宽」：宽屏三栏阅读页（博客文章 / 笔记详情）的正文列
+      左缘给一道极淡的页折渐变，正文从订口起排 —— 不对称，但幅度很小。 */
+@media (min-width: 1280px) {
+  body[data-page="post"] .post-body,
+  body[data-page="detail"] .post-body {
+    /* 折痕做成背景层（不用 ::before：test_css_rules 守卫不许重复定义伪元素，
+       而且少一个绝对定位元素） */
+    background-image: var(--fold);
+    background-repeat: no-repeat;
+    background-size: 22px 100%;
+    background-position: left top;
+    padding-left: 26px;
+  }
+}
+
+/* 3) 引用块：从「色块标注」回到书页的「双细线标界」——去底色与圆角，
+      左缘双线（3px double），保留斜体与次级墨色。 */
+.prose blockquote, .post-body blockquote {
+  background: none; border-radius: 0;
+  border-left: 3px double var(--line-strong);
+}
+
+/* 4) 分节符：整宽横线换成居中渐隐的短线（书页分节的呼吸感） */
+.prose hr, .post-body hr {
+  border: 0; height: 1px; width: min(190px, 42%); margin: 2.4em auto;
+  background: linear-gradient(to right, transparent, var(--line-strong), transparent);
+}
+
+/* 5) 打印：颗粒与折痕都是屏幕材质，纸上不要 */
+@media print {
+  body { background-image: none; }   /* 72-patches 的 body 是多层背景，长手置 none 即可全关 */
+  .card, .note-card, .post-body { background-image: none; }
+}
