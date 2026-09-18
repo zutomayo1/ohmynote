@@ -74,6 +74,45 @@ def test_select_enhancer_names_and_wiring():
     assert "select.hidden" not in js.replace(" ", ""), "原生 select 不该被 hidden（它要撑尺寸）"
 
 
+def test_every_native_select_carries_select_class():
+    """模板里每个原生 <select> 都必须带 .select 类。
+
+    select.js 只增强 `select.select`，写成 `class="input"` 会**静默**绕过自绘、
+    退回浏览器白底系统弹层（观感与站点脱节）。.input 与 .select 共用同一套基础
+    样式，所以这类笔误不会被 audit_css 抓到——只能靠这条结构断言。
+    2026-09-18 实测漏了 9 个（服务商下拉 + 备份页 4 个默认值 + 外观 4 个）。
+    确实想留原生弹层的，显式加 data-native-select。
+    """
+    offenders: list[str] = []
+    for path in sorted((ROOT / "app/templates").rglob("*.html")):
+        source = path.read_text(encoding="utf-8")
+        for match in re.finditer(r"<select\b[^>]*>", source, re.S):
+            tag = " ".join(match.group(0).split())
+            if "data-native-select" in tag:
+                continue
+            class_match = re.search(r'class="([^"]*)"', tag)
+            classes = class_match.group(1).split() if class_match else []
+            if "select" not in classes:
+                offenders.append(f"{path.name}: {tag[:90]}")
+    assert not offenders, f"这些 <select> 没带 .select 类，会被自绘增强静默漏掉：{offenders}"
+
+
+def test_select_enhancer_keeps_empty_value_reset_options():
+    """自绘面板不许丢掉 value="" 的选项——它们多是「重置项」。
+
+    `if (!option.value) return` 这种写法会把「全部标签 / 全部分类 / 全部状态 /
+    按相关度 / 不改」从面板里摘掉：选完具体值就再也回不到默认，筛选栏变成
+    单向阀（2026-09-18 在列表/搜索/图谱/备份页实测踩到）。
+    面板必须是原生选项的完整镜像。
+    """
+    js = (JS_DIR / "select.js").read_text(encoding="utf-8")
+    # 先剥掉注释：注释里会引用那句老写法当反面例子，不能当成代码
+    code = re.sub(r"/\*.*?\*/", "", js, flags=re.S)
+    code = re.sub(r"//[^\n]*", "", code)
+    assert "if (!option.value) return" not in code, "自绘面板又把空值重置项丢掉了"
+    assert "option.value" in code and "data-value" in code, "空值项也要带 data-value 进面板"
+
+
 def test_native_selects_still_in_html_for_no_js(client):
     """无 JS 时退回原生下拉：三页的 select 与选项必须照旧渲染出来。
 

@@ -235,3 +235,38 @@ def test_theme_switch_has_no_universal_transition():
     ]
     assert not offenders, "主题切换又给通配选择器挂了过渡：" + "；".join(offenders[:3])
     assert "theme-moon-flip" in CSS, "月亮图标的动画不该被顺手删掉"
+
+
+def test_scrollbar_custom_path_is_reachable():
+    """自绘滚动条（::-webkit-scrollbar）必须真的能用上，不能被标准属性顶掉。
+
+    踩过两次，都是「写了样式但不生效」：
+    - 全站基础规则 `* { scrollbar-width: thin; scrollbar-color: ... }` 一设，Chrome
+      就改走标准属性路径、**忽略全部 ::-webkit-scrollbar 自绘样式**；Windows 上若
+      系统开了「自动隐藏滚动条」，那条就是悬停才显形的浮层条，用户根本看不到。
+      所以需要自绘条的容器必须先 `scrollbar-width: auto; scrollbar-color: auto`
+      把路径放出来（.combo__panel / .svg-view__scroll 都这么做的）。
+    - `@supports not selector(::-webkit-scrollbar)` 当「不支持伪元素的浏览器」判据
+      是错的：Chrome 对它也返回 false，兜底块会在 Chrome 命中、反过来把自绘打死。
+      Firefox 只有 -moz-appearance 能可靠区分。
+    """
+    # 不许再用会误判的 @supports 判据
+    assert re.search(r"^@supports\s+not\s+selector\(::-webkit-scrollbar\)", CSS, re.M) is None, (
+        "别用 @supports not selector(::-webkit-scrollbar)：Chrome 也会命中，自绘滚动条会被顶掉"
+    )
+
+    def blocks_of(selector: str) -> list[str]:
+        # 同一选择器可能分多处声明（原始定位块 + 后续补丁块），要逐块看
+        found = re.findall(re.escape(selector) + r"\s*\{([^}]*)\}", CSS, re.S)
+        assert found, f"找不到 {selector} 规则"
+        return found
+
+    for selector in (".combo__panel", ".svg-view__scroll"):
+        bodies = blocks_of(selector)
+        assert any("scrollbar-width: auto" in b and "scrollbar-color: auto" in b for b in bodies), (
+            f"{selector} 没把标准属性重置为 auto，下面的 ::-webkit-scrollbar 自绘是死代码"
+        )
+        assert f"{selector}::-webkit-scrollbar" in CSS, f"{selector} 缺少自绘滚动条规则"
+
+    # Firefox 兜底（不支持伪元素，只有它是唯一可靠的判据）
+    assert CSS.count("@supports (-moz-appearance: none)") >= 2, "Firefox 的自绘兜底被删了"

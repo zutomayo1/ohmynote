@@ -10,6 +10,9 @@
  * 选中后给原生 select 派发 change：「筛选栏改了就自动提交」「批量栏按操作显隐输入框」
  * 这些既有逻辑一行都不用改；required 校验也照旧由原生 select 承担。
  *
+ * 面板是原生选项的**完整镜像**（含 value="" 的重置项，见下方注释）——自绘不该
+ * 让用户丢失任何原生能做的操作。
+ *
  * 渐进增强：整体包在 try/catch 里，出错就保持原生下拉。想留住原生弹层的加 data-native-select。
  */
 
@@ -71,7 +74,10 @@
     options.forEach(function (option, index) {
       var text = (option.textContent || '').trim();
       if (index === 0) placeholderText = text || placeholderText;
-      if (!option.value) return; // 占位项不进列表
+      // 空值项也要进列表：它们多半是**重置项**（「全部标签」「不改」「按相关度」），
+      // 早先这里 `if (!option.value) return` 把它们丢了 —— 于是选完具体值就再也
+      // 回不到「全部」，筛选栏形同单向阀（列表/搜索/标签/图谱/备份页全中）。
+      // 列表里那一项照常可点，选中后 select.value 回到 ""，既有提交/联动逻辑不变。
       var item = document.createElement('div');
       item.className = 'combo__item';
       item.id = panelId + '-item-' + index;

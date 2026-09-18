@@ -149,7 +149,10 @@
       </div>
       <div class="field field--wide ai-provider">
         <label class="field__label" for="ai-provider">服务商预设</label>
-        <select class="input" id="ai-provider" autocomplete="off">
+        {# 类名必须是 .select（不是 .input）：select.js 只增强 select.select，
+           写成 .input 会绕过全站自绘下拉，退回浏览器白底系统列表。
+           aria-label 是给自绘按钮用的——select 不在 <label> 里，取不到 .field__label。 #}
+        <select class="select" id="ai-provider" autocomplete="off" aria-label="服务商预设">
           <option value="">自定义 / 不预填</option>
           {% for p in ai.providers %}
             <option value="{{ p.name }}"
@@ -847,7 +850,7 @@
 
         <label class="field">
           <span class="field__label">明暗模式 {{ src_of(site.sources.get('appearance_mode')) }}</span>
-          <select class="input" name="appearance_mode">
+          <select class="select" name="appearance_mode">
             <option value="auto"{% if cur_mode == 'auto' %} selected{% endif %}>跟随系统</option>
             <option value="light"{% if cur_mode == 'light' %} selected{% endif %}>默认浅色</option>
             <option value="dark"{% if cur_mode == 'dark' %} selected{% endif %}>默认深色</option>
@@ -857,7 +860,7 @@
 
         <label class="field">
           <span class="field__label">圆角 {{ src_of(site.sources.get('appearance_radius')) }}</span>
-          <select class="input" name="appearance_radius">
+          <select class="select" name="appearance_radius">
             <option value="sm"{% if cur_radius == 'sm' %} selected{% endif %}>小圆角</option>
             <option value="md"{% if cur_radius == 'md' %} selected{% endif %}>默认</option>
             <option value="lg"{% if cur_radius == 'lg' %} selected{% endif %}>大圆角</option>
@@ -867,7 +870,7 @@
 
         <label class="field">
           <span class="field__label">正文字号 {{ src_of(site.sources.get('appearance_prose_size')) }}</span>
-          <select class="input" name="appearance_prose_size" data-prose-preview="size">
+          <select class="select" name="appearance_prose_size" data-prose-preview="size">
             <option value="sm"{% if cur_prose_size == 'sm' %} selected{% endif %}>小 16px</option>
             <option value="md"{% if cur_prose_size == 'md' %} selected{% endif %}>默认 17px</option>
             <option value="lg"{% if cur_prose_size == 'lg' %} selected{% endif %}>大 18.5px</option>
@@ -878,7 +881,7 @@
 
         <label class="field">
           <span class="field__label">正文字体 {{ src_of(site.sources.get('appearance_prose_font')) }}</span>
-          <select class="input" name="appearance_prose_font" data-prose-preview="font">
+          <select class="select" name="appearance_prose_font" data-prose-preview="font">
             <option value="serif"{% if cur_prose_font == 'serif' %} selected{% endif %}>衬线（默认）</option>
             <option value="sans"{% if cur_prose_font == 'sans' %} selected{% endif %}>无衬线</option>
           </select>

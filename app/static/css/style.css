@@ -8111,15 +8111,21 @@ details.warning[open] > summary, details.danger[open] > summary, details.quote[o
 .svg-view__scroll {
   overflow-x: auto;
   padding: 10px 12px;
-  scrollbar-width: thin;
+  /* 同 .combo__panel：全局 * 规则的标准属性会顶掉下面的自绘条，这里重置回 auto。
+     自绘条常驻可见，不受系统「自动隐藏滚动条」影响。 */
+  scrollbar-width: auto;
+  scrollbar-color: auto;
 }
 .svg-view__scroll::-webkit-scrollbar { height: 8px; }
 .svg-view__scroll::-webkit-scrollbar-track { background: transparent; }
 .svg-view__scroll::-webkit-scrollbar-thumb {
-  background: var(--brand-soft);
+  background: var(--ink-3);
   border-radius: 4px;
 }
 .svg-view__scroll::-webkit-scrollbar-thumb:hover { background: var(--brand); }
+@supports (-moz-appearance: none) {
+  .svg-view__scroll { scrollbar-width: thin; scrollbar-color: var(--ink-3) transparent; }
+}
 .svg-view__scroll > svg { display: block; max-width: none; height: auto; }
 
 .svg-view__actions {
@@ -8327,3 +8333,49 @@ html:not(.js) .svg-view__actions { display: none; }
 /* 服务商下拉（原卡片改版）：选中自动填表；说明与「拿 Key」入口跟在下方 */
 .ai-provider { margin-bottom: var(--sp-4); }
 .ai-provider__hint { display: block; margin-top: 6px; }
+
+/* ===== 补丁：自绘下拉面板的滚动条（2026-09-18） =====
+   .combo__panel 有 overflow-y:auto，服务商 17 家、模型列表上百项，必须滚得动、
+   还得让人**看得见**能滚。默认那条看不清，原因有两层：
+
+   1) 全站基础规则 `* { scrollbar-width: thin; scrollbar-color: ... }` 一设，
+      Chrome 就改走「标准属性」路径、**忽略全部 ::-webkit-scrollbar 自绘样式**；
+      而 Windows 上若系统开了「自动隐藏滚动条」，这条就是悬停才显形的浮层条。
+      所以这里对本元素显式重置回 auto，把自绘路径放出来。
+   2) 自绘条（::-webkit-scrollbar）是**常驻可见**的：不吃系统那条自动隐藏设置。
+
+   注意：别用 `@supports not selector(::-webkit-scrollbar)` 判断「不支持伪元素的浏览器」
+   ——Chrome 对 `selector(::-webkit-scrollbar)` 返回的也是 false，那个兜底块会在 Chrome
+   里命中，反过来把自绘样式打死。Firefox 只有它认的 -moz-appearance 能可靠区分。 */
+.combo__panel {
+  scrollbar-width: auto;         /* 放出自绘路径（覆盖全局 * 的标准属性） */
+  scrollbar-color: auto;
+  scrollbar-gutter: stable;      /* 预留槽位：出现/消失时条目不左右跳 */
+}
+.combo__panel::-webkit-scrollbar { width: 10px; height: 10px; }
+.combo__panel::-webkit-scrollbar-track { background: transparent; }
+/* 拇指用 --ink-3（中灰）：试过 --line-strong，它和面板边框**同色**，
+   整条滚动条直接并进边框里看不出来。 */
+.combo__panel::-webkit-scrollbar-thumb {
+  background: var(--ink-3);
+  border-radius: 5px;
+  border: 2px solid transparent;   /* 内缩出细拇指的观感 */
+  background-clip: padding-box;
+}
+.combo__panel::-webkit-scrollbar-thumb:hover {
+  background: var(--brand);        /* background 简写会重置 background-clip，这里要再写一次 */
+  background-clip: padding-box;
+}
+
+/* Firefox 不支持 ::-webkit-scrollbar，给它标准属性兜底 */
+@supports (-moz-appearance: none) {
+  .combo__panel {
+    scrollbar-width: thin;
+    scrollbar-color: var(--ink-3) transparent;
+  }
+}
+
+/* 下拉面板宽度收口：设置页那个服务商下拉的触发器是整行 1072px,
+   面板跟着铺满就成了「一条超长菜单 + 右边 1000px 空白」,滚动条也离文字老远。
+   菜单本来就该比触发器窄,这里只封顶不放宽（筛选栏那类窄触发器完全不受影响）。 */
+.select-combo__panel { max-width: 480px; }
