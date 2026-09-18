@@ -6225,17 +6225,18 @@ body.split-dragging .editor__textarea { pointer-events: none; }
       settings-block / editor__settings 内有 absolute 弹层（AI 下拉/标签联想），
       overflow clip 会裁掉它们，故不参与高度动画，仅保留原有的箭头旋转）
       旧浏览器不支持 ::details-content 时退化为瞬时开合 */
-.agent-runs, .agent-history, .editor__templates,
- /* tag-admin 不参与：块内有选择标签的下拉弹层，clip 会裁掉 */
+/* 参与高度过渡的三块（tag-admin / ai-presets-more / backup-errors 已移出：
+   块内有自绘下拉弹层，::details-content 的 overflow:clip 会把弹层裁掉）。 */
+.agent-runs, .agent-history, .editor__templates { interpolate-size: allow-keywords; }
 
 .agent-runs::details-content,
-.agent-history::details-content, .editor__templates::details-content
+.agent-history::details-content, .editor__templates::details-content {
   display: block; block-size: 0; overflow-y: clip;
   transition: block-size .26s cubic-bezier(.3, .8, .3, 1), content-visibility .26s allow-discrete;
 }
 
 .agent-runs[open]::details-content,
-.agent-history[open]::details-content, .editor__templates[open]::details-content
+.agent-history[open]::details-content, .editor__templates[open]::details-content { block-size: auto; }
 
 /* 2) 主题切换：月亮悬停「转一下」（每次移入重放）；切换瞬间全站颜色柔和过渡 */
 .theme-toggle svg { transform-origin: 50% 50%; }
@@ -6283,7 +6284,7 @@ html.theme-anim .theme-toggle svg { animation: theme-moon-flip .45s cubic-bezier
   .tag-manage__menu[open] .tag-manage__panel, .combo__panel, .toast,
   .batch-bar.is-active, .code-copy.is-copied { animation: none; }
   .agent-runs::details-content, .agent-history::details-content,
-
+  .editor__templates::details-content { transition: none; }
 }
 
 /* ===== 补丁：标签药丸统一质感（2026-09-14 深夜三，已合并） ===== */
@@ -8344,7 +8345,7 @@ html:not(.js) .svg-view__actions { display: none; }
 /* ===== 补丁：用量统计的折叠子块（2026-09-18） =====
    用量统计内容恢复完整（10 个小节），但只让主图（最近 30 天）常显；其余 8 个
    收进三个子折叠块，展开才看——完整和整洁不冲突。
-   子块里的小标题按「次级标题」排，不用页面级的 22px 衬线大字。 */
+   块内小节标题统一压成 13px 次级标签——规则见文件末尾「块内小节标题降一级」补丁。 */
 .settings-sub {
   margin: 16px 0 0;
   padding-top: 10px;
@@ -8359,9 +8360,6 @@ html:not(.js) .svg-view__actions { display: none; }
 .settings-sub[open] > .settings-sub__summary { color: var(--brand); }
 .settings-sub[open] > .settings-sub__summary::before { transform: rotate(90deg); }
 .settings-sub__body { padding: 2px 0 4px 14px; }
-.settings-sub__body .section-title {
-  margin: 16px 0 8px; padding-bottom: 0; border-bottom: 0;
-  color: var(--ink-2); font-family: var(--font-sans); font-size: 13px; font-weight: 600; }
 
 /* ===== 补丁：设置页折叠块里的入场动画（2026-09-18） =====
    `main .prose { animation: ink-rise }` 是给「页面加载」用的轻入场（页头/卡片/正文）。
@@ -8382,3 +8380,17 @@ main .settings-block .prose { animation: none; }
 .ai-profile-save { display: flex; gap: 8px; align-items: center; }
 .ai-profile-save .input { width: auto; flex: 1 1 auto; min-width: 0; }
 .ai-profile-save .btn { flex: none; white-space: nowrap; }
+
+/* ===== 补丁：设置页「块内小节标题」降一级（2026-09-18） =====
+   折叠块自己已经有摘要行了（粗体 + 状态徽标），块内再来一个 22px 衬线大字标题
+   （「连接配置」「本月质量」这种），等于顶着两个标题、大小还跟页面级一样 ——
+   用户反馈「连接配置几个字太大了显得很突兀」。统一压成 13px 次级标签。
+   页面级的分组标题（.settings-group「站点与账号」）不在 .settings-block 里，
+   仍是原来的大字，不受影响。 */
+.settings-block .section-title {
+  margin: 20px 0 10px; padding-bottom: 0; border-bottom: 0;
+  color: var(--ink-2); font-family: var(--font-sans);
+  font-size: 13px; font-weight: 600; line-height: 1.5; }
+
+/* 「连接配置」那行是 flex（左标题、右说明），标题自己不带外边距 */
+.ai-section-head > .section-title { margin: 0; white-space: nowrap; }
