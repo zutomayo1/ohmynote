@@ -8233,3 +8233,42 @@ html:not(.js) .svg-view__actions { display: none; }
 
 /* .btn 的 display 会盖过 UA 的 [hidden]（agent 的「停止」按钮踩过）：显式兜底 */
 .btn[hidden] { display: none; }
+
+/* ===== 补丁：设置页「我的预设」（2026-09-18） =====
+   多套「地址+密钥+主模型」一键切换；复用 ai-preset-card 卡皮，自身只管布局。 */
+.ai-profiles {
+  list-style: none;
+  margin: 0 0 var(--sp-3);
+  padding: 0;
+  display: grid;
+  gap: var(--sp-2);
+}
+.ai-profile {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+.ai-profile__info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.ai-profile__info .ai-preset__note {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-profile__actions {
+  display: flex;
+  gap: var(--sp-2);
+  flex-shrink: 0;
+}
+.ai-profile__actions form { margin: 0; }
+.ai-profile-save {
+  display: flex;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+.ai-profile-save .input { flex: 1; min-width: 0; }

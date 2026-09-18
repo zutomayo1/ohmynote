@@ -131,6 +131,46 @@
       {% endif %}
       <p class="micro">预设只会填进下面的输入框、<strong>不会自动保存</strong>；确认无误后点「保存配置」才会生效。想手动抄地址和模型名，展开下面的「常见服务商怎么填」。</p>
 
+      <!-- 我的预设：整套「地址+密钥+主模型」命名保存，跨服务商一键切换（数量不限）。
+           纯表单 POST，无 JS 也能用；密钥只在服务端流转，页面只露尾号 4 位。 -->
+      <h3 class="section-title">我的预设（保存并一键切换）</h3>
+      {% if ai_profiles %}
+        <ul class="ai-profiles">
+          {% for p in ai_profiles %}
+            <li class="ai-preset-card{{ ' is-active' if p.base_url == ai.base_url }}">
+              <div class="ai-profile">
+                <div class="ai-profile__info">
+                  <span class="ai-preset__name">{{ p.name }}</span>
+                  <span class="ai-preset__note">{{ p.base_url }} · {{ p.model or '无模型' }} · 密钥尾号 {{ p.key_tail }}</span>
+                </div>
+                <div class="ai-profile__actions">
+                  <form method="post" action="/settings/ai/profiles/apply">
+                    <input type="hidden" name="_csrf" value="{{ csrf }}">
+                    <input type="hidden" name="name" value="{{ p.name }}">
+                    <button class="btn btn--sm" type="submit">启用</button>
+                  </form>
+                  <form method="post" action="/settings/ai/profiles/delete"
+                        data-confirm="删除预设《{{ p.name }}》？当前生效的配置不受影响。">
+                    <input type="hidden" name="_csrf" value="{{ csrf }}">
+                    <input type="hidden" name="name" value="{{ p.name }}">
+                    <button class="btn btn--ghost btn--sm" type="submit">删除</button>
+                  </form>
+                </div>
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="micro">还没有预设。把当前配置存一份，以后换服务商不用再抄地址和密钥。</p>
+      {% endif %}
+      <form class="ai-profile-save" method="post" action="/settings/ai/profiles/save">
+        <input type="hidden" name="_csrf" value="{{ csrf }}">
+        <input class="input" type="text" name="name" maxlength="40" required
+               placeholder="预设名称，例如：硅基流动 / DeepSeek 官方" aria-label="预设名称">
+        <button class="btn btn--ghost btn--sm" type="submit">把当前配置存为预设</button>
+      </form>
+      <p class="micro">启用预设会替换 Base URL / 密钥 / 主模型，并清空分任务模型覆盖（那是上一家的模型名，带着走会 404）；超时、向量模型、隐私等其它设置不动。</p>
+
       <div class="field-grid">
         <label class="field field--wide">
           <span class="field__label">Base URL {{ src('base_url') }}</span>

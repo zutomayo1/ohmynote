@@ -125,6 +125,7 @@ def _settings_context(request: Request, conn: sqlite3.Connection, **extra) -> HT
     usage = ai_usage.summary(conn)
     context: dict = {
         "ai": ai.describe(),
+        "ai_profiles": ai.list_profiles(conn),
         "usage": usage,
         "usage_chart": _usage_chart(usage["by_day"]),
         "task_labels": TASK_LABELS,
@@ -388,6 +389,56 @@ def save_ai_prompts(
     return RedirectResponse(
         url_with_query("/settings", msg="提示词已保存并生效"), status_code=303
     )
+
+
+@settings_router.post("/settings/ai/profiles/save")
+def save_ai_profile(
+    request: Request,
+    conn: sqlite3.Connection = Depends(db_conn),
+    name: str = Form(""),
+):
+    """把当前生效的 Base URL / 密钥 / 主模型 存成一份命名预设（同名覆盖，数量不限）。"""
+    del request
+    result = ai.save_profile(conn, name)
+    if result["ok"]:
+        return RedirectResponse(
+            url_with_query("/settings", msg=f"已把当前配置存为预设《{result['name']}》（现有 {result['count']} 份，点「启用」一键切换）"),
+            status_code=303,
+        )
+    return RedirectResponse(url_with_query("/settings", msg=result["error"], kind="error"),
+                            status_code=303)
+
+
+@settings_router.post("/settings/ai/profiles/apply")
+def apply_ai_profile(
+    request: Request,
+    conn: sqlite3.Connection = Depends(db_conn),
+    name: str = Form(""),
+):
+    """切换到指定预设：替换 Base URL / 密钥 / 主模型，分任务模型覆盖清空。"""
+    del request
+    result = ai.apply_profile(conn, name)
+    if result["ok"]:
+        return RedirectResponse(
+            url_with_query("/settings", msg=f"已切换到预设《{result['name']}》并生效（分任务模型覆盖已清空，留空即跟随主模型）"),
+            status_code=303,
+        )
+    return RedirectResponse(url_with_query("/settings", msg=result["error"], kind="error"),
+                            status_code=303)
+
+
+@settings_router.post("/settings/ai/profiles/delete")
+def delete_ai_profile(
+    request: Request,
+    conn: sqlite3.Connection = Depends(db_conn),
+    name: str = Form(""),
+):
+    del request
+    if ai.delete_profile(conn, name):
+        return RedirectResponse(url_with_query("/settings", msg=f"已删除预设《{name}》"),
+                                status_code=303)
+    return RedirectResponse(url_with_query("/settings", msg="预设不存在（可能已被删除）", kind="error"),
+                            status_code=303)
 
 
 @settings_router.get("/settings/ai/usage.csv")

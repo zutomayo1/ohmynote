@@ -48,7 +48,7 @@ REASON_LABELS = {
 }
 
 # 脱敏备份要清空的 meta 键（存在才清；其余键一个不动）。
-SANITIZED_META_KEYS = ("ai.api_key", "account.password_hash",
+SANITIZED_META_KEYS = ("ai.api_key", "ai.profiles", "account.password_hash",
                        "backup.remote.password", "backup.remote.user")
 
 # 同一进程内串行化「生成 / 回滚 / 删除」，避免两个自动备份同时滚动删除。

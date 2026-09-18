@@ -290,6 +290,90 @@ def is_enabled() -> bool:
     return bool(_config.get("base_url") and _config.get("model"))
 
 
+# ---------------------------------------------------------------------------
+# 服务商预设（meta: ai.profiles）：多套「Base URL + 密钥 + 主模型」一键切换。
+# 数量不限；密钥只在服务端流转，列表/页面只露尾号 4 位；
+# 脱敏备份会整键清掉（SANITIZED_META_KEYS 里有 ai.profiles，见 db_backup）。
+# ---------------------------------------------------------------------------
+def _load_profiles(conn: sqlite3.Connection) -> list[dict]:
+    from .. import repo
+
+    raw = repo.get_meta_map(conn, META_PREFIX).get("profiles") or "[]"
+    try:
+        profiles = json.loads(raw)
+    except Exception:
+        return []
+    if not isinstance(profiles, list):
+        return []
+    return [p for p in profiles if isinstance(p, dict) and p.get("name")]
+
+
+def list_profiles(conn: sqlite3.Connection) -> list[dict]:
+    """给页面看的预设列表：密钥只露尾号 4 位。"""
+    out = []
+    for profile in _load_profiles(conn):
+        key = str(profile.get("api_key") or "")
+        out.append({
+            "name": str(profile.get("name"))[:40],
+            "base_url": str(profile.get("base_url") or ""),
+            "model": str(profile.get("model") or ""),
+            "key_tail": key[-4:] if len(key) >= 4 else ("••••" if key else ""),
+        })
+    return out
+
+
+def save_profile(conn: sqlite3.Connection, name: str) -> dict:
+    """把当前生效的 Base URL / 密钥 / 主模型 存成一份命名预设（同名覆盖，数量不限）。"""
+    from .. import repo
+
+    name = str(name or "").strip()[:40]
+    if not name:
+        return {"ok": False, "error": "预设名称不能为空"}
+    cfg = current()
+    if not (cfg.get("base_url") and cfg.get("model")):
+        return {"ok": False, "error": "当前配置还不完整（Base URL 和模型都要有），配好再存"}
+    profiles = [p for p in _load_profiles(conn) if str(p.get("name")) != name]
+    profiles.insert(0, {
+        "name": name,
+        "base_url": cfg.get("base_url") or "",
+        "api_key": cfg.get("api_key") or "",
+        "model": cfg.get("model") or "",
+    })
+    repo.save_meta_map(conn, {"profiles": json.dumps(profiles, ensure_ascii=False)}, META_PREFIX)
+    return {"ok": True, "name": name, "count": len(profiles)}
+
+
+def apply_profile(conn: sqlite3.Connection, name: str) -> dict:
+    """切换到指定预设：替换 Base URL / 密钥 / 主模型，并清掉分任务模型覆盖——
+    那些多半是上一家服务商的模型名，带着走只会 404；留空即跟随主模型。
+    超时 / 向量模型 / 本机限定 / 隐私等设置保持不动。"""
+    name = str(name or "").strip()[:40]
+    profile = next((p for p in _load_profiles(conn) if str(p.get("name")) == name), None)
+    if profile is None:
+        return {"ok": False, "error": "预设不存在（可能已被删除）"}
+    save(conn, {
+        "base_url": profile.get("base_url") or "",
+        "api_key": profile.get("api_key") or "",
+        "model": profile.get("model") or "",
+        "model_summary": "",
+        "model_tags": "",
+        "model_answer": "",
+    })
+    return {"ok": True, "name": name}
+
+
+def delete_profile(conn: sqlite3.Connection, name: str) -> bool:
+    from .. import repo
+
+    name = str(name or "").strip()[:40]
+    profiles = _load_profiles(conn)
+    kept = [p for p in profiles if str(p.get("name")) != name]
+    if len(kept) == len(profiles):
+        return False
+    repo.save_meta_map(conn, {"profiles": json.dumps(kept, ensure_ascii=False)}, META_PREFIX)
+    return True
+
+
 def describe() -> dict:
     """给设置页用：当前值、每个字段的来源、密钥掩码、.env 是否也配了。"""
     env = _env_values()
