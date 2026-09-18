@@ -1248,8 +1248,9 @@ def iter_agent_events(
             repeat_streak = 0
             observation = {
                 "dry_run": True,
-                "note": "计划模式：本工具没有被真正调用。请继续规划后续步骤；"
-                        "全部想清楚后用 final 输出「将要做的事」清单（不要声称已执行）。",
+                "note": "计划模式：本工具没有被真正调用。请继续规划后续步骤；独立的读操作"
+                        "请合并进 actions 一轮做完，减少轮次。全部想清楚后用 final 输出"
+                        "「将要做的事」清单（不要声称已执行）。",
             }
             summary = f"（计划）将执行 {action}"
             seen_calls.add(signature)
