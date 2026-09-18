@@ -517,8 +517,10 @@ async def agent_run(request: Request, conn: sqlite3.Connection = Depends(db_conn
     # 否则同步阻塞事件循环——博客访客的请求也会被一起卡住
     read_only, dry_run = _parse_agent_mode(payload)
     history = payload.get("history")
+    confirmed_plan = payload.get("plan")
     result = await run_in_threadpool(
-        agent.run_agent, conn, task, read_only=read_only, dry_run=dry_run, history=history)
+        agent.run_agent, conn, task, read_only=read_only, dry_run=dry_run, history=history,
+        confirmed_plan=str(confirmed_plan)[:agent.PLAN_MAX_CHARS] if confirmed_plan else None)
     status = 200 if result.get("ok") else 502
     return _json(result, status)
 
@@ -588,9 +590,12 @@ async def agent_stream(request: Request, conn: sqlite3.Connection = Depends(db_c
     """agent 循环的流式版本：每完成一步就推一条 SSE 事件。
 
     事件格式（JSON per data: 行）：
-      {"type": "step", "tool": ..., "params": {...}, "summary": ...}
+      {"type": "step", "tool": ..., "params": {...}, "summary": ..., "run_id": ...}
       {"type": "final", "ok": true, "answer": ..., "steps": [...]}（收尾，含完整步骤）
       {"type": "error", "error": ...}（未配置 AI 等前置失败）
+
+    run_id 通过响应头 X-Run-Id 交给前端：前端在任务运行期间可随时
+    POST /api/agent/cancel 取消（服务端在下一个步骤边界安全停下）。
     """
     payload = await read_json(request)
     task = str(payload.get("task") or "").strip()
@@ -600,17 +605,36 @@ async def agent_stream(request: Request, conn: sqlite3.Connection = Depends(db_c
         return _json({"ok": False, "error": "任务太长了（上限 2000 字）"}, 400)
     read_only, dry_run = _parse_agent_mode(payload)
     history = payload.get("history")
+    confirmed_plan = str(payload.get("plan") or "")[:agent.PLAN_MAX_CHARS] or None
+    run_id = agent.new_run_id()
 
     def gen():
         try:
             for event in agent.iter_agent_events(
-                conn, task, read_only=read_only, dry_run=dry_run, history=history):
+                    conn, task, read_only=read_only, dry_run=dry_run, history=history,
+                    run_id=run_id, confirmed_plan=confirmed_plan):
                 yield "data: " + json.dumps(event, ensure_ascii=False) + "\n\n"
         except Exception as exc:  # 流断了也要给前端一个明确错误
             logger.warning("agent 流式执行异常", exc_info=True)
             yield "data: " + json.dumps({"type": "error", "error": str(exc)}, ensure_ascii=False) + "\n\n"
+        finally:
+            # 客户端断开（关页面/刷新）时 StreamingResponse 会关闭生成器：
+            # 置取消标志，服务端循环在下一个步骤边界停下，不再继续烧模型调用
+            agent.request_cancel(run_id)
 
-    return StreamingResponse(gen(), media_type="text/event-stream")
+    return StreamingResponse(gen(), media_type="text/event-stream",
+                             headers={"X-Run-Id": run_id})
+
+
+@ai_api_router.post("/agent/cancel")
+async def agent_cancel(request: Request):
+    """取消一个正在运行的 agent 任务。已结束 / 不存在的 run 返回 ok=False。"""
+    payload = await read_json(request)
+    run_id = str(payload.get("run_id") or "").strip()
+    if not run_id:
+        return _json({"ok": False, "error": "缺少 run_id"}, 400)
+    ok = agent.request_cancel(run_id)
+    return _json({"ok": ok, "error": "" if ok else "任务不在运行中（可能已经结束了）"})
 
 
 @ai_api_router.post("/ai/summarize")

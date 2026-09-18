@@ -8213,3 +8213,23 @@ html:not(.js) .svg-view__actions { display: none; }
 .svg-lightbox svg foreignObject {
   overflow: visible;
 }
+
+/* ===== 补丁：agent 两段式计划条（2026-09-18） =====
+   干跑产出的计划下面挂一条「按计划执行」操作条，让先审后放形成闭环。 */
+.agent-planbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-top: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px dashed var(--brand);
+  border-radius: var(--radius-sm);
+  background: var(--brand-soft);
+}
+.agent-planbar__hint {
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+/* .btn 的 display 会盖过 UA 的 [hidden]（agent 的「停止」按钮踩过）：显式兜底 */
+.btn[hidden] { display: none; }

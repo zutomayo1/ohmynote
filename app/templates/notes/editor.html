@@ -266,6 +266,10 @@
     </button>
     <a class="btn btn--ghost" href="{{ '/notes' if is_new else '/notes/' ~ note.id }}">取消</a>
     {% if not is_new %}
+      <a class="btn btn--ghost" href="/agent?note={{ note.id }}&title={{ note.title | urlencode }}"
+         title="让笔记助手读这篇并按你的指示操作（先保存再用效果最好）">
+        {{ icon('sparkles', 14) }} 让助手处理这篇
+      </a>
       <span class="editor__actions-meta muted">最后更新：{{ note.updated_at | datetime_cn }}</span>
     {% endif %}
   </div>

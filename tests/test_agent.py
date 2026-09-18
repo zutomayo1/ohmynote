@@ -62,6 +62,7 @@ def db_conn(client, monkeypatch):
 
 def test_agent_search_and_tag_flow(db_conn, seeded_note, monkeypatch):
     """搜到笔记 → 追加标签 → 汇报。三步循环全部生效。"""
+    agent_service.clear_runs(db_conn)   # 其它用例可能留下执行历史：recap 注入会多出一条消息
     script = ScriptedChat([
         json.dumps({"action": "search_notes", "params": {"query": "Docker"}}, ensure_ascii=False),
         json.dumps({"action": "add_tags", "params": {"note_id": seeded_note, "tags": ["部署"]}},
@@ -129,12 +130,31 @@ def test_agent_stops_after_max_steps(db_conn, monkeypatch):
 
 
 def test_agent_unformat_reply_becomes_answer(db_conn, monkeypatch):
-    """模型没按 JSON 回：把原话当最终回答，不算失败。"""
-    monkeypatch.setattr(agent_service.ai, "chat", ScriptedChat(["我觉得没必要加标签。"]))
+    """模型连续 MAX_FORMAT_RETRIES+1 次都没按 JSON 回：把原话当最终回答，不算失败。"""
+    garbage = "我觉得没必要加标签。"
+    monkeypatch.setattr(
+        agent_service.ai, "chat",
+        ScriptedChat([garbage] * (agent_service.MAX_FORMAT_RETRIES + 1)))
     result = agent_service.run_agent(db_conn, "加标签")
     assert result["ok"] is True
     assert result["steps"] == []
     assert "没必要" in result["answer"]
+
+
+def test_agent_format_failure_gets_feedback_and_recovers(db_conn, monkeypatch):
+    """格式失控先带反馈重试：模型第二次按协议回了 JSON，任务正常继续。"""
+    script = ScriptedChat([
+        "我觉得应该先搜一下再动手。",   # 没按协议回
+        json.dumps({"action": "final", "answer": "好的，已按格式回复"}, ensure_ascii=False),
+    ])
+    monkeypatch.setattr(agent_service.ai, "chat", script)
+    result = agent_service.run_agent(db_conn, "加标签")
+    assert result["ok"] is True
+    assert "按格式回复" in result["answer"]
+    # 第二次调用前，上一条原话和格式纠正反馈都喂回去了
+    second = script.calls[1]
+    assert any("不符合约定格式" in m["content"] for m in second)
+    assert any("应该先搜一下" in m["content"] for m in second)
 
 
 def test_agent_requires_ai(db_conn, monkeypatch):
@@ -228,14 +248,15 @@ def test_iter_agent_events_yields_error_when_ai_disabled(db_conn, monkeypatch):
 
 
 def test_run_agent_still_matches_old_shape(db_conn, seeded_note, monkeypatch):
-    """run_agent 退化为 iter_agent_events 的消费者，返回值结构和以前一致。"""
+    """run_agent 退化为 iter_agent_events 的消费者：老四键保底，v2 加 cancelled/duration_ms。"""
     script = ScriptedChat([
         json.dumps({"action": "search_notes", "params": {"query": "Docker"}}, ensure_ascii=False),
         json.dumps({"action": "final", "answer": "完成"}, ensure_ascii=False),
     ])
     monkeypatch.setattr(agent_service.ai, "chat", script)
     result = agent_service.run_agent(db_conn, "搜 Docker 笔记")
-    assert set(result) == {"ok", "answer", "steps", "error"}
+    assert {"ok", "answer", "steps", "error"} <= set(result)
+    assert set(result) == {"ok", "answer", "steps", "error", "cancelled", "duration_ms"}
     assert result["ok"] is True
     assert result["steps"][0]["tool"] == "search_notes"
 

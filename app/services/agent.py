@@ -16,8 +16,10 @@ import json
 import logging
 import re
 import sqlite3
+import threading
 import time
 from datetime import date, timedelta
+from difflib import SequenceMatcher
 from uuid import uuid4
 from typing import Any, Callable
 
@@ -41,17 +43,78 @@ MAX_RUNS = 20                # 执行历史最多保留多少条（审计用）
 CHAT_RETRIES = 2             # 模型调用失败自动重试次数（总共尝试 N 次）
 SEARCH_LIMIT_MAX = 10
 MAX_REPEAT_STEPS = 3         # 连续这么多步都在重复调用就收场，别把预算烧光
+MAX_FORMAT_RETRIES = 2       # 模型没按 JSON 协议回：带反馈重试这么多次后才降级
+MAX_ACTIONS_PER_TURN = 4     # 单轮最多并做几个工具（协议 v2：actions[] 数组）
+PLAN_MAX_CHARS = 4000        # 「按计划执行」计划文本上限
+CONFIRM_BULK_THRESHOLD = 10  # 批量操作超过这个篇数需要用户确认
+CONFIRM_REWRITE_MIN_CHARS = 200   # 原文短于这个字数不触发「大改写」确认
+CONFIRM_REWRITE_RATIO = 0.35      # 新旧正文相似度低于它 = 大改写，需要确认
+
+# ---------------------------------------------------------------------------
+# 可取消：run_id -> threading.Event。单进程应用，模块级注册表足够；
+# SSE 端点把 run_id 通过响应头交给前端，取消端点按 id 置位，循环每步检查。
+# ---------------------------------------------------------------------------
+_CANCEL_EVENTS: dict[str, threading.Event] = {}
+_CANCEL_LOCK = threading.Lock()
+
+
+def new_run_id() -> str:
+    return uuid4().hex[:12]
+
+
+def _register_run(run_id: str) -> threading.Event:
+    with _CANCEL_LOCK:
+        event = _CANCEL_EVENTS.get(run_id)
+        if event is None:
+            event = threading.Event()
+            _CANCEL_EVENTS[run_id] = event
+        # 顺手清理已结束的残留（防御性，正常都会在 finally 里摘掉）
+        if len(_CANCEL_EVENTS) > 64:
+            for key in [k for k, v in _CANCEL_EVENTS.items() if k != run_id and v.is_set()]:
+                _CANCEL_EVENTS.pop(key, None)
+        return event
+
+
+def _release_run(run_id: str) -> None:
+    with _CANCEL_LOCK:
+        _CANCEL_EVENTS.pop(run_id, None)
+
+
+def request_cancel(run_id: str) -> bool:
+    """请求取消一个正在跑的任务。返回是否找到了还在跑的 run。"""
+    with _CANCEL_LOCK:
+        event = _CANCEL_EVENTS.get(str(run_id or ""))
+    if event is None:
+        return False
+    event.set()
+    return True
 
 _WRITE_TOOLS = frozenset({
     "create_note", "update_note", "add_tags", "remove_tags", "set_category",
     "publish_note", "archive_note", "trash_note", "restore_note", "pin_note", "star_note",
     "bulk_add_tags", "bulk_remove_tags", "append_note",
+    "restore_version", "merge_notes",
 })
 
 # 这些写操作不可逆或影响面大，机制层强制「先确认再执行」：
 # 模型调用只会生成一张确认卡片（meta: agent.pending），用户在页面点「确认执行」
 # 才真正落地（execute_pending，绕过模型）——提示词约束之外的最后一道闸
-_CONFIRM_TOOLS = frozenset({"trash_note"})
+_CONFIRM_TOOLS = frozenset({"trash_note", "publish_note", "merge_notes"})
+# 确认卡片的文案按动作生成：会发生什么、怎么后悔（不再写死回收站一套话）
+_CONFIRM_META = {
+    "trash_note": {
+        "label": "移入回收站",
+        "consequence": "笔记将进入回收站（软删除），30 天内可在回收站恢复，之后自动清除",
+    },
+    "publish_note": {
+        "label": "发布到博客",
+        "consequence": "笔记将公开到博客，任何能访问博客的人都能看到；取消公开即收回",
+    },
+    "merge_notes": {
+        "label": "合并笔记",
+        "consequence": "源笔记正文将并入目标笔记，源笔记移入回收站（30 天内可恢复）",
+    },
+}
 PENDING_TTL_SECONDS = 600      # 确认卡片有效期：10 分钟没用就作废
 
 _WEEKDAYS = ("周一", "周二", "周三", "周四", "周五", "周六", "周日")
@@ -63,32 +126,50 @@ def _today_label() -> str:
     return f"{today.isoformat()}（{_WEEKDAYS[today.weekday()]}）"
 
 
-SYSTEM_PROMPT = """你是墨痕笔记应用里的笔记助手 Agent。用户会用自然语言给你任务，
-你通过调用工具多步完成任务。今天是 {today}。可用工具：
+SYSTEM_PROMPT = """你是墨痕笔记应用里的笔记助手 Agent。用户用自然语言给你任务，你通过调用工具多步完成。
+今天是 {today}。
+
+## 可用工具
 
 {tools}
 
-每一轮你只能输出一个 JSON 对象（不要输出任何别的文字、不要用代码块包裹）：
+## 输出协议（严格遵守）
 
-1. 调工具：{{"action": "工具名", "params": {{...}}}}
-2. 任务完成：{{"action": "final", "answer": "给用户看的最终回答"}}
+每一轮你只能输出**一个** JSON 对象，不要输出任何别的文字、不要用代码块包裹：
 
-行动准则：
-- 动手前先查一次就够：写操作（create/update/…）之前，先用 search_notes 或 read_note
-  确认目标笔记确实存在，绝对不要凭空编造 note_id。不要反复确认同一件事。
-- 一步能做完就别拆开：拿到 note_id 后直接动手，把能合并的操作并到尽量少的步骤里。
-- read_note 一次基本就把整篇给你了（返回里的 content_chars 是总字数，
-  returned_chars 是这次给了多少）。**has_more=false 就说明这篇已经读完了，
-  绝对不要再用不同 offset 反复读同一篇**；只有 has_more=true 且确实需要后面的内容时
-  才续读，最多续读一两次，并在最终回答里说明「只读了前 N 字」。
-- update_note 只传需要修改的字段，没有提到的保持不变。注意语义差别：
-  update_note 的 tags 是**整体替换**，add_tags 是追加，remove_tags 是删除指定标签。
-- 危险操作（trash_note 移入回收站）只在用户明确要求时做。调用后会生成确认卡片而不是直接执行：用 final 提醒用户在页面上点「确认执行」，用户确认前不要重复调用。回答里要说清楚去哪找回来（回收站）。
-- 信息不够就反问：如果任务含糊到无法安全执行（比如"改一下那篇笔记"但搜不到明确目标），
-  用 final 提一个具体的问题让用户补充，宁可少做不可做错。
-- 对话可能包含之前的任务记录：用户说"继续 / 刚才那篇 / 再加点"时，从上下文里找对应的
-  note_id；找不到就用 search_notes 重新定位。
-- answer 用简洁的中文说清楚你做了什么、结果如何；列出一批笔记时带上标题。"""
+1. 调一个工具：{{"action": "工具名", "params": {{...}}}}
+2. 一次并做多个独立工具（最多 {max_actions} 个，只能是读类或互不依赖的操作）：
+   {{"actions": [{{"action": "工具名", "params": {{...}}}}, ...]}}
+3. 任务完成：{{"action": "final", "answer": "给用户看的最终回答"}}
+
+## 示例
+
+用户：给提到 Docker 的笔记加上「部署」标签
+正确第一步：{{"action": "search_notes", "params": {{"query": "Docker"}}}}
+拿到结果后：{{"action": "add_tags", "params": {{"note_id": 12, "tags": ["部署"]}}}}
+做完后：{{"action": "final", "answer": "已给《Docker 部署手记》加上「部署」标签。"}}
+
+用户：随便聊聊什么是知识管理
+直接：{{"action": "final", "answer": "知识管理是…"}}（无需工具就别调工具）
+
+## 行动准则
+
+- **先查再写**：写操作（create/update/…）前先用 search_notes 或 read_note 确认目标存在，
+  绝不凭空编造 note_id。但也不要反复确认同一件事——查一次就够。
+- **省步数**：拿到 note_id 直接动手；互不依赖的读操作合并进 actions 一次做完。
+- **read_note 一次读完**：返回里 content_chars 是总字数、has_more=false 表示读完。
+  has_more=false 就绝不再读同一篇；只有确实需要后续内容才按 next_offset 续读（最多一两次），
+  并在回答里说明「只读了前 N 字」。
+- **改对字段**：update_note 只传要改的字段，没提到的保持不变；tags 是**整体替换**，
+  add_tags 追加，remove_tags 删除指定标签；「在末尾加一段」用 append_note，别整篇重写。
+- **危险操作**：移入回收站、发布到博客、合并笔记（以及超大范围的改写/批量操作）会先生成
+  确认卡片并结束本轮任务，不会直接执行——不要重复调用，等用户在页面上确认。
+- **信息不够就反问**：任务含糊到无法安全执行（比如"改一下那篇笔记"但搜不到明确目标），
+  用 final 提一个具体的问题，宁可少做不可做错。
+- **跨轮上下文**：对话里可能带之前任务的记录；用户说"继续 / 刚才那篇 / 再加点"时从上下文找
+  note_id，找不到就 search_notes 重新定位。若给了「已确认的计划」，严格按计划执行，
+  可以微调参数但不要扩大范围。
+- answer 用简洁的中文说清楚做了什么、结果如何；列出一批笔记时带上标题。"""
 
 
 def _note_brief(note: dict[str, Any]) -> dict[str, Any]:
@@ -430,6 +511,113 @@ def _make_tools(conn: sqlite3.Connection) -> dict[str, dict[str, Any]]:
         return {"count": len(items), "total": total, "notes": items,
                 "hint": "这些笔记在回收站里；restore_note 可恢复，超过剩余天数会被自动清掉。"}
 
+    def get_note_history(params: dict) -> dict:
+        """版本历史列表：模型由此拿到 version_id，再决定要不要恢复。"""
+        note_id = _as_int(params.get("note_id"))
+        note = repo.get_note(conn, note_id, include_deleted=True)
+        if note is None:
+            return {"error": "笔记不存在"}
+        versions = repo.list_versions(conn, note_id)[:20]
+        return {
+            "note_id": note_id,
+            "title": note.get("title"),
+            "count": len(versions),
+            "versions": [{"version_id": v.get("id"), "title": v.get("title"),
+                          "reason": v.get("reason"), "created_at": v.get("created_at"),
+                          "size": v.get("size")} for v in versions],
+            "hint": "restore_version 需要 note_id + version_id；恢复前会自动把当前内容存为新版本，随时可再恢复回来。",
+        }
+
+    def restore_version(params: dict) -> dict:
+        note_id = _as_int(params.get("note_id"))
+        version_id = _as_int(params.get("version_id"))
+        note = repo.get_note(conn, note_id)
+        if note is None:
+            return {"error": "笔记不存在"}
+        restored = repo.restore_version(conn, note_id, version_id)
+        if restored is None:
+            return {"error": "版本不存在（先用 get_note_history 查到 version_id 再恢复）"}
+        return {"restored": True, "note_id": note_id, "version_id": version_id,
+                "title": restored.get("title"),
+                "note": "已恢复到该版本；恢复前的内容也自动存了版本历史，可再恢复回来"}
+
+    def list_backlinks(params: dict) -> dict:
+        note_id = _as_int(params.get("note_id"))
+        note = repo.get_note(conn, note_id)
+        if note is None:
+            return {"error": "笔记不存在"}
+        items = repo.backlinks(conn, note_id)[:20]
+        return {"note_id": note_id, "title": note.get("title"), "count": len(items),
+                "notes": [_note_brief(n) for n in items],
+                "hint": "这些笔记的正文里链接到了本篇（[[双链]]）。"}
+
+    def semantic_search(params: dict) -> dict:
+        from . import ai_embed
+        query = str(params.get("query") or "").strip()
+        if not query:
+            return {"error": "query 不能为空"}
+        limit = min(max(_opt_int(params.get("limit"), 6), 1), SEARCH_LIMIT_MAX)
+        try:
+            hits = ai_embed.retrieve(conn, query, limit=limit)
+        except Exception:
+            logger.warning("agent semantic_search 失败", exc_info=True)
+            hits = None
+        if not hits:
+            return {"error": "语义检索不可用（向量索引未构建或未配置向量模型），改用 search_notes 关键词检索"}
+        notes = []
+        for hit in hits[:limit]:
+            try:
+                brief = _note_brief(hit)
+            except Exception:
+                continue
+            brief["score"] = round(float(hit.get("score") or 0), 3)
+            if hit.get("snippet"):
+                brief["snippet"] = str(hit["snippet"])[:200]
+            notes.append(brief)
+        return {"count": len(notes), "query": query, "notes": notes,
+                "hint": "语义检索按含义匹配（score 越高越相关），命中词未必出现在正文里。"}
+
+    def merge_notes(params: dict) -> dict:
+        """多篇合并进一篇：源笔记进回收站（可恢复），目标原正文存版本历史。"""
+        target_id = _as_int(params.get("target_id"))
+        target = repo.get_note(conn, target_id)
+        if target is None:
+            return {"error": "目标笔记不存在"}
+        raw_ids = params.get("source_ids")
+        if not isinstance(raw_ids, list) or not raw_ids:
+            return {"error": "source_ids 必须是非空的笔记 id 列表（先用 search_notes 找到它们）"}
+        source_ids = []
+        for raw in raw_ids[:20]:
+            value = _as_int(raw)
+            if value > 0 and value != target_id:
+                source_ids.append(value)
+        source_ids = list(dict.fromkeys(source_ids))
+        if not source_ids:
+            return {"error": "source_ids 里没有合法的源笔记 id（不能包含目标本身）"}
+        sources = []
+        for source_id in source_ids:
+            note = repo.get_note(conn, source_id)
+            if note is None:
+                return {"error": f"源笔记 #{source_id} 不存在"}
+            sources.append(note)
+        parts = [str(target.get("content") or "").rstrip()]
+        merged_titles = []
+        for note in sources:
+            title = str(note.get("title") or f"笔记 #{note.get('id')}")
+            body = str(note.get("content") or "").strip()
+            parts.append(f"## 来自《{title}》\n\n{body}" if body else f"## 来自《{title}》\n\n（原文为空）")
+            merged_titles.append(title)
+        new_content = "\n\n".join(part for part in parts if part)
+        repo.update_note(conn, target_id, content=new_content, reason="agent-merge")
+        trashed = []
+        for note in sources:
+            if repo.soft_delete(conn, int(note["id"])):
+                trashed.append({"id": note["id"], "title": note.get("title")})
+        return {"merged": True, "target_id": target_id, "target_title": target.get("title"),
+                "merged_notes": merged_titles, "trashed": trashed,
+                "content_chars": len(new_content),
+                "note": "源笔记已移入回收站（30 天内可恢复）；合并前的目标正文存了版本历史"}
+
     return {
         "search_notes": {
             "description": "按关键词和/或标签、分类、状态、最近天数检索笔记，返回 id、标题、标签、分类",
@@ -543,6 +731,32 @@ def _make_tools(conn: sqlite3.Connection) -> dict[str, dict[str, Any]]:
             "params": {"note_id": "必填"},
             "run": restore_note,
         },
+        "get_note_history": {
+            "description": "列出笔记的版本历史（version_id、时间、原因、大小）——想撤销修改先查这个",
+            "params": {"note_id": "必填"},
+            "run": get_note_history,
+        },
+        "restore_version": {
+            "description": "把笔记恢复到某个历史版本（恢复前自动把当前内容存为新版本，可再恢复回来）",
+            "params": {"note_id": "必填", "version_id": "必填，先 get_note_history 查到"},
+            "run": restore_version,
+        },
+        "list_backlinks": {
+            "description": "列出链接到这篇笔记的其他笔记（[[双链]]引用了它的）",
+            "params": {"note_id": "必填"},
+            "run": list_backlinks,
+        },
+        "semantic_search": {
+            "description": "语义检索：按「意思相近」找笔记，命中词不必出现在正文里（关键词搜不到时用它）",
+            "params": {"query": "必填，自然语言描述想找的内容", "limit": "可选，默认 6"},
+            "run": semantic_search,
+        },
+        "merge_notes": {
+            "description": "把多篇笔记合并进一篇：源笔记正文并入目标（带来源小节），源笔记移入回收站。"
+                           "合并前会生成确认卡片等用户确认",
+            "params": {"target_id": "必填，合并进哪篇", "source_ids": "必填，被合并的笔记 id 列表"},
+            "run": merge_notes,
+        },
         "pin_note": {
             "description": "置顶 / 取消置顶",
             "params": {"note_id": "必填", "pinned": "默认 true，false 表示取消置顶"},
@@ -562,7 +776,7 @@ def _chat_with_retry(conn: sqlite3.Connection, messages: list[dict[str, str]]):
     last_error: ai.AIError | None = None
     for attempt in range(CHAT_RETRIES):
         try:
-            return ai.chat(messages, task="agent", conn=conn, temperature=0.0, max_tokens=1200), None
+            return ai.chat(messages, task="agent", conn=conn, temperature=0.0, max_tokens=2000), None
         except ai.AIError as exc:
             last_error = exc
             if attempt + 1 < CHAT_RETRIES:
@@ -661,6 +875,16 @@ def _summarize_step(name: str, result: dict) -> str:
         return f"已创建笔记 #{result.get('note_id')}"
     if name == "read_note":
         return f"已读取《{result.get('title')}》"
+    if name == "restore_version":
+        return f"已把《{result.get('title')}》恢复到指定版本"
+    if name == "merge_notes":
+        return f"已合并 {len(result.get('merged_notes') or [])} 篇进《{result.get('target_title')}》"
+    if name == "semantic_search":
+        return f"语义检索命中 {result.get('count', 0)} 篇"
+    if name == "get_note_history":
+        return f"查到 {result.get('count', 0)} 个历史版本"
+    if name == "list_backlinks":
+        return f"查到 {result.get('count', 0)} 篇反向链接"
     if result.get("updated"):
         return f"已更新笔记 #{result.get('note_id')}"
     return f"{name} 完成"
@@ -671,6 +895,50 @@ def _summarize_step(name: str, result: dict) -> str:
 # ---------------------------------------------------------------------------
 def _notes_list(involved: dict[int, str]) -> list[dict[str, Any]]:
     return [{"id": note_id, "title": title} for note_id, title in involved.items()]
+
+
+def _needs_confirm(action: str, params: dict, conn: sqlite3.Connection) -> bool:
+    """危险操作的判定：动作级（_CONFIRM_TOOLS 写死）+ 条件级（批量篇数 / 大改写）。
+
+    条件级只往「多确认」的方向误报（确认总是安全的），判定必须便宜：
+    大改写用 4000 字头的相似度近似，避免长正文上的性能坑。
+    """
+    if action in _CONFIRM_TOOLS:
+        if action == "publish_note":
+            return bool(params.get("public", True))   # 取消公开（public=false）不拦
+        return True
+    if action in ("bulk_add_tags", "bulk_remove_tags"):
+        ids = params.get("note_ids")
+        return isinstance(ids, list) and len(ids) > CONFIRM_BULK_THRESHOLD
+    if action == "update_note":
+        content = params.get("content")
+        if content is None:
+            return False
+        note = repo.get_note(conn, _as_int(params.get("note_id")))
+        old = str((note or {}).get("content") or "")
+        if len(old) < CONFIRM_REWRITE_MIN_CHARS:
+            return False
+        new = str(content)
+        if new.rstrip() == old.rstrip():
+            return False
+        return SequenceMatcher(None, old[:4000], new[:4000]).ratio() < CONFIRM_REWRITE_RATIO
+    return False
+
+
+# 可能出现在确认卡片上的动作全集（execute_pending 的白名单）
+_ALL_CONFIRMABLE = frozenset(_CONFIRM_TOOLS) | {"bulk_add_tags", "bulk_remove_tags", "update_note"}
+
+
+def _confirm_meta(action: str, params: dict) -> tuple[str, str, str]:
+    """确认卡片的 (label, consequence, 主体标题)。"""
+    meta = _CONFIRM_META.get(action) or {"label": action, "consequence": "该操作影响面较大，请确认"}
+    if action in ("bulk_add_tags", "bulk_remove_tags"):
+        ids = params.get("note_ids") if isinstance(params.get("note_ids"), list) else []
+        verb = "批量追加标签" if action == "bulk_add_tags" else "批量删除标签"
+        return (f"{verb}（{len(ids)} 篇）",
+                f"将给 {len(ids)} 篇笔记{'追加' if action == 'bulk_add_tags' else '删除'}指定标签",
+                f"{len(ids)} 篇笔记")
+    return meta["label"], meta["consequence"], ""
 
 
 def _record_run(
@@ -684,6 +952,8 @@ def _record_run(
     read_only: bool,
     dry_run: bool = False,
     involved: dict[int, str] | None = None,
+    duration_ms: int | None = None,
+    cancelled: bool = False,
 ) -> None:
     """把一次任务落进执行历史（审计用）。绝不抛异常——审计挂了不能连累任务。"""
     try:
@@ -697,6 +967,8 @@ def _record_run(
             "answer": (answer or "")[:300],
             "read_only": bool(read_only),
             "dry_run": bool(dry_run),
+            "cancelled": bool(cancelled),
+            "duration_ms": int(duration_ms or 0),
             "steps": [{"tool": s.get("tool"), "summary": s.get("summary")} for s in steps][:MAX_STEPS],
             "notes": [{"id": n.get("id"), "title": n.get("title")}
                       for n in _notes_list(involved or {})],
@@ -779,7 +1051,7 @@ def execute_pending(conn: sqlite3.Connection, confirm_id: str) -> dict[str, Any]
     if pending is None:
         return {"ok": False, "error": "确认已过期或不存在，请重新发起任务"}
     action = str(pending.get("action") or "")
-    if action not in _CONFIRM_TOOLS:
+    if action not in _ALL_CONFIRMABLE:
         return {"ok": False, "error": "该操作不需要确认或已失效"}
     spec = _make_tools(conn).get(action)
     if spec is None:
@@ -839,6 +1111,30 @@ def delete_run(conn: sqlite3.Connection, run_id: str) -> bool:
         return False
 
 
+def _planned_actions(data: dict) -> list[tuple[str, dict]]:
+    """协议 v2：单轮可带 actions 数组并做多个独立工具；兼容旧的单数 action。
+
+    最多 MAX_ACTIONS_PER_TURN 个；final 不在这里处理。坏形状返回空列表。
+    """
+    planned: list[tuple[str, dict]] = []
+    raw_list = data.get("actions")
+    if isinstance(raw_list, list):
+        for item in raw_list[:MAX_ACTIONS_PER_TURN]:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("action") or "").strip()
+            if not name or name == "final":
+                continue
+            params = item.get("params") if isinstance(item.get("params"), dict) else {}
+            planned.append((name, params))
+    if not planned:
+        name = str(data.get("action") or "").strip()
+        if name and name != "final":
+            params = data.get("params") if isinstance(data.get("params"), dict) else {}
+            planned.append((name, params))
+    return planned[:MAX_ACTIONS_PER_TURN]
+
+
 def iter_agent_events(
     conn: sqlite3.Connection,
     task: str,
@@ -847,15 +1143,21 @@ def iter_agent_events(
     read_only: bool = False,
     dry_run: bool = False,
     history: list[dict[str, str]] | None = None,
+    run_id: str | None = None,
+    confirmed_plan: str | None = None,
 ):
     """agent 循环的流式版本：每完成一步就 yield 一个事件 dict，而不是干等。
 
     事件类型（SSE 里每个 `data: ` 行的内容）：
-      {"type": "step", "tool": ..., "params": {...}, "summary": ...}
-      {"type": "final", "ok": bool, "answer": ..., "steps": [...], "error": ...}
+      {"type": "step", "tool": ..., "params": {...}, "summary": ..., "run_id": ...}
+      {"type": "final", "ok": bool, "answer": ..., "steps": [...], "error": ...,
+       "run_id": ..., "duration_ms": ..., "cancelled": bool}
       {"type": "error", "error": ...}（未配置 AI 等前置失败，没有 final）
 
     `run_agent` 就是它的消费者：吃掉 step/final/error 后拼回原来的 dict。
+
+    取消：request_cancel(run_id) 置位后，循环在**下一个步骤边界**安全停下
+    （正在进行的模型调用不会被掐断）；run_id 由调用方传入或自动生成。
     """
     if not ai.is_enabled():
         yield {"type": "error", "error": "尚未配置 AI 服务"}
@@ -865,14 +1167,24 @@ def iter_agent_events(
         yield {"type": "error", "error": "任务不能为空"}
         return
 
+    run_id = run_id or new_run_id()
+    cancel_event = _register_run(run_id)
+    started = time.time()
     tools = _make_tools(conn)
-    system = SYSTEM_PROMPT.format(tools=_describe_tools(tools), today=_today_label())
+    system = SYSTEM_PROMPT.format(tools=_describe_tools(tools), today=_today_label(),
+                                  max_actions=MAX_ACTIONS_PER_TURN)
     messages: list[dict[str, str]] = [{"role": "system", "content": system}]
     recap = _last_run_recap(conn)
     if recap:
         # 补上「上一轮动过哪篇笔记」——history 里只有最终回答，note_id 常常已经丢了，
         # 于是用户说「继续」时模型只能反问（真实踩过：0 步就交白卷）
         messages.append({"role": "system", "content": recap})
+    plan_text = str(confirmed_plan or "").strip()[:PLAN_MAX_CHARS]
+    if plan_text:
+        # 两段式任务流的后半段：用户在干跑里审阅过这份计划，这里严格照做
+        messages.append({"role": "system", "content":
+            "用户已在干跑中审阅并确认了以下计划，请严格按计划执行：可以微调参数，"
+            "不要扩大范围、不要添加计划之外的大动作。\n" + plan_text})
     messages.extend(_clean_history(history))
     messages.append({"role": "user", "content": task})
 
@@ -880,6 +1192,19 @@ def iter_agent_events(
     involved: dict[int, str] = {}   # 本次任务动过/读过的笔记 id -> 标题（给前端做链接）
     seen_calls: set[str] = set()    # 已成功执行过的「工具+参数」签名，用来拦住重复空转
     repeat_streak = 0               # 连续多少步是重复调用
+    format_retries = 0              # 已经做过几次「格式失控带反馈重试」
+
+    def _finish(ok: bool, answer: str, error: str = "") -> dict[str, Any]:
+        answer = answer or ""
+        _record_run(conn, task, ok=ok, answer=answer, steps=steps, error=error,
+                    read_only=read_only, dry_run=dry_run, involved=involved,
+                    duration_ms=_elapsed_ms(), cancelled=cancel_event.is_set())
+        return {"type": "final", "ok": ok, "answer": answer, "steps": steps,
+                "error": error, "notes": _notes_list(involved), "run_id": run_id,
+                "duration_ms": _elapsed_ms(), "cancelled": cancel_event.is_set()}
+
+    def _elapsed_ms() -> int:
+        return int((time.time() - started) * 1000)
 
     def _push_observe(payload: dict, limit_chars: int) -> None:
         """把工具结果喂回模型：按工具自己的上限截断，别把长正文一刀切掉。"""
@@ -888,38 +1213,26 @@ def iter_agent_events(
             text = text[:limit_chars] + "…（结果过长已截断）"
         messages.append({"role": "user", "content": "工具结果：" + text})
 
-    for _step_no in range(max_steps):
-        raw, last_error = _chat_with_retry(conn, messages)
-        if last_error is not None:
-            # 模型调用重试后仍挂：**不丢掉已完成的步骤**，把进度和补救建议一起交付
-            answer = _partial_answer(steps, last_error)
-            _record_run(conn, task, ok=False, answer=answer, steps=steps,
-                        error=str(last_error), read_only=read_only, dry_run=dry_run, involved=involved)
-            yield {"type": "final", "ok": False, "answer": answer, "steps": steps,
-                   "error": str(last_error), "notes": _notes_list(involved)}
+    def _collect(note_id: Any, title: Any) -> None:
+        if not isinstance(note_id, int):
             return
+        if not title:
+            try:
+                note = repo.get_note(conn, note_id)
+                title = str((note or {}).get("title") or "")
+            except Exception:
+                title = ""
+        involved[note_id] = title or f"笔记 #{note_id}"
 
-        data = _extract_json(raw)
-        if data is None:
-            # 模型没按格式回：直接把原话当最终回答收场，不再空转
-            _record_run(conn, task, ok=True, answer=(raw or "").strip(), steps=steps,
-                        error="", read_only=read_only, dry_run=dry_run, involved=involved)
-            yield {"type": "final", "ok": True, "answer": (raw or "").strip(),
-                  "steps": steps, "error": "", "notes": _notes_list(involved)}
-            return
+    def _execute_one(action: str, params: dict) -> tuple[dict, str, dict | None]:
+        """执行单个动作，返回 (观察结果, 步骤摘要, 确认信息或 None)。
 
-        action = str(data.get("action") or "").strip()
-        if action == "final":
-            _record_run(conn, task, ok=True, answer=str(data.get("answer") or "").strip(),
-                        steps=steps, error="", read_only=read_only, dry_run=dry_run, involved=involved)
-            yield {"type": "final", "ok": True,
-                  "answer": str(data.get("answer") or "").strip(), "steps": steps, "error": "",
-                  "notes": _notes_list(involved)}
-            return
-
-        params = data.get("params") if isinstance(data.get("params"), dict) else {}
+        只改外层的 seen_calls / repeat_streak；步数、事件与收尾由外层管。
+        """
+        nonlocal repeat_streak
         signature = action + ":" + json.dumps(params, ensure_ascii=False, sort_keys=True)
         spec = tools.get(action)
+        confirm_info: dict | None = None
 
         if signature in seen_calls and spec is not None:
             # 同一个工具 + 完全一样的参数又调一次：结果不会变，别把步数烧在这儿
@@ -945,30 +1258,35 @@ def iter_agent_events(
             observation = {"error": "只读模式：本次任务不执行写操作，如需修改请关闭只读模式后重试"}
             summary = f"已拦截写操作 {action}（只读模式）"
             seen_calls.add(signature)
-        elif action in _CONFIRM_TOOLS:
-            # 危险操作：不执行，生成确认卡片等用户点「确认执行」（见 _CONFIRM_TOOLS 注释）
-            note = repo.get_note(conn, _as_int(params.get("note_id")))
-            if note is None:
-                repeat_streak = 0
-                observation = {"error": "笔记不存在"}
-                summary = f"{action} 失败：笔记不存在"
+        elif _needs_confirm(action, params, conn):
+            # 危险/大影响操作：不执行，生成确认卡片等用户点「确认执行」（机制层兜底）
+            repeat_streak = 0
+            ctx_key = "target_id" if action == "merge_notes" else "note_id"
+            ctx_note = None
+            if params.get(ctx_key) is not None:
+                ctx_note = repo.get_note(conn, _as_int(params.get(ctx_key)))
+                if ctx_note is None:
+                    return {"error": "笔记不存在"}, f"{action} 失败：笔记不存在", None
+            existing = _get_pending_op(conn)
+            if (existing and existing.get("action") == action
+                    and existing.get("params") == params):
+                pending = existing
+                repeat_streak += 1   # 反复生成同一张确认卡也按空转算
             else:
-                existing = _get_pending_op(conn)
-                if (existing and existing.get("action") == action
-                        and existing.get("params") == params):
-                    pending = existing
-                    repeat_streak += 1   # 反复生成同一张确认卡也按空转算
-                else:
-                    pending = _save_pending_op(conn, action, params, note)
-                    repeat_streak = 0
-                observation = {
-                    "confirm_required": True,
-                    "confirm_id": pending["id"],
-                    "note": "确认卡片已生成，本步没有真正执行。请用 final 提醒用户："
-                            "页面上有一张确认卡片，点「确认执行」才会移入回收站"
-                            "（软删除，可在回收站恢复）。用户确认前不要再调用本工具。",
-                }
-                summary = f"等待用户确认：移入回收站《{note.get('title')}》"
+                pending = _save_pending_op(conn, action, params, ctx_note or {})
+            label, consequence, subject = _confirm_meta(action, params)
+            if ctx_note is not None:
+                subject = str(ctx_note.get("title") or subject)
+                summary = f"等待用户确认：{label}《{subject}》"
+            else:
+                summary = f"等待用户确认：{label}"
+            observation = {
+                "confirm_required": True,
+                "confirm_id": pending["id"],
+                "note": "确认卡片已生成，本步没有真正执行。用户在页面上点「确认执行」才会生效。",
+            }
+            confirm_info = {"id": pending["id"], "note_id": params.get(ctx_key),
+                            "title": subject, "label": label, "consequence": consequence}
         elif spec is None:
             repeat_streak = 0
             observation = {"error": f"未知工具 {action!r}，可用工具：{', '.join(tools)}"}
@@ -986,61 +1304,124 @@ def iter_agent_events(
             # 只有真的执行过才算「做过」；报错的调用允许换个参数重试
             if not (isinstance(observation, dict) and observation.get("error")):
                 seen_calls.add(signature)
+        return observation, summary, confirm_info
 
-        def _collect(note_id: Any, title: Any) -> None:
-            if not isinstance(note_id, int):
+    try:
+        for _step_no in range(max_steps):
+            if cancel_event.is_set():
+                done = f"已完成 {len(steps)} 步，" if steps else ""
+                yield _finish(True, f"任务已按你的要求取消。{done}已完成的操作都生效了。")
                 return
-            if not title:
-                try:
-                    note = repo.get_note(conn, note_id)
-                    title = str((note or {}).get("title") or "")
-                except Exception:
-                    title = ""
-            involved[note_id] = title or f"笔记 #{note_id}"
 
-        if isinstance(observation, dict):
-            _collect(observation.get("note_id"), observation.get("title"))
-            _collect(observation.get("id"), observation.get("title"))
-            for item in observation.get("notes") or []:
-                if isinstance(item, dict):
-                    _collect(item.get("id"), item.get("title"))
+            raw, last_error = _chat_with_retry(conn, messages)
+            if last_error is not None:
+                # 模型调用重试后仍挂：**不丢掉已完成的步骤**，把进度和补救建议一起交付
+                yield _finish(False, _partial_answer(steps, last_error), error=str(last_error))
+                return
 
-        step = {"tool": action, "summary": summary, "params": params}
-        steps.append(step)
-        # 先把这一步推给前端，再准备下一轮——这就是「流式」的核心
-        event = {"type": "step", "tool": action, "summary": summary, "params": params,
-                 "notes": _notes_list(involved)}
-        if isinstance(observation, dict) and observation.get("confirm_required"):
-            note = repo.get_note(conn, _as_int(params.get("note_id")), include_deleted=True)
-            event["confirm"] = {
-                "id": observation.get("confirm_id"),
-                "note_id": params.get("note_id"),
-                "title": str((note or {}).get("title") or ""),
-            }
-        yield event
-        messages.append({"role": "assistant", "content": json.dumps(data, ensure_ascii=False)})
-        _push_observe(
-            observation if isinstance(observation, dict) else {"result": observation},
-            int((spec or {}).get("observe_limit") or OBSERVE_LIMIT),
-        )
+            data = _extract_json(raw)
+            if data is None:
+                # 模型没按格式回：带反馈让它重试几次；仍不行就把原话当最终回答收场
+                if format_retries < MAX_FORMAT_RETRIES:
+                    format_retries += 1
+                    messages.append({"role": "assistant", "content": (raw or "").strip()[:2000]})
+                    messages.append({"role": "user", "content":
+                        "你上一条回复不符合约定格式。只输出一个 JSON 对象："
+                        '调工具用 {"action": "工具名", "params": {...}}'
+                        '（多个独立工具用 {"actions": [...]}），'
+                        '完成用 {"action": "final", "answer": "..."}。'
+                        "不要输出其他文字或代码块。"})
+                    continue
+                yield _finish(True, (raw or "").strip())
+                return
 
-        if repeat_streak >= MAX_REPEAT_STEPS:
-            answer = (
-                f"我卡在重复操作上了（同一个调用连着做了 {repeat_streak} 次，结果不会变），先停下来。"
-                "已经完成的操作都生效了。你可以把任务说得更具体一点，或者告诉我下一步做什么。"
-            )
-            _record_run(conn, task, ok=True, answer=answer, steps=steps, error="",
-                        read_only=read_only, dry_run=dry_run, involved=involved)
-            yield {"type": "final", "ok": True, "answer": answer, "steps": steps, "error": "",
-                  "notes": _notes_list(involved)}
-            return
+            action = str(data.get("action") or "").strip()
+            if action == "final":
+                yield _finish(True, str(data.get("answer") or "").strip())
+                return
 
-    # 步数耗尽还没收尾：安全停下，绝不无限循环
-    answer = "步骤太多，我先停下来了。已经完成的操作都生效了，你可以继续给我补充指令。"
-    _record_run(conn, task, ok=True, answer=answer, steps=steps, error="",
-                read_only=read_only, dry_run=dry_run, involved=involved)
-    yield {"type": "final", "ok": True, "answer": answer, "steps": steps, "error": "",
-          "notes": _notes_list(involved)}
+            planned = _planned_actions(data)
+            if not planned:
+                if format_retries < MAX_FORMAT_RETRIES:
+                    format_retries += 1
+                    messages.append({"role": "assistant",
+                                     "content": json.dumps(data, ensure_ascii=False)})
+                    messages.append({"role": "user", "content":
+                        "这一步没有可执行的工具调用（action 不是已知工具）。"
+                        "请重新输出一个 JSON 对象。"})
+                    continue
+                yield _finish(True, "我没有看懂这一步的指令格式，先停下来了。已完成的操作都生效了。")
+                return
+
+            # ---- 执行本轮动作（协议 v2：单轮可并做多个独立工具） ----
+            format_retries = 0          # 能正常出招了就重置格式重试计数
+            round_observations: list[dict[str, Any]] = []
+            observe_limits: list[int] = []
+            stop_round = False
+            last_confirm: dict | None = None
+            for sub_action, sub_params in planned:
+                if len(steps) >= max_steps:
+                    break
+                if cancel_event.is_set():
+                    stop_round = True
+                    break
+                observation, summary, confirm_info = _execute_one(sub_action, sub_params)
+                if isinstance(observation, dict):
+                    _collect(observation.get("note_id"), observation.get("title"))
+                    _collect(observation.get("id"), observation.get("title"))
+                    for item in observation.get("notes") or []:
+                        if isinstance(item, dict):
+                            _collect(item.get("id"), item.get("title"))
+                    if observation.get("merged"):
+                        _collect(observation.get("target_id"), observation.get("target_title"))
+                step = {"tool": sub_action, "summary": summary, "params": sub_params}
+                steps.append(step)
+                # 先把这一步推给前端，再准备下一轮——这就是「流式」的核心
+                event: dict[str, Any] = {"type": "step", "tool": sub_action, "summary": summary,
+                                         "params": sub_params, "notes": _notes_list(involved),
+                                         "run_id": run_id}
+                if confirm_info:
+                    event["confirm"] = confirm_info
+                yield event
+                round_observations.append({"action": sub_action, "result": observation})
+                observe_limits.append(
+                    int((tools.get(sub_action) or {}).get("observe_limit") or OBSERVE_LIMIT))
+                if confirm_info:
+                    # 等用户确认期间别继续执行本轮剩余动作，避免在未确认状态下叠加操作
+                    last_confirm = confirm_info
+                    stop_round = True
+                    break
+
+            if not round_observations:
+                continue   # 本轮没动任何工具（步数耗尽/取消），交给外层判断收尾
+
+            messages.append({"role": "assistant", "content": json.dumps(data, ensure_ascii=False)})
+            _push_observe({"results": round_observations},
+                          max(observe_limits) if observe_limits else OBSERVE_LIMIT)
+
+            if cancel_event.is_set():
+                done = f"已完成 {len(steps)} 步，" if steps else ""
+                yield _finish(True, f"任务已按你的要求取消。{done}已完成的操作都生效了。")
+                return
+
+            if repeat_streak >= MAX_REPEAT_STEPS:
+                answer = (
+                    f"我卡在重复操作上了（同一个调用连着做了 {repeat_streak} 次，结果不会变），先停下来。"
+                    "已经完成的操作都生效了。你可以把任务说得更具体一点，或者告诉我下一步做什么。"
+                )
+                yield _finish(True, answer)
+                return
+
+            if stop_round and last_confirm:
+                # 生成了确认卡片：本轮到此为止，等用户在页面上确认（不再烧模型调用）
+                yield _finish(True, "已生成确认卡片，等你在页面上点「确认执行」。确认前我不会继续操作。")
+                return
+
+        # 步数耗尽还没收尾：安全停下，绝不无限循环
+        answer = "步骤太多，我先停下来了。已经完成的操作都生效了，你可以继续给我补充指令。"
+        yield _finish(True, answer)
+    finally:
+        _release_run(run_id)
 
 
 def run_agent(
@@ -1051,13 +1432,17 @@ def run_agent(
     read_only: bool = False,
     dry_run: bool = False,
     history: list[dict[str, str]] | None = None,
+    run_id: str | None = None,
+    confirmed_plan: str | None = None,
 ) -> dict[str, Any]:
     """跑一次 agent 循环。等价于消费 `iter_agent_events` 并拼回 {ok, answer, steps, error}。
 
-    保留旧签名与返回值结构，原有 14 个测试无需改动即可全绿。
+    保留旧签名与返回值结构，原有测试无需改动即可全绿。
     """
     final: dict[str, Any] | None = None
-    for event in iter_agent_events(conn, task, max_steps=max_steps, read_only=read_only, dry_run=dry_run, history=history):
+    for event in iter_agent_events(conn, task, max_steps=max_steps, read_only=read_only,
+                                   dry_run=dry_run, history=history, run_id=run_id,
+                                   confirmed_plan=confirmed_plan):
         if event["type"] == "error":
             return {"ok": False, "answer": "", "steps": [], "error": event["error"]}
         if event["type"] == "final":
@@ -1065,10 +1450,13 @@ def run_agent(
             break
         # step 事件：步骤已包含在最终 final 的 steps 里，这里忽略即可
     if final is None:
-        return {"ok": False, "answer": "", "steps": [], "error": "agent 没有产生结果"}
+        return {"ok": False, "answer": "", "steps": [], "error": "agent 没有产生结果",
+                "cancelled": False, "duration_ms": 0}
     return {
         "ok": bool(final.get("ok")),
         "answer": final.get("answer") or "",
         "steps": final.get("steps") or [],
         "error": final.get("error") or "",
+        "cancelled": bool(final.get("cancelled")),
+        "duration_ms": int(final.get("duration_ms") or 0),
     }

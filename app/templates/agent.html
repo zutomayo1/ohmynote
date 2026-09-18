@@ -38,6 +38,8 @@
       <div class="composer__foot">
         <span class="ai-status" id="agent-status" role="status"></span>
         <span class="composer__hint">Enter 发送 · Shift+Enter 换行</span>
+        <button class="btn btn--ghost btn--sm" type="button" id="agent-cancel" hidden
+                title="停止这个任务（当前步骤完成后停下，已完成的操作保留）">停止</button>
         <button class="btn btn--primary" type="submit" id="agent-run">{{ icon('play', 15) }} 让它去做</button>
       </div>
     </form>

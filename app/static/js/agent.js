@@ -12,11 +12,47 @@
     var form = document.getElementById('agent-form');
     var taskInput = document.getElementById('agent-task');
     var runBtn = document.getElementById('agent-run');
+    var cancelBtn = document.getElementById('agent-cancel');
     var statusEl = document.getElementById('agent-status');
     var resultEl = document.getElementById('agent-result');
     var stepsEl = document.getElementById('agent-steps');
     var answerEl = document.getElementById('agent-answer');
     if (!form || !taskInput || !runBtn) { return; }
+    var currentRunId = '';   // 本次任务的 run_id（响应头 X-Run-Id），取消用
+
+    function hideCancel() {
+      currentRunId = '';
+      if (cancelBtn) { cancelBtn.hidden = true; }
+    }
+
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', function () {
+        if (!currentRunId) { return; }
+        cancelBtn.disabled = true;
+        setStatus('正在取消（当前步骤完成后停止）…', 'warn');
+        var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+        fetch('/api/agent/cancel', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': csrfMeta ? csrfMeta.getAttribute('content') : ''
+          },
+          credentials: 'same-origin',
+          body: JSON.stringify({ run_id: currentRunId })
+        }).catch(function () { /* 就算请求失败，final 事件也会把状态收尾 */ });
+      });
+    }
+
+    // ===== 编辑页「让助手处理这篇」入口：/agent?note=ID&title=标题 预填任务上下文 =====
+    try {
+      var params = new URLSearchParams(window.location.search);
+      var preNote = params.get('note');
+      if (preNote && /^\d+$/.test(preNote) && !taskInput.value) {
+        var preTitle = params.get('title') || ('#' + preNote);
+        taskInput.value = '我想调整《' + preTitle + '》（笔记 id：' + preNote + '）。我的要求：';
+        taskInput.focus();
+      }
+    } catch (err) { /* 没有 URLSearchParams 的老浏览器直接跳过 */ }
 
     // ===== 会话记忆：本轮会话的任务/回答存 localStorage，追问时随请求带给模型 =====
     var HISTORY_KEY = 'inknote.agent.history';
@@ -94,7 +130,10 @@
           (run.read_only ? '[只读] ' : '') + run.task);
         li.setAttribute('data-tip-lines', JSON.stringify([
           ['时间', String(run.at || '').slice(0, 16).replace('T', ' ')],
-          ['结果', run.ok ? '成功' : '失败：' + (run.error || '未知')]
+          ['结果', (run.cancelled ? '已取消 · ' : '') + (run.ok ? '成功' : '失败：' + (run.error || '未知'))],
+          ['用时', run.duration_ms
+            ? Math.max(1, Math.round(run.duration_ms / 1000)) + ' 秒 / ' + (run.steps || []).length + ' 步'
+            : '—']
         ]));
         if (stepBits) { li.setAttribute('data-tip-note', '步骤：\n' + stepBits); }
         var at = document.createElement('time');
@@ -278,8 +317,9 @@
       li.className = 'agent-confirm';
       var text = document.createElement('p');
       text.className = 'agent-confirm__text';
-      text.textContent = '确认把《' + (confirm.title || ('#' + confirm.note_id))
-        + '》移入回收站？软删除，30 天内可在回收站恢复。';
+      var label = confirm.label || '执行该操作';
+      var consequence = confirm.consequence || '此操作影响面较大，请确认。';
+      text.textContent = '确认' + label + '《' + (confirm.title || ('#' + confirm.note_id)) + '》？' + consequence;
       var actions = document.createElement('div');
       actions.className = 'agent-confirm__actions';
       var okBtn = document.createElement('button');
@@ -314,8 +354,10 @@
           credentials: 'same-origin',
           body: JSON.stringify({ confirm_id: confirm.id }),
         }).then(function (res) { return res.json(); }).then(function (data) {
-          if (data && data.ok) { settle('已移入回收站（30 天内可在回收站恢复）。', true); }
-          else { settle((data && data.error) || '执行失败', false); }
+          if (data && data.ok) {
+            var note = (data.result && data.result.note) ? data.result.note : '已执行。';
+            settle(note, true);
+          } else { settle((data && data.error) || '执行失败', false); }
         }).catch(function () { settle('网络错误，请重试', false); });
       });
 
@@ -367,15 +409,57 @@
       event.preventDefault();
       var task = String(taskInput.value || '').trim();
       if (!task) { setStatus('先写一句你想让它做的事', 'warn'); taskInput.focus(); return; }
+      runTask(task, null);
+    });
 
+    // ===== 两段式任务流：干跑产出的计划审阅后可以一键真正执行 =====
+    var lastPlan = '';
+    var lastPlanTask = '';
+    var planBar = null;
+
+    function clearPlanBar() {
+      if (planBar && planBar.parentNode) { planBar.parentNode.removeChild(planBar); }
+      planBar = null;
+      lastPlan = '';
+    }
+
+    function showPlanBar(planText, planTask) {
+      if (!answerEl || !answerEl.parentNode) { return; }
+      clearPlanBar();
+      planBar = document.createElement('div');
+      planBar.className = 'agent-planbar';
+      var hint = document.createElement('span');
+      hint.className = 'agent-planbar__hint';
+      hint.textContent = '计划看过了没问题？';
+      var goBtn = document.createElement('button');
+      goBtn.type = 'button';
+      goBtn.className = 'btn btn--primary btn--sm';
+      goBtn.textContent = '按计划执行';
+      goBtn.addEventListener('click', function () {
+        goBtn.disabled = true;
+        runTask(planTask, planText);
+      });
+      planBar.appendChild(hint);
+      planBar.appendChild(goBtn);
+      answerEl.parentNode.insertBefore(planBar, answerEl.nextSibling);
+    }
+
+    function runTask(task, plan) {
       var csrfMeta = document.querySelector('meta[name="csrf-token"]');
       var csrf = csrfMeta ? csrfMeta.getAttribute('content') : '';
       runBtn.disabled = true;
-      setStatus('正在执行（每完成一步都会即时显示）…', '');
+      if (plan) {
+        clearPlanBar();
+        taskInput.value = task;   // 输入框跟上正在执行的任务
+        setStatus('正在按确认的计划执行…', '');
+      } else {
+        setStatus('正在执行（每完成一步都会即时显示）…', '');
+      }
 
       // 清掉上一次的结果
       pendingEl = null;
       stepCount = 0;
+      hideCancel();
       if (resultEl) { resultEl.hidden = false; }
       if (stepsEl) { stepsEl.textContent = ''; }
       if (answerEl) { answerEl.textContent = ''; answerEl.className = 'agent-answer'; }
@@ -392,12 +476,22 @@
 
       function onFinal(ev) {
         removePending();
-        setStatus(ev.ok ? '完成' : (ev.error || '没有完成'), ev.ok ? 'ok' : 'warn');
+        hideCancel();
+        var secs = ev.duration_ms ? '（用时 ' + Math.max(1, Math.round(ev.duration_ms / 1000)) + ' 秒）' : '';
+        if (ev.cancelled) { setStatus('已取消' + secs, 'warn'); }
+        else { setStatus((ev.ok ? '完成' : (ev.error || '没有完成')) + secs, ev.ok ? 'ok' : 'warn'); }
         if (answerEl) {
           answerEl.textContent = ev.answer || ev.error || '';
           answerEl.className = 'agent-answer' + (ev.ok ? '' : ' agent-answer--error');
         }
         if (ev.ok && ev.answer) { pushHistory(task, ev.answer); }
+        if (!plan && currentMode === 'dry' && ev.ok && ev.answer) {
+          lastPlan = ev.answer;
+          lastPlanTask = task;
+          showPlanBar(ev.answer, task);
+        } else {
+          clearPlanBar();
+        }
         loadRuns();
       }
 
@@ -410,7 +504,8 @@
         credentials: 'same-origin',
         body: JSON.stringify({
           task: task,
-          mode: currentMode,
+          mode: plan ? 'rw' : currentMode,
+          plan: plan || undefined,
           history: history.reduce(function (acc, turn) {
             acc.push({ role: 'user', content: turn.task });
             acc.push({ role: 'assistant', content: turn.answer });
@@ -420,12 +515,20 @@
       }).then(function (res) {
         if (!res.ok) {
           runBtn.disabled = false;
+          hideCancel();
           removePending();
           setStatus('请求失败（HTTP ' + res.status + '），请重试', 'warn');
           return;
         }
+        // run_id 从响应头拿到：任务运行期间可以点「停止」取消
+        currentRunId = res.headers.get('X-Run-Id') || '';
+        if (cancelBtn && currentRunId) {
+          cancelBtn.hidden = false;
+          cancelBtn.disabled = false;
+        }
         if (!res.body || !res.body.getReader) {
           runBtn.disabled = false;
+          hideCancel();
           removePending();
           setStatus('你的浏览器不支持流式读取，已降级', 'warn');
           return;
@@ -448,6 +551,7 @@
             onFinal(ev);
           } else if (ev.type === 'error') {
             removePending();
+            hideCancel();
             setStatus(ev.error || '出错了', 'warn');
             if (answerEl) { answerEl.textContent = ev.error || ''; answerEl.className = 'agent-answer agent-answer--error'; }
           }
@@ -468,6 +572,7 @@
               processBuffer(); // 处理可能残留的最后一段
               removePending();
               runBtn.disabled = false;
+              hideCancel();
               return;
             }
             buffer += decoder.decode(chunk.value, { stream: true });
@@ -475,6 +580,7 @@
             return pump();
           }).catch(function (err) {
             runBtn.disabled = false;
+            hideCancel();
             removePending();
             setStatus('读取失败：' + (err && err.message ? err.message : '网络错误'), 'warn');
           });
@@ -482,9 +588,10 @@
         pump();
       }).catch(function (err) {
         runBtn.disabled = false;
+        hideCancel();
         removePending();
         setStatus('请求失败：' + (err && err.message ? err.message : '网络错误'), 'warn');
       });
-    });
+    }
   });
 })();
