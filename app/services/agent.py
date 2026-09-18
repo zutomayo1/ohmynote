@@ -92,7 +92,8 @@ def request_cancel(run_id: str) -> bool:
 _WRITE_TOOLS = frozenset({
     "create_note", "update_note", "add_tags", "remove_tags", "set_category",
     "publish_note", "archive_note", "trash_note", "restore_note", "pin_note", "star_note",
-    "bulk_add_tags", "bulk_remove_tags", "append_note",
+    "bulk_add_tags", "bulk_remove_tags", "bulk_set_category", "append_note",
+    "replace_in_note", "prepend_note", "rewrite_section",
     "restore_version", "merge_notes",
 })
 
@@ -114,10 +115,54 @@ _CONFIRM_META = {
         "label": "合并笔记",
         "consequence": "源笔记正文将并入目标笔记，源笔记移入回收站（30 天内可恢复）",
     },
+    "replace_in_note": {
+        "label": "批量替换正文",
+        "consequence": "将把正文里所有命中的片段替换为新内容（替换前的全文存版本历史）",
+    },
+    "rewrite_section": {
+        "label": "重写小节",
+        "consequence": "将重写该小节的内容（标题行保留、其余小节不动，原文存版本历史）",
+    },
 }
 PENDING_TTL_SECONDS = 600      # 确认卡片有效期：10 分钟没用就作废
 
 _WEEKDAYS = ("周一", "周二", "周三", "周四", "周五", "周六", "周日")
+
+_HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
+
+
+def _heading_lines(content: str) -> list[tuple[int, int, str]]:
+    """[(行号, 级别, 标题文字)]，给 rewrite_section 定位小节用。"""
+    heads: list[tuple[int, int, str]] = []
+    for i, line in enumerate(str(content or "").split("\n")):
+        m = _HEADING_RE.match(line.strip())
+        if m:
+            heads.append((i, len(m.group(1)), m.group(2).strip().rstrip("#").strip()))
+    return heads
+
+
+def _locate_section(content: str, section: str) -> tuple[int, int, str] | None:
+    """按标题文字定位小节，返回 (标题行号, 结束行号[不含], 原节正文)；找不到返回 None。
+
+    结束行号 = 下一个级别不高于它的标题行（更深的子标题 ### 属于本节）；
+    没有下一个标题就是全文末尾。同名小节取第一处。
+    """
+    heads = _heading_lines(content)
+    matches = [(i, lvl, txt) for i, lvl, txt in heads if txt == section]
+    if not matches:
+        lowered = section.lower()
+        matches = [(i, lvl, txt) for i, lvl, txt in heads if txt.lower() == lowered]
+    if not matches:
+        return None
+    idx, _level, _txt = matches[0]
+    lines = str(content or "").split("\n")
+    end = len(lines)
+    for j, lvl2, _t in heads:
+        if j > idx and lvl2 <= _level:
+            end = j
+            break
+    old_body = "\n".join(lines[idx + 1:end]).strip()
+    return idx, end, old_body
 
 
 def _today_label() -> str:
@@ -161,7 +206,11 @@ SYSTEM_PROMPT = """你是墨痕笔记应用里的笔记助手 Agent。用户用�
   has_more=false 就绝不再读同一篇；只有确实需要后续内容才按 next_offset 续读（最多一两次），
   并在回答里说明「只读了前 N 字」。
 - **改对字段**：update_note 只传要改的字段，没提到的保持不变；tags 是**整体替换**，
-  add_tags 追加，remove_tags 删除指定标签；「在末尾加一段」用 append_note，别整篇重写。
+  add_tags 追加，remove_tags 删除指定标签。
+- **编辑粒度**：改正文优先用小粒度工具——替换某段文字用 replace_in_note（不必先读全文）、
+  开头插入用 prepend_note、「加一段」用 append_note、重写某一节用 rewrite_section；
+  只有结构大调才用 update_note 整篇重写（整篇重写可能触发确认卡片）。
+  整理重复笔记：find_similar 找相似 → read_note 确认 → merge_notes 合并。
 - **危险操作**：移入回收站、发布到博客、合并笔记（以及超大范围的改写/批量操作）会先生成
   确认卡片并结束本轮任务，不会直接执行——不要重复调用，等用户在页面上确认。
 - **信息不够就反问**：任务含糊到无法安全执行（比如"改一下那篇笔记"但搜不到明确目标），
@@ -228,11 +277,15 @@ def _make_tools(conn: sqlite3.Connection) -> dict[str, dict[str, Any]]:
             notes = [n for n in notes if str(n.get("updated_at") or "")[:10] >= cutoff]
             if not query:
                 notes = repo.sort_notes(notes, sort="updated")
-        return {
+        result = {
             "count": len(notes[:limit]),
             "matched": len(notes),
             "notes": [_note_brief(n) for n in notes[:limit]],
         }
+        if not notes:
+            result["hint"] = ("零命中：去掉部分条件再试；想按意思找（用词和正文里写的不一样）"
+                              "可改用 semantic_search（需要配置向量模型）。")
+        return result
 
     def read_note(params: dict) -> dict:
         note = repo.get_note(conn, _as_int(params.get("note_id")))
@@ -500,6 +553,169 @@ def _make_tools(conn: sqlite3.Connection) -> dict[str, dict[str, Any]]:
         return {"updated": True, "note_id": note_id, "added_chars": len(text),
                 "content_chars": len(new), "note": "已在末尾追加，并存了版本历史"}
 
+    def replace_in_note(params: dict) -> dict:
+        """查找替换正文片段：逐字匹配，小改动不必整篇重写，也不必先读全文。"""
+        note_id = _as_int(params.get("note_id"))
+        note = repo.get_note(conn, note_id)
+        if note is None:
+            return {"error": "笔记不存在"}
+        find = str(params.get("find") or "")
+        replace_with = str(params.get("replace_with") or "")
+        if not find:
+            return {"error": "find 不能为空（要与正文逐字一致，包括空格与换行）"}
+        if find == replace_with:
+            return {"error": "find 与 replace_with 相同，没有要替换的"}
+        count = _opt_int(params.get("count"), 0)
+        old = str(note.get("content") or "")
+        occurrences = old.count(find)
+        if occurrences == 0:
+            return {"replaced": 0, "note_id": note_id, "title": note.get("title"),
+                    "note": "正文里没有找到 find 的内容；要与正文逐字一致，可先用 read_note 核对原文"}
+        n = occurrences if count <= 0 else min(count, occurrences)
+        new = old.replace(find, replace_with, n)
+        repo.update_note(conn, note_id, content=new, reason="agent")
+        return {"replaced": n, "occurrences": occurrences, "note_id": note_id,
+                "title": note.get("title"), "content_chars": len(new),
+                "note": (f"已替换全部 {n} 处" if n == occurrences else f"已替换前 {n} 处（共 {occurrences} 处）")
+                        + "，并存了版本历史"}
+
+    def prepend_note(params: dict) -> dict:
+        """在笔记开头插入一段内容（如摘要、TL;DR），原有正文全部保留。"""
+        note_id = _as_int(params.get("note_id"))
+        note = repo.get_note(conn, note_id)
+        if note is None:
+            return {"error": "笔记不存在"}
+        text = str(params.get("content") or "").strip()
+        if not text:
+            return {"error": "content 不能为空"}
+        old = str(note.get("content") or "")
+        new = (text + "\n\n" + old.lstrip()) if old.strip() else text
+        repo.update_note(conn, note_id, content=new, reason="agent")
+        return {"updated": True, "note_id": note_id, "title": note.get("title"),
+                "added_chars": len(text), "content_chars": len(new),
+                "note": "已在开头插入，并存了版本历史"}
+
+    def rewrite_section(params: dict) -> dict:
+        """按标题定位小节，只重写这一节的正文（标题行保留，其它小节不动）。"""
+        note_id = _as_int(params.get("note_id"))
+        note = repo.get_note(conn, note_id)
+        if note is None:
+            return {"error": "笔记不存在"}
+        section = str(params.get("section") or "").strip().lstrip("#").strip()
+        new_body = str(params.get("content") or "").strip("\n")
+        if not section:
+            return {"error": "section 不能为空（写标题文字，不带 # 号）"}
+        if not new_body:
+            return {"error": "content 不能为空（新小节正文）；想删掉整节请改用 update_note 并说明"}
+        old = str(note.get("content") or "")
+        located = _locate_section(old, section)
+        if located is None:
+            available = [txt for _i, _l, txt in _heading_lines(old)][:15]
+            return {"error": f"正文里没有找到标题为「{section}」的小节",
+                    "sections": available,
+                    "hint": "section 要与标题文字完全一致（不带 # 号）；可先 read_note 看结构，或从 sections 里挑"}
+        idx, end, old_body = located
+        lines = old.split("\n")
+        multi = sum(1 for _i, _l, t in _heading_lines(old) if t == section) > 1
+        rebuilt = lines[:idx + 1] + ["", *new_body.split("\n")]
+        if end < len(lines):
+            rebuilt.append("")
+        rebuilt.extend(lines[end:])
+        new_content = re.sub(r"\n{3,}", "\n\n", "\n".join(rebuilt)).strip()
+        repo.update_note(conn, note_id, content=new_content, reason="agent")
+        return {"updated": True, "note_id": note_id, "title": note.get("title"),
+                "section": section, "old_body_chars": len(old_body),
+                "new_body_chars": len(new_body), "content_chars": len(new_content),
+                "multi_matched": multi,
+                "note": "已重写该小节（标题行保留），其余内容未动；原文存了版本历史"}
+
+    def bulk_set_category(params: dict) -> dict:
+        """给一批笔记设置同一个分类；category 传空字符串 = 清除分类。"""
+        ids = params.get("note_ids")
+        if not isinstance(ids, list):
+            return {"error": "note_ids 必须是 id 列表（先用 search_notes 找到它们）"}
+        note_ids: list[int] = []
+        for raw in ids[:50]:
+            value = _as_int(raw)
+            if value > 0:
+                note_ids.append(value)
+        note_ids = list(dict.fromkeys(note_ids))[:50]
+        if not note_ids:
+            return {"error": "note_ids 里没有合法的笔记 id"}
+        category = str(params.get("category") or "").strip()[:80]
+        updated, unchanged, missing, notes = 0, 0, [], []
+        for note_id in note_ids:
+            note = repo.get_note(conn, note_id)
+            if note is None:
+                missing.append(note_id)
+                continue
+            current = str(note.get("category") or "")
+            title = str(note.get("title") or "")
+            if current == category:
+                unchanged += 1
+                notes.append({"note_id": note_id, "title": title, "changed": False})
+                continue
+            repo.update_note(conn, note_id, category=category, reason="agent")
+            updated += 1
+            notes.append({"note_id": note_id, "title": title, "changed": True})
+        return {"updated": updated, "unchanged": unchanged, "missing": missing,
+                "category": category, "notes": notes,
+                "hint": "changed=false 表示本来就是该分类，没有改动；category 为空表示清除了分类。"}
+
+    def find_similar(params: dict) -> dict:
+        """找与某篇相似/可能重复的笔记：语义优先，没配向量时按共同标签/分类/互链打分。"""
+        note_id = _as_int(params.get("note_id"))
+        note = repo.get_note(conn, note_id)
+        if note is None:
+            return {"error": "笔记不存在"}
+        limit = min(max(_opt_int(params.get("limit"), 6), 1), 10)
+        from . import ai_related
+        items: list[dict[str, Any]] | None = None
+        engine = "semantic"
+        try:
+            items = ai_related.related_notes(conn, note, limit=limit)
+        except Exception:
+            logger.warning("agent find_similar 语义路径失败", exc_info=True)
+            items = None
+        if not items:
+            engine = "keyword"
+            tags = {str(t).lower() for t in (note.get("tags") or [])}
+            category = str(note.get("category") or "")
+            linked = {int(b.get("id")) for b in repo.backlinks(conn, note_id) if b.get("id")}
+            scored: list[tuple[float, dict[str, Any]]] = []
+            for other in repo.all_notes(conn, sort="updated"):
+                oid = int(other.get("id") or 0)
+                if not oid or oid == note_id:
+                    continue
+                otags = {str(t).lower() for t in (other.get("tags") or [])}
+                score = 2.0 * len(tags & otags)
+                if category and str(other.get("category") or "") == category:
+                    score += 1.0
+                if oid in linked:
+                    score += 3.0
+                if score > 0:
+                    scored.append((score, other))
+            scored.sort(key=lambda pair: (-pair[0], int(pair[1].get("id") or 0)))
+            items = [{**other, "score": score} for score, other in scored[:limit]]
+        notes_out = []
+        for item in (items or [])[:limit]:
+            try:
+                full = repo.get_note(conn, int(item.get("id")))
+            except (TypeError, ValueError):
+                continue
+            if full is None or int(full["id"]) == note_id:
+                continue
+            brief = _note_brief(full)
+            try:
+                brief["score"] = round(float(item.get("score") or 0), 3)
+            except (TypeError, ValueError):
+                pass
+            notes_out.append(brief)
+        return {"note_id": note_id, "title": note.get("title"), "engine": engine,
+                "count": len(notes_out), "notes": notes_out,
+                "hint": "按相似度从高到低；确认内容重复后可用 merge_notes 合并（会生成确认卡片）。"
+                        "engine=keyword 表示未配置向量模型，按共同标签/分类/互链打分。"}
+
     def list_trash(params: dict) -> dict:
         limit = min(max(_opt_int(params.get("limit"), 10), 1), 30)
         notes, total = repo.list_notes(conn, page=1, per_page=limit, include_deleted=True)
@@ -721,6 +937,44 @@ def _make_tools(conn: sqlite3.Connection) -> dict[str, dict[str, Any]]:
             "params": {"note_id": "必填", "content": "要追加的正文（Markdown）"},
             "run": append_note,
         },
+        "replace_in_note": {
+            "description": "在正文里查找并替换一段文字（逐字匹配）。小改动用它；命中 "
+                           f"{CONFIRM_BULK_THRESHOLD} 处及以上会先生成确认卡片",
+            "params": {
+                "note_id": "必填",
+                "find": "要找的原文（逐字一致，含空格换行）",
+                "replace_with": "替换成什么（留空 = 删除该片段）",
+                "count": "可选，只替换前 N 处；默认全部",
+            },
+            "run": replace_in_note,
+        },
+        "prepend_note": {
+            "description": "在笔记开头插入一段内容（原有正文全部保留，自动存版本历史）",
+            "params": {"note_id": "必填", "content": "要插入的正文（Markdown）"},
+            "run": prepend_note,
+        },
+        "rewrite_section": {
+            "description": "按标题定位小节，只重写这一节的正文（标题行保留、其它小节不动）。"
+                           "大段改写会先生成确认卡片",
+            "params": {
+                "note_id": "必填",
+                "section": "小节标题文字（不带 # 号）",
+                "content": "新的小节正文（Markdown）",
+            },
+            "run": rewrite_section,
+        },
+        "bulk_set_category": {
+            "description": "给一批笔记设置同一个分类（category 留空 = 清除分类）。"
+                           f"超过 {CONFIRM_BULK_THRESHOLD} 篇会先生成确认卡片",
+            "params": {"note_ids": "必填，id 列表", "category": "分类名；空字符串表示清除"},
+            "run": bulk_set_category,
+        },
+        "find_similar": {
+            "description": "找与某篇相似/可能重复的笔记（语义优先，未配向量则按共同标签/分类/互链打分）；"
+                           "确认重复后配合 merge_notes 合并",
+            "params": {"note_id": "必填", "limit": "可选，默认 6，最多 10"},
+            "run": find_similar,
+        },
         "list_trash": {
             "description": "列出回收站里的笔记（含剩余可恢复天数）",
             "params": {"limit": "可选，默认 10"},
@@ -881,6 +1135,16 @@ def _summarize_step(name: str, result: dict) -> str:
         return f"已合并 {len(result.get('merged_notes') or [])} 篇进《{result.get('target_title')}》"
     if name == "semantic_search":
         return f"语义检索命中 {result.get('count', 0)} 篇"
+    if name == "replace_in_note":
+        return f"已在《{result.get('title')}》里替换 {result.get('replaced', 0)} 处"
+    if name == "prepend_note":
+        return f"已在《{result.get('title')}》开头插入内容"
+    if name == "rewrite_section":
+        return f"已重写《{result.get('title')}》的「{result.get('section')}」小节"
+    if name == "bulk_set_category":
+        return f"已把 {result.get('updated', 0)} 篇的分类设为「{result.get('category') or '（空）'}」"
+    if name == "find_similar":
+        return f"找到 {result.get('count', 0)} 篇相似笔记"
     if name == "get_note_history":
         return f"查到 {result.get('count', 0)} 个历史版本"
     if name == "list_backlinks":
@@ -907,9 +1171,35 @@ def _needs_confirm(action: str, params: dict, conn: sqlite3.Connection) -> bool:
         if action == "publish_note":
             return bool(params.get("public", True))   # 取消公开（public=false）不拦
         return True
-    if action in ("bulk_add_tags", "bulk_remove_tags"):
+    if action in ("bulk_add_tags", "bulk_remove_tags", "bulk_set_category"):
         ids = params.get("note_ids")
         return isinstance(ids, list) and len(ids) > CONFIRM_BULK_THRESHOLD
+    if action == "replace_in_note":
+        find = str(params.get("find") or "")
+        if not find:
+            return False
+        note = repo.get_note(conn, _as_int(params.get("note_id")))
+        if note is None:
+            return False
+        total = str(note.get("content") or "").count(find)
+        count = _opt_int(params.get("count"), 0)
+        planned = total if count <= 0 else min(count, total)
+        return planned >= CONFIRM_BULK_THRESHOLD
+    if action == "rewrite_section":
+        section = str(params.get("section") or "").strip().lstrip("#").strip()
+        new_body = str(params.get("content") or "").strip("\n")
+        note = repo.get_note(conn, _as_int(params.get("note_id")))
+        if not section or note is None:
+            return False
+        located = _locate_section(str(note.get("content") or ""), section)
+        if located is None:
+            return False
+        _idx, _end, old_body = located
+        if len(old_body) < CONFIRM_REWRITE_MIN_CHARS:
+            return False
+        if new_body and old_body == new_body:
+            return False
+        return SequenceMatcher(None, old_body[:4000], new_body[:4000]).ratio() < CONFIRM_REWRITE_RATIO
     if action == "update_note":
         content = params.get("content")
         if content is None:
@@ -926,7 +1216,10 @@ def _needs_confirm(action: str, params: dict, conn: sqlite3.Connection) -> bool:
 
 
 # 可能出现在确认卡片上的动作全集（execute_pending 的白名单）
-_ALL_CONFIRMABLE = frozenset(_CONFIRM_TOOLS) | {"bulk_add_tags", "bulk_remove_tags", "update_note"}
+_ALL_CONFIRMABLE = frozenset(_CONFIRM_TOOLS) | {
+    "bulk_add_tags", "bulk_remove_tags", "bulk_set_category",
+    "update_note", "replace_in_note", "rewrite_section",
+}
 
 
 def _confirm_meta(action: str, params: dict) -> tuple[str, str, str]:
@@ -938,6 +1231,19 @@ def _confirm_meta(action: str, params: dict) -> tuple[str, str, str]:
         return (f"{verb}（{len(ids)} 篇）",
                 f"将给 {len(ids)} 篇笔记{'追加' if action == 'bulk_add_tags' else '删除'}指定标签",
                 f"{len(ids)} 篇笔记")
+    if action == "bulk_set_category":
+        ids = params.get("note_ids") if isinstance(params.get("note_ids"), list) else []
+        category = str(params.get("category") or "").strip()
+        verb = (f"清除 {len(ids)} 篇笔记的分类" if not category
+                else f"把 {len(ids)} 篇笔记的分类设为「{category}」")
+        return (f"批量设置分类（{len(ids)} 篇）", verb, f"{len(ids)} 篇笔记")
+    if action == "replace_in_note":
+        find = str(params.get("find") or "")
+        shown = find if len(find) <= 24 else find[:24] + "…"
+        return ("批量替换正文", f"将把正文里所有「{shown}」替换为新内容", "")
+    if action == "rewrite_section":
+        section = str(params.get("section") or "").strip()
+        return ("重写小节", f"将重写小节「{section}」的内容（标题保留，原文存版本历史）", "")
     return meta["label"], meta["consequence"], ""
 
 

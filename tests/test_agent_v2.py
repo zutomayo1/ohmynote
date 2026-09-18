@@ -476,3 +476,197 @@ def test_agent_page_has_cancel_button(auth_client):
     page = auth_client.get("/agent")
     assert page.status_code == 200
     assert 'id="agent-cancel"' in page.text
+
+
+# ---------------------------------------------------------------------------
+# 2026-09-18 晚：精准编辑与整理五工具
+# ---------------------------------------------------------------------------
+
+def _tools(db_conn):
+    return agent_service._make_tools(db_conn)
+
+
+def test_replace_in_note_basic_count_and_zero_hit(db_conn):
+    """替换全部 / 限定次数 / 零命中 / 同文拦截。"""
+    note = agent_service.repo.create_note(
+        db_conn, title="替换试验田", content="旧词一 旧词二 旧词三，其余不动。"
+    )
+    run = _tools(db_conn)["replace_in_note"]["run"]
+    out = run({"note_id": note["id"], "find": "旧词", "replace_with": "新词", "count": 2})
+    assert out["replaced"] == 2 and out["occurrences"] == 3
+    assert "新词一 新词二 旧词三" in agent_service.repo.get_note(db_conn, note["id"])["content"]
+    out = run({"note_id": note["id"], "find": "旧词", "replace_with": "终词"})
+    assert out["replaced"] == 1
+    assert run({"note_id": note["id"], "find": "查无此物", "replace_with": "x"})["replaced"] == 0
+    assert "error" in run({"note_id": note["id"], "find": "新词", "replace_with": "新词"})
+    assert "error" in run({"note_id": note["id"], "find": "", "replace_with": "x"})
+
+
+def test_replace_in_note_mass_hits_require_confirm(db_conn, monkeypatch):
+    """命中 ≥ 10 处：不直接执行，生成确认卡片；确认后才落地。"""
+    body = " ".join(["占位词"] * 12)
+    note = agent_service.repo.create_note(db_conn, title="批量替换", content=body)
+    chat = ScriptedChat([
+        json.dumps({"action": "replace_in_note",
+                    "params": {"note_id": note["id"], "find": "占位词", "replace_with": "终"}},
+                   ensure_ascii=False),
+        json.dumps({"action": "final", "answer": "等待确认。"}, ensure_ascii=False),
+    ])
+    monkeypatch.setattr(agent_service.ai, "is_enabled", lambda: True)
+    monkeypatch.setattr(agent_service.ai, "chat", chat)
+
+    result = agent_service.run_agent(db_conn, "把这篇里的占位词都换掉")
+    assert result["ok"] is True
+    assert "等待用户确认" in result["steps"][0]["summary"]
+    # 没有真正执行
+    assert "占位词" in agent_service.repo.get_note(db_conn, note["id"])["content"]
+    # 用户确认后执行
+    pending = agent_service._get_pending_op(db_conn)
+    assert pending and pending["action"] == "replace_in_note"
+    done = agent_service.execute_pending(db_conn, pending["id"])
+    assert done["ok"] is True and done["result"]["replaced"] == 12
+    assert "占位词" not in agent_service.repo.get_note(db_conn, note["id"])["content"]
+    agent_service._clear_pending_op(db_conn)
+
+
+def test_prepend_note_tool(db_conn):
+    note = agent_service.repo.create_note(db_conn, title="开头插入", content="正文在这里。")
+    run = _tools(db_conn)["prepend_note"]["run"]
+    assert run({"note_id": note["id"], "content": ""}) .get("error")
+    out = run({"note_id": note["id"], "content": "TL;DR：先看这个。"})
+    assert out["updated"] is True
+    content = agent_service.repo.get_note(db_conn, note["id"])["content"]
+    assert content.startswith("TL;DR：先看这个。") and "正文在这里。" in content
+    empty = agent_service.repo.create_note(db_conn, title="空笔记", content="")
+    out = run({"note_id": empty["id"], "content": "只有这段。"})
+    assert agent_service.repo.get_note(db_conn, empty["id"])["content"] == "只有这段。"
+
+
+def test_rewrite_section_tool(db_conn):
+    """重写一节：标题保留、### 子节被替换、其它节不动；找不到时列出可用小节。"""
+    content = (
+        "# 总标题\n\n## 安装\n\n旧步骤一。\n\n### 依赖\n\n旧依赖说明。\n\n## 使用\n\n使用说明保持不变。\n"
+    )
+    note = agent_service.repo.create_note(db_conn, title="章节重写", content=content)
+    run = _tools(db_conn)["rewrite_section"]["run"]
+    miss = run({"note_id": note["id"], "section": "不存在", "content": "x"})
+    assert "sections" in miss and "安装" in miss["sections"]
+    out = run({"note_id": note["id"], "section": "安装", "content": "新步骤。\n\n### 依赖\n\n新依赖。"})
+    assert out["updated"] is True
+    new = agent_service.repo.get_note(db_conn, note["id"])["content"]
+    assert "## 安装" in new and "新步骤。" in new and "旧步骤一" not in new
+    assert "## 使用" in new and "使用说明保持不变。" in new  # 其它节没动
+    # 不带 # 号也能匹配；大小写不敏感
+    out = run({"note_id": note["id"], "section": "使用", "content": "新使用说明。"})
+    assert "新使用说明。" in agent_service.repo.get_note(db_conn, note["id"])["content"]
+
+
+def test_rewrite_section_big_rewrite_requires_confirm(db_conn):
+    """原小节 ≥ 200 字且新内容大改：先生成确认卡片，确认后执行且标题保留。"""
+    long_body = "这是一段很长的旧正文。" * 30
+    note = agent_service.repo.create_note(
+        db_conn, title="大改写", content=f"## 长节\n\n{long_body}\n\n## 别动\n\n保持。"
+    )
+    chat = ScriptedChat([
+        json.dumps({"action": "rewrite_section",
+                    "params": {"note_id": note["id"], "section": "长节",
+                               "content": "完全不同的新内容。"}},
+                   ensure_ascii=False),
+        json.dumps({"action": "final", "answer": "已生成确认卡片。"}, ensure_ascii=False),
+    ])
+    import pytest as mp
+    from app.services import ai as ai_mod
+    m = mp.MonkeyPatch()
+    m.setattr(ai_mod, "is_enabled", lambda: True)
+    m.setattr(ai_mod, "chat", chat)
+    result = agent_service.run_agent(db_conn, "重写长节")
+    assert "等待用户确认" in result["steps"][0]["summary"]
+    assert long_body in agent_service.repo.get_note(db_conn, note["id"])["content"]
+    pending = agent_service._get_pending_op(db_conn)
+    done = agent_service.execute_pending(db_conn, pending["id"])
+    assert done["ok"] is True
+    new = agent_service.repo.get_note(db_conn, note["id"])["content"]
+    assert "## 长节" in new and "完全不同的新内容。" in new and "## 别动" in new
+    assert long_body not in new
+    agent_service._clear_pending_op(db_conn)
+
+
+def test_bulk_set_category_tool_and_confirm(db_conn):
+    """批量设分类：改的才计数、缺的跳过、空串=清除；>10 篇走确认卡。"""
+    ids = [agent_service.repo.create_note(db_conn, title=f"批量 {i}", content="x",
+                                          category="旧分类")["id"] for i in range(3)]
+    ids.append(agent_service.repo.create_note(db_conn, title="已是目标", content="x",
+                                              category="技术")["id"])
+    run = _tools(db_conn)["bulk_set_category"]["run"]
+    out = run({"note_ids": ids, "category": "技术"})
+    assert out["updated"] == 3 and out["unchanged"] == 1
+    out = run({"note_ids": ids + [99999], "category": ""})
+    assert out["updated"] == 4 and out["missing"] == [99999]
+    assert all((agent_service.repo.get_note(db_conn, i)["category"] or "") == "" for i in ids)
+    # 循环层：11 篇 → 确认卡片
+    chat = ScriptedChat([
+        json.dumps({"action": "bulk_set_category",
+                    "params": {"note_ids": list(range(1, 12)), "category": "归档"}},
+                   ensure_ascii=False),
+        json.dumps({"action": "final", "answer": "等确认。"}, ensure_ascii=False),
+    ])
+    import pytest as mp
+    from app.services import ai as ai_mod
+    m = mp.MonkeyPatch()
+    m.setattr(ai_mod, "is_enabled", lambda: True)
+    m.setattr(ai_mod, "chat", chat)
+    result = agent_service.run_agent(db_conn, "把这批都归到归档分类")
+    assert "等待用户确认" in result["steps"][0]["summary"]
+    agent_service._clear_pending_op(db_conn)
+
+
+def test_find_similar_keyword_fallback(db_conn, monkeypatch):
+    """未配向量时按共同标签/互链打分：共享标签的排出来，无关的不出现。"""
+    monkeypatch.setattr("app.services.ai_related.related_notes", lambda *a, **k: None)
+    a = agent_service.repo.create_note(db_conn, title="A 主笔记", content="x", tags=["python", "测试"])
+    b = agent_service.repo.create_note(db_conn, title="B 相似", content="x", tags=["python"])
+    agent_service.repo.create_note(db_conn, title="C 无关", content="x", tags=["生活"])
+    out = _tools(db_conn)["find_similar"]["run"]({"note_id": a["id"]})
+    assert out["engine"] == "keyword"
+    names = [n["title"] for n in out["notes"]]
+    assert "B 相似" in names and "C 无关" not in names
+    assert out["notes"][0]["score"] >= 2.0
+    assert "error" in _tools(db_conn)["find_similar"]["run"]({"note_id": 999999})
+
+
+def test_search_notes_zero_hit_hint(db_conn):
+    out = _tools(db_conn)["search_notes"]["run"]({"query": "绝对查无此词的字符串"})
+    assert out["count"] == 0 and "semantic_search" in out.get("hint", "")
+
+
+def test_new_write_tools_blocked_in_read_only(db_conn):
+    """只读模式拦住新写工具，数据不动。"""
+    note = agent_service.repo.create_note(db_conn, title="只读试验", content="原文不动。")
+    chat = ScriptedChat([
+        json.dumps({"action": "replace_in_note",
+                    "params": {"note_id": note["id"], "find": "原文", "replace_with": "改"}},
+                   ensure_ascii=False),
+        json.dumps({"action": "final", "answer": "只读模式做不了。"}, ensure_ascii=False),
+    ])
+    import pytest as mp
+    from app.services import ai as ai_mod
+    m = mp.MonkeyPatch()
+    m.setattr(ai_mod, "is_enabled", lambda: True)
+    m.setattr(ai_mod, "chat", chat)
+    result = agent_service.run_agent(db_conn, "试试改", read_only=True)
+    assert any("已拦截写操作 replace_in_note" in s["summary"] for s in result["steps"])
+    assert agent_service.repo.get_note(db_conn, note["id"])["content"] == "原文不动。"
+
+
+def test_registry_describes_new_tools(db_conn):
+    tools = _tools(db_conn)
+    for name in ("replace_in_note", "prepend_note", "rewrite_section",
+                 "bulk_set_category", "find_similar"):
+        spec = tools.get(name)
+        assert spec and spec["description"] and spec["params"], f"注册表缺 {name}"
+        assert name in agent_service._describe_tools(tools)
+    # 写工具进只读黑名单；条件确认动作在确认白名单里
+    for name in ("replace_in_note", "prepend_note", "rewrite_section", "bulk_set_category"):
+        assert name in agent_service._WRITE_TOOLS
+    for name in ("replace_in_note", "rewrite_section", "bulk_set_category"):
+        assert name in agent_service._ALL_CONFIRMABLE
