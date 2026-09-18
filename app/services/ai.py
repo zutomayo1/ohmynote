@@ -309,7 +309,12 @@ def _load_profiles(conn: sqlite3.Connection) -> list[dict]:
 
 
 def list_profiles(conn: sqlite3.Connection) -> list[dict]:
-    """给页面看的预设列表：密钥只露尾号 4 位。"""
+    """给页面看的预设列表：密钥只露尾号 4 位。
+
+    「使用中」由服务端精确判定（地址 + 模型 + 完整密钥全等）——只比 base_url 会把
+    同一家的两把密钥都标成使用中。
+    """
+    cfg = current()
     out = []
     for profile in _load_profiles(conn):
         key = str(profile.get("api_key") or "")
@@ -318,6 +323,9 @@ def list_profiles(conn: sqlite3.Connection) -> list[dict]:
             "base_url": str(profile.get("base_url") or ""),
             "model": str(profile.get("model") or ""),
             "key_tail": key[-4:] if len(key) >= 4 else ("••••" if key else ""),
+            "active": (str(profile.get("base_url") or "") == str(cfg.get("base_url") or "")
+                       and str(profile.get("model") or "") == str(cfg.get("model") or "")
+                       and key == str(cfg.get("api_key") or "")),
         })
     return out
 

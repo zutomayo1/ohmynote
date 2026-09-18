@@ -59,9 +59,14 @@
 </div>
 
 {% if ai.env_keys %}
-  <p class="settings-status__env micro">
-    检测到 <code>.env</code> 里也配了 AI（{{ ai.env_keys | join('、') }}），目前被本页保存的值覆盖；想让 <code>.env</code> 生效，点下面的「清除本页配置」。
-  </p>
+  {# 这是「改了配置却不生效」的经典坑，视觉上必须是告警条，不能混在普通说明里 #}
+  <div class="flash flash--warn settings-status__env" role="status">
+    {{ icon('alert', 15) }}
+    <span>
+      检测到 <code>.env</code> 里也配了 AI（{{ ai.env_keys | join('、') }}）——目前<strong>被本页保存的值覆盖</strong>，
+      改了 <code>.env</code> 不会生效；想让 <code>.env</code> 说了算，点下面的「清除本页配置」。
+    </span>
+  </div>
 {% endif %}
 
 {# ===== 我的预设：必须是独立区块，放在外层 AI 表单之外 =====
@@ -90,8 +95,8 @@
     {% if ai_profiles %}
       <div class="ai-profile-list">
         {% for p in ai_profiles %}
-          <div class="ai-profile-row{{ ' is-active' if p.base_url == ai.base_url }}">
-            <span class="ai-profile-row__name">{{ p.name }}{% if p.base_url == ai.base_url %} <span class="badge badge--saved">使用中</span>{% endif %}</span>
+          <div class="ai-profile-row{{ ' is-active' if p.active }}">
+            <span class="ai-profile-row__name">{{ p.name }}{% if p.active %} <span class="badge badge--saved">使用中</span>{% endif %}</span>
             <span class="ai-profile-row__meta">{{ p.base_url }} · {{ p.model or '无模型' }} · 密钥…{{ p.key_tail }}</span>
             <span class="ai-profile-row__actions">
               <form method="post" action="/settings/ai/profiles/apply">
@@ -146,8 +151,8 @@
       {# 「我的预设」不在这里——HTML 不允许嵌套 form，它在外层表单之外单独立块。
           这个折叠块里只剩「填表 → 保存」的字段，保持单一表单结构。 #}
 
-      {# ===== 1 · 服务商快捷填充：点一下把地址/模型填进下面第 2 步的表单（不会自动保存）。
-           DOM 契约被 settings.js 依赖（.ai-preset-card > .ai-preset[data-*]），别改结构。 ===== #}
+      {# ===== 1 · 连接配置：选服务商（自动填表）与填字段是同一个步骤，
+           拆成两块会让人以为要填两遍 ===== #}
       {% macro preset_card(p) -%}
         <div class="ai-preset-card{{ ' is-active' if p.base_url == ai.base_url else '' }}">
           <button class="ai-preset" type="button"
@@ -166,18 +171,11 @@
         </div>
       {%- endmacro %}
       <div class="ai-section-head">
-        <h3 class="section-title">1 · 服务商快捷填充</h3>
-        <p class="micro">点一下自动填地址和模型；密钥去各服务商官网拿。</p>
+        <h3 class="section-title">1 · 连接配置</h3>
+        <p class="micro">① 点卡片自动填地址和模型 · ② 粘贴密钥 → 点底部「保存配置」生效</p>
       </div>
-      {% set extra_providers = ai.providers | rejectattr('featured') | list %}
       <div class="ai-presets ai-presets--compact" role="group" aria-label="服务商快捷填充">
         {% for p in ai.providers %}{{ preset_card(p) }}{% endfor %}
-      </div>
-
-      {# ===== 2 · 连接配置 ===== #}
-      <div class="ai-section-head">
-        <h3 class="section-title">2 · 连接配置</h3>
-        <p class="micro">密钥留空表示不修改；只存在你自己电脑的数据库里。</p>
       </div>
       <div class="field-grid">
         <label class="field field--wide">

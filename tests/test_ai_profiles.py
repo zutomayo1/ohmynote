@@ -127,6 +127,19 @@ def test_delete_profile(conn):
     assert ai.delete_profile(conn, "要删的") is False   # 再删一次：False，不报错
 
 
+def test_list_profiles_marks_only_exact_match_active(conn):
+    """同一家的两把密钥：只有「地址+模型+密钥」全等的那份算使用中（只比 base_url 会全标上）。"""
+    ai.save(conn, {"base_url": "https://api.siliconflow.cn/v1", "model": "m1",
+                   "api_key": "sk-aaaa1111"})
+    ai.save_profile(conn, "同一家 A")
+    ai.save(conn, {"base_url": "https://api.siliconflow.cn/v1", "model": "m1",
+                   "api_key": "sk-bbbb2222"})
+    ai.save_profile(conn, "同一家 B")
+
+    profiles = ai.list_profiles(conn)
+    assert [p["name"] for p in profiles if p["active"]] == ["同一家 B"]
+
+
 def test_profiles_have_no_limit(conn):
     """用户要求无上限：存 30 份也照单全收。"""
     _configure(conn)

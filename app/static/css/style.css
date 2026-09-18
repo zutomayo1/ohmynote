@@ -8298,3 +8298,104 @@ html:not(.js) .svg-view__actions { display: none; }
 }
 .ai-presets--compact .ai-preset__note,
 .ai-presets--compact .ai-preset__key { white-space: nowrap; font-size: 12px; }
+
+/* ===== 补丁：UI 评审第一轮（2026-09-18）=====
+   ① agent 非读写模式强提示  ② 本轮会话气泡化  ③ .env 告警条
+   ④ 当前服务商标识加强  ⑥ 模型输入框与「获取可用模型」成组
+   （⑤「快捷填充/连接配置」合并属模板结构调整，见 settings.html） */
+
+/* ① 模式横幅 + 输入框变色：避免用户以为「计划/只读」下真的改了笔记 */
+.agent-mode-banner {
+  margin: 0 0 var(--sp-3);
+  padding: 8px 12px;
+  border-left: 3px solid var(--warn);
+  border-radius: var(--radius-sm);
+  background: var(--warn-soft);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+.agent-mode-banner--ro { border-left-color: var(--brand); background: var(--brand-soft); }
+.composer.is-dry .composer-input { border-color: var(--warn); }
+.composer.is-ro .composer-input { border-color: var(--brand); }
+
+/* ② 本轮会话气泡：任务靠右品牌底色、回答靠左描边底色，各带角色标签 */
+.agent-history__list { display: flex; flex-direction: column; gap: var(--sp-3); }
+.agent-history__item {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.agent-history__task,
+.agent-history__answer { padding: 8px 11px; font-size: 13.5px; line-height: 1.6; }
+.agent-history__task {
+  align-self: flex-end;
+  max-width: 85%;
+  margin: 0;
+  background: var(--brand-soft);
+  border-radius: var(--radius-sm) var(--radius-sm) 3px var(--radius-sm);
+}
+.agent-history__answer {
+  align-self: flex-start;
+  max-width: 92%;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm) var(--radius-sm) var(--radius-sm) 3px;
+}
+.agent-history__role {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--ink-3);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+/* ③ .env 覆盖提醒：flash--warn 已有底色，这里补图标对齐（原本只是一行灰字） */
+.settings-status__env { display: flex; gap: 8px; align-items: flex-start; margin: 8px 0 0; }
+.settings-status__env .icon { flex: none; margin-top: 2px; color: var(--warn); }
+
+/* ④ 当前服务商：细边框 → 实心描边 + 底色 + 「当前」角标 */
+.ai-preset-card.is-active {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  box-shadow: inset 0 0 0 1px var(--brand);
+}
+.ai-preset-card.is-active .ai-preset__name::after {
+  content: '当前';
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--brand);
+  color: var(--surface);
+  font-size: 11px;
+  font-weight: 600;
+  vertical-align: 1px;
+}
+
+/* ⑥ 模型名输入 + ▾ 下拉 + 「获取可用模型」框成一个整体（原本像两个独立元素并排） */
+#ai-settings-form .ai-inline {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  overflow: hidden;
+}
+#ai-settings-form .ai-inline .combo__input {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+#ai-settings-form .ai-inline .btn {
+  border: 0;
+  border-left: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+}
+#ai-settings-form .ai-inline .btn:hover { background: var(--surface-2); }
