@@ -68,55 +68,6 @@
   </div>
 {% endif %}
 
-{# ===== 我的预设：必须是独立区块，放在外层 AI 表单之外 =====
-   HTML 不允许嵌套 form：上一版把这段塞进 AI 表单内部，浏览器直接丢弃了内层
-   form 标签 → 「存当前配置 / 启用 / 删除」实际提交的都是「保存 AI 配置」的地址，
-   预设永远存不进去。这里每行是各自独立的 form，纯 HTML，无 JS 也能用。 #}
-<details class="settings-block settings-block--primary" open>
-  <summary class="settings-block__summary">
-    <span class="settings-block__chevron" aria-hidden="true">▸</span>
-    <span class="settings-block__title">我的预设</span>
-    <span class="settings-block__note">换服务商一键切换，不用再抄密钥</span>
-    <span class="settings-block__state">
-      {% if ai_profiles %}<span class="badge badge--saved">{{ ai_profiles | length }} 份</span>{% else %}<span class="badge badge--draft">还没有</span>{% endif %}
-    </span>
-  </summary>
-  <div class="settings-block__body">
-    <div class="ai-section-head">
-      <form class="ai-profile-save" method="post" action="/settings/ai/profiles/save">
-        <input type="hidden" name="_csrf" value="{{ csrf }}">
-        <input class="input" type="text" name="name" maxlength="40" required
-               placeholder="预设名称，如：硅基流动" aria-label="预设名称">
-        <button class="btn btn--ghost btn--sm" type="submit">存当前配置</button>
-      </form>
-    </div>
-    {% if ai_profiles %}
-      <div class="ai-profile-list">
-        {% for p in ai_profiles %}
-          <div class="ai-profile-row{{ ' is-active' if p.active }}">
-            <span class="ai-profile-row__name">{{ p.name }}{% if p.active %} <span class="badge badge--saved">使用中</span>{% endif %}</span>
-            <span class="ai-profile-row__meta">{{ p.base_url }} · {{ p.model or '无模型' }} · 密钥…{{ p.key_tail }}</span>
-            <span class="ai-profile-row__actions">
-              <form method="post" action="/settings/ai/profiles/apply">
-                <input type="hidden" name="_csrf" value="{{ csrf }}">
-                <input type="hidden" name="name" value="{{ p.name }}">
-                <button class="btn btn--sm" type="submit">启用</button>
-              </form>
-              <form method="post" action="/settings/ai/profiles/delete"
-                    data-confirm="删除预设《{{ p.name }}》？当前生效的配置不受影响。">
-                <input type="hidden" name="_csrf" value="{{ csrf }}">
-                <input type="hidden" name="name" value="{{ p.name }}">
-                <button class="btn btn--ghost btn--sm" type="submit">删除</button>
-              </form>
-            </span>
-          </div>
-        {% endfor %}
-      </div>
-    {% else %}
-      <p class="micro">还没有预设。配好 AI 服务后点右上角「存当前配置」。</p>
-    {% endif %}
-  </div>
-</details>
 
 <form class="settings-form" id="ai-settings-form" method="post" action="/settings/ai"
       data-models-url="/api/ai/models"
@@ -218,147 +169,177 @@
           「测试连接」只体检不保存；「保存配置」才生效。
         </p>
 
+      {# 预设行：与保存/测试共用同一张表单（formaction 分流到预设接口），
+         因此能直接带上刚填的地址/密钥/模型——不必先保存、再回头存预设。
+         不能另起一个 form：HTML 不允许嵌套，内层 form 会被浏览器丢弃。 #}
+      <div class="ai-profile-save">
+        <span class="ai-profile-save__label">存为预设</span>
+        <input class="input" type="text" name="profile_name" maxlength="40"
+               placeholder="起个名字，如：硅基流动" aria-label="预设名称">
+        <button class="btn btn--ghost btn--sm" type="submit"
+                formaction="/settings/ai/profiles/save"
+                title="把上面填的地址/密钥/模型存进「我的预设」；当前生效的配置不受影响">存到「我的预设」</button>
+      </div>
+
+
         <div class="ai-probe" id="ai-probe-result" hidden aria-live="polite"></div>
+
+      <details class="settings-sub">
+        <summary class="settings-sub__summary">分任务模型
+<span class="settings-sub__note">{{ task_note() }}</span></summary>
+        <div class="settings-sub__body">
+          <p class="micro">留空则用通用模型 <code>{{ ai.model or '（未配置）' }}</code>；填了按填的走。</p>
+          <div class="field-grid">
+            <div class="field">
+              <label class="field__label" for="ai-model-summary">摘要用模型 {{ src('model_summary') }}</label>
+              <span class="combo" data-model-combo>
+                <input class="input combo__input" type="text" name="model_summary" id="ai-model-summary"
+                       value="{{ ai.model_summary }}" placeholder="留空 = 用通用模型"
+                       autocomplete="off" spellcheck="false" role="combobox"
+                       aria-expanded="false" aria-autocomplete="list">
+                <button class="combo__toggle" type="button" aria-label="展开可选模型列表" tabindex="-1">▾</button>
+                <div class="combo__panel" role="listbox" hidden></div>
+              </span>
+            </div>
+
+            <div class="field">
+              <label class="field__label" for="ai-model-tags">打标签用模型 {{ src('model_tags') }}</label>
+              <span class="combo" data-model-combo>
+                <input class="input combo__input" type="text" name="model_tags" id="ai-model-tags"
+                       value="{{ ai.model_tags }}" placeholder="留空 = 用通用模型"
+                       autocomplete="off" spellcheck="false" role="combobox"
+                       aria-expanded="false" aria-autocomplete="list">
+                <button class="combo__toggle" type="button" aria-label="展开可选模型列表" tabindex="-1">▾</button>
+                <div class="combo__panel" role="listbox" hidden></div>
+              </span>
+            </div>
+
+            <div class="field">
+              <label class="field__label" for="ai-model-answer">问答用模型 {{ src('model_answer') }}</label>
+              <span class="combo" data-model-combo>
+                <input class="input combo__input" type="text" name="model_answer" id="ai-model-answer"
+                       value="{{ ai.model_answer }}" placeholder="留空 = 用通用模型"
+                       autocomplete="off" spellcheck="false" role="combobox"
+                       aria-expanded="false" aria-autocomplete="list">
+                <button class="combo__toggle" type="button" aria-label="展开可选模型列表" tabindex="-1">▾</button>
+                <div class="combo__panel" role="listbox" hidden></div>
+              </span>
+            </div>
+          </div>
+    
+        </div>
+      </details>
+      <details class="settings-sub">
+        <summary class="settings-sub__summary">安全与隐私
+<span class="settings-sub__note">脱敏：{{ '开' if ai.redact else '关' }} · 只允许本机：{{ '开' if ai.local_only else '关' }}</span></summary>
+        <div class="settings-sub__body">
+          <div class="ai-switches field--wide">
+            <label class="ai-switch">
+              <input type="checkbox" name="local_only" value="1" {% if ai.local_only %}checked{% endif %}>
+              <span class="ai-switch__body">
+                <span class="ai-switch__title">只允许本机模型</span>
+                <span class="ai-switch__desc">打开后，任何指向公网的地址都会被直接拦下，笔记不会被发出去；自建 / 局域网模型请打开。</span>
+              </span>
+            </label>
+            <label class="ai-switch">
+              <input type="checkbox" name="redact" value="1" {% if ai.redact %}checked{% endif %}>
+              <span class="ai-switch__body">
+                <span class="ai-switch__title">发送前脱敏</span>
+                <span class="ai-switch__desc">发给 AI 之前，自动把正文里像密钥、手机号、身份证、银行卡号的片段打码；介意隐私就打开。</span>
+              </span>
+            </label>
+          </div>
+          <div class="field field--checks">
+            <span class="field__label">密钥</span>
+            <label class="checkbox">
+              <input type="checkbox" name="clear_key" value="1">
+              清除已保存的密钥
+            </label>
+          </div>
+    
+        </div>
+      </details>
+      <details class="settings-sub">
+        <summary class="settings-sub__summary">向量检索
+<span class="settings-sub__note">{% if ai.embed_model %}向量模型：{{ ai.embed_model }}{% else %}未配置{% endif %}</span></summary>
+        <div class="settings-sub__body">
+          <p class="muted">
+            给笔记建好向量索引后，「问笔记」就能按语义检索，而不只是关键词匹配。
+            需要先在下面填「向量模型」，并且服务商要支持 <code>/embeddings</code>。
+          </p>
+          <div class="field">
+            <label class="field__label" for="ai-embed-model">向量模型 {{ src('embed_model') }}</label>
+            <span class="combo" data-model-combo>
+              <input class="input combo__input" type="text" name="embed_model" id="ai-embed-model"
+                     value="{{ ai.embed_model }}" placeholder="例如 text-embedding-3-small；留空 = 不做向量索引"
+                     autocomplete="off" spellcheck="false" role="combobox"
+                     aria-expanded="false" aria-autocomplete="list">
+              <button class="combo__toggle" type="button" aria-label="展开可选模型列表" tabindex="-1">▾</button>
+              <div class="combo__panel" role="listbox" hidden></div>
+            </span>
+            <span class="micro">留空则退回关键词检索</span>
+          </div>
+          <div class="ai-embed" id="ai-embed"
+               data-status-url="/api/ai/embed/status"
+               data-rebuild-url="/api/ai/embed/rebuild">
+            <div class="ai-embed__head">
+              <span class="ai-embed__count" id="ai-embed-count">正在读取状态…</span>
+              <button class="btn btn--sm" type="button" id="ai-embed-rebuild">重建索引</button>
+            </div>
+            <div class="ai-progress" id="ai-embed-progress" hidden>
+              <div class="ai-progress__bar" id="ai-embed-progress-bar"></div>
+            </div>
+            <p class="ai-embed__hint micro" id="ai-embed-hint">
+              需要 JavaScript 显示进度；原始状态见 <a href="/api/ai/embed/status">/api/ai/embed/status</a>。
+            </p>
+          </div>
+    
+        </div>
+      </details>
     </div>
   </details>
 
-  {# ===== 分任务模型（收起） ===== #}
-  <details class="settings-block">
-    <summary class="settings-block__summary">
-      <span class="settings-block__chevron" aria-hidden="true">▸</span>
-      <span class="settings-block__title">分任务模型</span>
-      <span class="settings-block__note">{{ task_note() }}</span>
-    </summary>
-    <div class="settings-block__body">
-      <p class="micro">留空则用通用模型 <code>{{ ai.model or '（未配置）' }}</code>；填了按填的走。</p>
-      {# 同一张表单：这个按钮和「AI 服务」里的「保存配置」等价，就近放一个 #}
-      <div class="settings-form__actions">
-        <button class="btn btn--primary btn--sm" type="submit">保存这页设置</button>
-      </div>
-      <div class="field-grid">
-        <div class="field">
-          <label class="field__label" for="ai-model-summary">摘要用模型 {{ src('model_summary') }}</label>
-          <span class="combo" data-model-combo>
-            <input class="input combo__input" type="text" name="model_summary" id="ai-model-summary"
-                   value="{{ ai.model_summary }}" placeholder="留空 = 用通用模型"
-                   autocomplete="off" spellcheck="false" role="combobox"
-                   aria-expanded="false" aria-autocomplete="list">
-            <button class="combo__toggle" type="button" aria-label="展开可选模型列表" tabindex="-1">▾</button>
-            <div class="combo__panel" role="listbox" hidden></div>
-          </span>
-        </div>
-
-        <div class="field">
-          <label class="field__label" for="ai-model-tags">打标签用模型 {{ src('model_tags') }}</label>
-          <span class="combo" data-model-combo>
-            <input class="input combo__input" type="text" name="model_tags" id="ai-model-tags"
-                   value="{{ ai.model_tags }}" placeholder="留空 = 用通用模型"
-                   autocomplete="off" spellcheck="false" role="combobox"
-                   aria-expanded="false" aria-autocomplete="list">
-            <button class="combo__toggle" type="button" aria-label="展开可选模型列表" tabindex="-1">▾</button>
-            <div class="combo__panel" role="listbox" hidden></div>
-          </span>
-        </div>
-
-        <div class="field">
-          <label class="field__label" for="ai-model-answer">问答用模型 {{ src('model_answer') }}</label>
-          <span class="combo" data-model-combo>
-            <input class="input combo__input" type="text" name="model_answer" id="ai-model-answer"
-                   value="{{ ai.model_answer }}" placeholder="留空 = 用通用模型"
-                   autocomplete="off" spellcheck="false" role="combobox"
-                   aria-expanded="false" aria-autocomplete="list">
-            <button class="combo__toggle" type="button" aria-label="展开可选模型列表" tabindex="-1">▾</button>
-            <div class="combo__panel" role="listbox" hidden></div>
-          </span>
-        </div>
-      </div>
-    </div>
-  </details>
-
-  {# ===== 安全与隐私（收起） ===== #}
-  <details class="settings-block">
-    <summary class="settings-block__summary">
-      <span class="settings-block__chevron" aria-hidden="true">▸</span>
-      <span class="settings-block__title">安全与隐私</span>
-      <span class="settings-block__note">脱敏：{{ '开' if ai.redact else '关' }} · 只允许本机：{{ '开' if ai.local_only else '关' }}</span>
-    </summary>
-    <div class="settings-block__body">
-      <div class="ai-switches field--wide">
-        <label class="ai-switch">
-          <input type="checkbox" name="local_only" value="1" {% if ai.local_only %}checked{% endif %}>
-          <span class="ai-switch__body">
-            <span class="ai-switch__title">只允许本机模型</span>
-            <span class="ai-switch__desc">打开后，任何指向公网的地址都会被直接拦下，笔记不会被发出去；自建 / 局域网模型请打开。</span>
-          </span>
-        </label>
-        <label class="ai-switch">
-          <input type="checkbox" name="redact" value="1" {% if ai.redact %}checked{% endif %}>
-          <span class="ai-switch__body">
-            <span class="ai-switch__title">发送前脱敏</span>
-            <span class="ai-switch__desc">发给 AI 之前，自动把正文里像密钥、手机号、身份证、银行卡号的片段打码；介意隐私就打开。</span>
-          </span>
-        </label>
-      </div>
-      <div class="field field--checks">
-        <span class="field__label">密钥</span>
-        <label class="checkbox">
-          <input type="checkbox" name="clear_key" value="1">
-          清除已保存的密钥
-        </label>
-      </div>
-      {# 同一张表单：这个按钮和「AI 服务」里的「保存配置」等价，就近放一个 #}
-      <div class="settings-form__actions">
-        <button class="btn btn--primary btn--sm" type="submit">保存这页设置</button>
-      </div>
-    </div>
-  </details>
-
-  {# ===== 向量检索（收起）：向量模型 + 索引状态 + 重建 ===== #}
-  <details class="settings-block">
-    <summary class="settings-block__summary">
-      <span class="settings-block__chevron" aria-hidden="true">▸</span>
-      <span class="settings-block__title">向量检索</span>
-      <span class="settings-block__note">{% if ai.embed_model %}向量模型：{{ ai.embed_model }}{% else %}未配置{% endif %}</span>
-    </summary>
-    <div class="settings-block__body">
-      <p class="muted">
-        给笔记建好向量索引后，「问笔记」就能按语义检索，而不只是关键词匹配。
-        需要先在下面填「向量模型」，并且服务商要支持 <code>/embeddings</code>。
-      </p>
-      <div class="field">
-        <label class="field__label" for="ai-embed-model">向量模型 {{ src('embed_model') }}</label>
-        <span class="combo" data-model-combo>
-          <input class="input combo__input" type="text" name="embed_model" id="ai-embed-model"
-                 value="{{ ai.embed_model }}" placeholder="例如 text-embedding-3-small；留空 = 不做向量索引"
-                 autocomplete="off" spellcheck="false" role="combobox"
-                 aria-expanded="false" aria-autocomplete="list">
-          <button class="combo__toggle" type="button" aria-label="展开可选模型列表" tabindex="-1">▾</button>
-          <div class="combo__panel" role="listbox" hidden></div>
-        </span>
-        <span class="micro">留空则退回关键词检索</span>
-      </div>
-      <div class="ai-embed" id="ai-embed"
-           data-status-url="/api/ai/embed/status"
-           data-rebuild-url="/api/ai/embed/rebuild">
-        <div class="ai-embed__head">
-          <span class="ai-embed__count" id="ai-embed-count">正在读取状态…</span>
-          <button class="btn btn--sm" type="button" id="ai-embed-rebuild">重建索引</button>
-        </div>
-        <div class="ai-progress" id="ai-embed-progress" hidden>
-          <div class="ai-progress__bar" id="ai-embed-progress-bar"></div>
-        </div>
-        <p class="ai-embed__hint micro" id="ai-embed-hint">
-          需要 JavaScript 显示进度；原始状态见 <a href="/api/ai/embed/status">/api/ai/embed/status</a>。
-        </p>
-      {# 同一张表单：这个按钮和「AI 服务」里的「保存配置」等价，就近放一个 #}
-      <div class="settings-form__actions">
-        <button class="btn btn--primary btn--sm" type="submit">保存这页设置</button>
-      </div>
-      </div>
-    </div>
-  </details>
 
 </form>
+
+{# ===== 我的预设：列表里每行是独立 form（启用/删除），必须在 AI 表单之外 ===== #}
+<details class="settings-block settings-block--primary" open>
+  <summary class="settings-block__summary">
+    <span class="settings-block__chevron" aria-hidden="true">▸</span>
+    <span class="settings-block__title">我的预设</span>
+    <span class="settings-block__note">换服务商一键切换，不用再抄密钥</span>
+    <span class="settings-block__state">
+      {% if ai_profiles %}<span class="badge badge--saved">{{ ai_profiles | length }} 份</span>{% else %}<span class="badge badge--draft">还没有</span>{% endif %}
+    </span>
+  </summary>
+  <div class="settings-block__body">
+    {% if ai_profiles %}
+      <div class="ai-profile-list">
+        {% for p in ai_profiles %}
+          <div class="ai-profile-row{{ ' is-active' if p.active }}">
+            <span class="ai-profile-row__name">{{ p.name }}{% if p.active %} <span class="badge badge--saved">使用中</span>{% endif %}</span>
+            <span class="ai-profile-row__meta">{{ p.base_url }} · {{ p.model or '无模型' }} · 密钥…{{ p.key_tail }}</span>
+            <span class="ai-profile-row__actions">
+              <form method="post" action="/settings/ai/profiles/apply">
+                <input type="hidden" name="_csrf" value="{{ csrf }}">
+                <input type="hidden" name="name" value="{{ p.name }}">
+                <button class="btn btn--sm" type="submit">启用</button>
+              </form>
+              <form method="post" action="/settings/ai/profiles/delete"
+                    data-confirm="删除预设《{{ p.name }}》？当前生效的配置不受影响。">
+                <input type="hidden" name="_csrf" value="{{ csrf }}">
+                <input type="hidden" name="name" value="{{ p.name }}">
+                <button class="btn btn--ghost btn--sm" type="submit">删除</button>
+              </form>
+            </span>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="micro">还没有预设。在上面的「AI 服务」里填好地址和模型，点「存到「我的预设」」就能存一份。</p>
+    {% endif %}
+  </div>
+</details>
 
 {# ===== 提示词模板（收起）：三套可改，占位符缺失/超长保存时会被拒绝 ===== #}
 <form class="settings-form" method="post" action="/settings/ai/prompts">

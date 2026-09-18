@@ -421,7 +421,9 @@ def test_usage_summary_page_and_reset(auth_client, csrf, fake_ai):
         assert needle in page.text, f"用量统计里应该有「{needle}」"
     # 「最近的失败」只在真有失败记录时才渲染（这个用例的调用全是成功的）
     # 其中 8 个收进 3 个折叠子块：内容全在，只是不一路铺到底
-    assert page.text.count("settings-sub__summary") == 3
+    # （整页还有「AI 服务」块里的 3 个子块，所以只看用量统计这一块）
+    usage_html = page.text[page.text.index("用量统计"):]
+    assert usage_html.count("settings-sub__summary") >= 3
 
     # 重置按钮：清空后页面回到「还没有调用记录」
     reset = auth_client.post(

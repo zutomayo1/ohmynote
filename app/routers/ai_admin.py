@@ -396,13 +396,24 @@ def save_ai_profile(
     request: Request,
     conn: sqlite3.Connection = Depends(db_conn),
     name: str = Form(""),
+    profile_name: str = Form(""),
+    base_url: str = Form(""),
+    model: str = Form(""),
+    api_key: str = Form(""),
 ):
-    """把当前生效的 Base URL / 密钥 / 主模型 存成一份命名预设（同名覆盖，数量不限）。"""
+    """把一份配置存成命名预设（同名覆盖，数量不限）。
+
+    两种来源，都走这一个端点：
+    - 「AI 服务」块里的「存到「我的预设」」——与保存/测试共用同一张表单，靠 formaction
+      分流过来，因此**带着刚填的 base_url / model / api_key**：不必先保存生效再存预设；
+    - 直接 POST name（无 JS 的老调用 / 测试）——快照当前生效的配置。
+    """
     del request
-    result = ai.save_profile(conn, name)
+    result = ai.save_profile(conn, name.strip() or profile_name.strip(),
+                             base_url=base_url, model=model, api_key=api_key)
     if result["ok"]:
         return RedirectResponse(
-            url_with_query("/settings", msg=f"已把当前配置存为预设《{result['name']}》（现有 {result['count']} 份，点「启用」一键切换）"),
+            url_with_query("/settings", msg=f"已存为预设《{result['name']}》（现有 {result['count']} 份，在「我的预设」里点「启用」一键切换）"),
             status_code=303,
         )
     return RedirectResponse(url_with_query("/settings", msg=result["error"], kind="error"),

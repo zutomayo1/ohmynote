@@ -8373,3 +8373,17 @@ html:not(.js) .svg-view__actions { display: none; }
    同类问题已一并处理：图表柱子的 chart-rise / chart-grow-x 与按模型条的 usage-bar
    也是每次展开重放，已整段删除（2026-09-18）。 */
 main .settings-block .prose { animation: none; }
+
+/* ===== 补丁：AI 服务块里的预设行与子折叠块提示（2026-09-18） =====
+   「存为预设」和保存/测试共用一张表单（formaction 分流），所以它长得像动作行，
+   但语义是「把上面这份配置另存一份」——标签 + 输入框 + 按钮一行排开。 */
+.ai-profile-save { flex-wrap: wrap; margin-top: 12px; }
+.ai-profile-save .input { width: auto; flex: 1 1 200px; max-width: 280px; }
+.ai-profile-save__label {
+  color: var(--ink-2); font-family: var(--font-sans);
+  font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+/* 子折叠块的摘要右侧状态（脱敏开关、向量模型名等） */
+.settings-sub__note {
+  margin-left: auto; color: var(--ink-3);
+  font-size: 12px; font-weight: 400; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

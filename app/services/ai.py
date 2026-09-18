@@ -451,22 +451,57 @@ def list_profiles(conn: sqlite3.Connection) -> list[dict]:
     return out
 
 
-def save_profile(conn: sqlite3.Connection, name: str) -> dict:
-    """把当前生效的 Base URL / 密钥 / 主模型 存成一份命名预设（同名覆盖，数量不限）。"""
+def save_profile(
+    conn: sqlite3.Connection,
+    name: str,
+    *,
+    base_url: str | None = None,
+    model: str | None = None,
+    api_key: str | None = None,
+) -> dict:
+    """把一份配置存成命名预设（同名覆盖，数量不限）。
+
+    两种来源：
+    - 传了 base_url / model / api_key（「AI 服务」块里的「存到我的预设」会把刚填的
+      值一起提交）：按传进来的存 —— 用户不必先把配置保存生效、再回头存预设；
+    - 都没传（直接 POST 名字 / 老调用）：快照**当前生效**的配置。
+
+    密钥留空怎么算：地址没变就用已保存的密钥；**地址变了却留空则拦下** ——
+    否则会把新地址配上一把旧密钥，看着能存其实调不通，属于埋雷。
+    """
     from .. import repo
 
     name = str(name or "").strip()[:40]
     if not name:
         return {"ok": False, "error": "预设名称不能为空"}
+
     cfg = current()
-    if not (cfg.get("base_url") and cfg.get("model")):
-        return {"ok": False, "error": "当前配置还不完整（Base URL 和模型都要有），配好再存"}
+    typed = any(str(value or "").strip() for value in (base_url, model, api_key))
+    if typed:
+        new_base = str(base_url or "").strip() or str(cfg.get("base_url") or "")
+        new_model = str(model or "").strip() or str(cfg.get("model") or "")
+        submitted_key = str(api_key or "").strip()
+        if not (new_base and new_model):
+            return {"ok": False, "error": "Base URL 和模型名都要有才能存成预设"}
+        if submitted_key:
+            new_key = submitted_key
+        elif new_base != str(cfg.get("base_url") or ""):
+            return {"ok": False, "error": "换了服务商地址，请把对应的密钥也填上再存"}
+        else:
+            new_key = str(cfg.get("api_key") or "")
+    else:
+        if not (cfg.get("base_url") and cfg.get("model")):
+            return {"ok": False, "error": "当前配置还不完整（Base URL 和模型都要有），配好再存"}
+        new_base = str(cfg.get("base_url") or "")
+        new_model = str(cfg.get("model") or "")
+        new_key = str(cfg.get("api_key") or "")
+
     profiles = [p for p in _load_profiles(conn) if str(p.get("name")) != name]
     profiles.insert(0, {
         "name": name,
-        "base_url": cfg.get("base_url") or "",
-        "api_key": cfg.get("api_key") or "",
-        "model": cfg.get("model") or "",
+        "base_url": new_base,
+        "api_key": new_key,
+        "model": new_model,
     })
     repo.save_meta_map(conn, {"profiles": json.dumps(profiles, ensure_ascii=False)}, META_PREFIX)
     return {"ok": True, "name": name, "count": len(profiles)}

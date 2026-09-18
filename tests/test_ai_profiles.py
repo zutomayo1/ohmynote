@@ -274,11 +274,85 @@ def test_settings_page_has_no_nested_forms(auth_client):
     assert parser.forms >= 4, "设置页应该有：AI 配置 / 预设若干 / 提示词 等多个表单"
     assert parser.nested == 0, "设置页出现了嵌套 form——浏览器会丢弃内层，按钮会提交错地址"
 
-    # 预设相关表单必须在外层 AI 配置表单之外
+    # 预设相关：「存为预设」是 AI 表单里一个带 formaction 的按钮（同一张表单、分流提交），
+    # 「启用 / 删除」各自是独立 form，必须在 AI 表单之外 —— 内层 form 会被浏览器丢弃
+    # （那次「我的预设一直为空」的根因）
     assert 'class="ai-profile-save"' in page.text
     start = page.text.index('id="ai-settings-form"')
     end = page.text.index("</form>", start)
     outer_block = page.text[start:end]
-    assert "profiles/save" not in outer_block
+    assert 'formaction="/settings/ai/profiles/save"' in outer_block
+    # 切片从 id= 开始，不含开标签本身：里面再出现 form 标签就是嵌套（会被丢弃）
+    assert outer_block.count("<form") == 0, "AI 表单里又出现了 form 标签（会被浏览器丢弃）"
     assert "profiles/apply" not in outer_block
     assert "profiles/delete" not in outer_block
+
+
+# ---------------------------------------------------------------------------
+# 从「AI 服务」块存预设：同一张表单 + formaction，带着刚填的地址/密钥/模型
+# ---------------------------------------------------------------------------
+def test_save_profile_uses_submitted_values(conn):
+    """按表单里刚填的值存，不必先保存生效再回头存预设。"""
+    _configure(conn, base_url="https://old.example/v1", key="sk-old-key-0000", model="old-model")
+    result = ai.save_profile(conn, "新服务商", base_url="https://new.example/v1",
+                             model="new-model", api_key="sk-new-key-8888")
+    assert result["ok"] is True
+    stored = ai._load_profiles(conn)[0]
+    assert stored["base_url"] == "https://new.example/v1"
+    assert stored["model"] == "new-model"
+    assert stored["api_key"] == "sk-new-key-8888"
+    # 存预设 ≠ 切换：当前生效的配置一动不动
+    assert ai.current()["base_url"] == "https://old.example/v1"
+
+
+def test_save_profile_blank_key_same_address_inherits_saved_key(conn):
+    """地址没变时密钥留空 = 沿用已保存的（AI 表单里的密钥框本来就是「留空不改」）。"""
+    _configure(conn, base_url="https://same.example/v1", key="sk-keep-me-9999", model="m1")
+    result = ai.save_profile(conn, "沿用密钥", base_url="https://same.example/v1",
+                             model="m2", api_key="")
+    assert result["ok"] is True
+    stored = ai._load_profiles(conn)[0]
+    assert stored["api_key"] == "sk-keep-me-9999"
+    assert stored["model"] == "m2"
+
+
+def test_save_profile_rejects_new_address_without_key(conn):
+    """换了地址却留空密钥要拦下——否则会把新地址配上一把旧密钥，看着能存其实调不通。"""
+    _configure(conn, base_url="https://old.example/v1", key="sk-old-key-0000", model="old-model")
+    result = ai.save_profile(conn, "踩雷", base_url="https://new.example/v1",
+                             model="new-model", api_key="")
+    assert result["ok"] is False
+    assert "密钥" in result["error"]
+    assert ai.list_profiles(conn) == [], "拦下之后不该留下半份预设"
+
+
+def test_save_profile_without_payload_still_snapshots_current(conn):
+    """不带地址/模型的调用（无 JS 老调用、测试）仍按「快照当前生效配置」办事。"""
+    _configure(conn, base_url="https://snap.example/v1", key="sk-snap-1234", model="snap-model")
+    result = ai.save_profile(conn, "快照")
+    assert result["ok"] is True
+    stored = ai._load_profiles(conn)[0]
+    assert stored["base_url"] == "https://snap.example/v1"
+    assert stored["api_key"] == "sk-snap-1234"
+
+
+def test_profile_save_from_ai_form_over_http(auth_client, conn):
+    """HTTP：「存到我的预设」提交 profile_name + 表单里的地址/模型/密钥。"""
+    _configure(conn)
+    conn.commit()
+    headers = {"X-CSRF-Token": _csrf(auth_client)}
+    res = auth_client.post(
+        "/settings/ai/profiles/save",
+        data={"profile_name": "表单存的", "base_url": "https://form.example/v1",
+              "model": "form-model", "api_key": "sk-form-key-1234"},
+        headers=headers, follow_redirects=False,
+    )
+    assert res.status_code == 303
+    profiles = ai.list_profiles(conn)
+    assert [p["name"] for p in profiles] == ["表单存的"]
+    assert profiles[0]["base_url"] == "https://form.example/v1"
+    assert profiles[0]["model"] == "form-model"
+    # 页面上只露尾号
+    page = auth_client.get("/settings")
+    assert "表单存的" in page.text
+    assert "sk-form-key-1234" not in page.text
