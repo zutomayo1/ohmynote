@@ -581,8 +581,8 @@ def test_manual_page_renders_the_guide(auth_client):
     assert response.status_code == 200
     assert "使用说明" in response.text
     # 说明里的章节标题应该被渲染出来，并且生成了目录
-    assert "怎么打开" in response.text
-    assert "Markdown 语法速查" in response.text
+    assert "启动与登录" in response.text
+    assert "Markdown 速查" in response.text
     assert 'class="toc"' in response.text
     assert "post-body prose" in response.text
     # 代码块应该被渲染成 <pre>，而不是显示原始的反引号

@@ -353,7 +353,7 @@ inknote/
 │   ├── main.py                  create_app()、中间件、异常处理、路由挂载
 │   ├── config.py                环境变量 / .env 读取
 │   ├── db.py                    SQLite 连接与建表（含迁移位）
-│   ├── repo.py                  数据访问层：笔记、标签、版本、双链、模板、统计
+│   ├── repo/                    数据访问层（包）：笔记、标签、版本、双链、模板、统计、回收站
 │   ├── search.py                FTS5（trigram）+ LIKE 兜底、打分、摘要、高亮
 │   ├── markdown_render.py       Markdown → HTML / TOC / 纯文本 / 字数，含安全过滤
 │   ├── security.py              pbkdf2 密码、签名 Cookie 会话、登录限流
@@ -479,7 +479,7 @@ location / {
 - `--workers 1`：SQLite + 本地文件上传，单进程最省心；SQLite 已开 WAL，多进程不是不能用，但写入会串行，个人站通常没必要加 workers，也别开 `--reload`。
 - **登录限流是进程内存的**，多进程下每个进程各自计数（个人用无所谓）。
 - 默认关闭了 `SessionMiddleware` 之类的额外组件，只依赖 `Starlette` 自带的 Cookie 处理。
-- FastAPI 自带的 `/docs`、`/redoc`、`/openapi.json` 默认开启且**无需登录**（2026-09-12 实测均返回 200），不受后台登录依赖保护。不想暴露就把 `app/main.py` 里 `FastAPI(...)` 的 `docs_url`、`redoc_url`、`openapi_url` 设为 `None`。
+- FastAPI 自带的 `/docs`、`/redoc`、`/openapi.json` **默认关闭**（私人应用没必要向匿名访客暴露 API 结构；调试时在 `.env` 加 `INKNOTE_DOCS=1` 再启动即可）。写接口本身仍然要登录 + CSRF。
 
 ---
 
@@ -621,15 +621,16 @@ python scripts/build_css.py --check              # 只校验产物是否最新�
 
 ## Roadmap
 
-- 收拢 `style.css`（多轮并行开发留下的补丁分节有重复选择器与重复断点，值得合并一遍）
-- **关系图谱下一批**：力导向参数面板（斥力/弹簧可调）、按节点类型着色（groups）、导出 SVG/PNG、
-  路径查找（两篇笔记之间的引用链）
 - 图片上传时压缩 / 去 EXIF
-- 草稿箱自动清理、回收站定时清理（现在只在启动时清一次）
+- 回收站定时清理（现在只在启动时清一次）
 - 文章目录支持多级折叠、代码块行号与复制按钮配置
 - 评论（或接入 Giscus 之类的外部评论）
 - 多用户 + 权限（如果哪天想给朋友用）
 
+（已完成并移出 roadmap：CI 接入、style.css 拆分为 src/ 源文件、关系图谱的路径查找 / 图内建链 / 导出图片 / 布局参数面板。）
+
 ---
 
-*本文档于 2026-09-15 对照源码逐条核对，并实测：`python -m pytest tests -q` → **916 个用例全部通过**（含 AI 配置/向量检索/内联写作/问笔记/标签管理/导入恢复/批量操作/待办聚合/后台线程/关系图谱/命令面板/首次引导/阅读进度条/模板排序/标记接口/文档守卫等新增模块）。`scripts/audit_css.py` → 模板里用到的 class 全部有样式。`scripts/check.py` 全量自检约 22 秒（测试那一步已改为并行）。*
+*本文档于 2026-09-18 对照源码核对：`python scripts/check.py` → 7 项全通过（**1172 个用例全绿**）。
+面向使用者的手册（[使用说明.md](使用说明.md)）已于同日整体重写：任务导向重组、去掉更新流水账、
+同步设置页改版（我的预设 / 服务商模板 / 分区块）与远端备份、启动脚本。*
