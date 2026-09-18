@@ -928,6 +928,23 @@
   }
 
   // ===== 10. 正文增强：外链 rel / 图片懒加载 =====
+  // mermaid 边标签的盒比文字窄（导出度量的字体与回退字体宽度有差），
+  // 会被挤成竖排。只处理「盒高容不下已发生的行数」的真挤压（补 nowrap
+  // 恢复单行，轻微横向溢出由 overflow:visible 兜住）；设计内多行标签
+  // （盒高 ≥ 两行）不动。随 enhanceContent 覆盖笔记页/博客页/编辑器预览，
+  // 灯箱克隆自已修复的 DOM 自动继承。
+  function fixSvgLabelWraps(root) {
+    $$('.svg-view foreignObject, .svg-lightbox foreignObject', root).forEach(function (fo) {
+      var inner = fo.firstElementChild;
+      if (!inner) { return; }
+      var foH = parseFloat(fo.getAttribute('height'));
+      if (!foH) { foH = fo.getBoundingClientRect().height; }
+      if (inner.getBoundingClientRect().height > foH + 1) {
+        inner.style.whiteSpace = 'nowrap';
+      }
+    });
+  }
+
   function enhanceContent(root) {
     root = root || document;
     $$('.prose a[href^="http"]', root).forEach(function (a) {
@@ -940,6 +957,7 @@
     $$('.prose img', root).forEach(function (img) {
       if (!img.hasAttribute('loading')) img.setAttribute('loading', 'lazy');
     });
+    fixSvgLabelWraps(root);
   }
 
   // ===== 11. 筛选表单自动提交（select / checkbox，q 输入框不自动提交）=====
@@ -1334,7 +1352,7 @@
       var clone = svg.cloneNode(true);
       var lock = document.createElementNS('http://www.w3.org/2000/svg', 'style');
       lock.textContent =
-        'svg { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; font-size: 16px; }' +
+        'svg { font-family: "trebuchet ms", verdana, arial, sans-serif; font-size: 16px; }' +
         'foreignObject { overflow: visible; }' +
         'foreignObject div, foreignObject span, foreignObject p { line-height: 1.35; margin: 0; }';
       clone.appendChild(lock);
