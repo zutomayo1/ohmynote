@@ -879,6 +879,22 @@ def test_settings_page_stays_lean(auth_client):
     assert "站点信息" in titles and "外观" in titles, titles
 
 
+def test_settings_page_only_presets_open_by_default(auth_client):
+    """默认展开态：整页只「我的预设」打开（2026-09-18 起 AI 服务也默认收起）。
+
+    校验失败时会把相关块自动展开（提示词、账号），那是例外，由各自的路由测试覆盖。
+    这条只钉「普通打开设置页」的样子——否则又会变成一屏全撑开、要滚很久才到底。
+    """
+    page = auth_client.get("/settings")
+    blocks = re.findall(
+        r'<details class="settings-block[^"]*"([^>]*)>.*?settings-block__title[^>]*>([^<]+)<',
+        page.text,
+        re.S,
+    )
+    opened = [title.strip() for attrs, title in blocks if "open" in attrs]
+    assert opened == ["我的预设"], f"默认只该展开「我的预设」，实际：{opened}"
+
+
 def test_settings_page_needs_login(client):
     fresh = client.__class__(client.app)
     assert fresh.get("/settings", follow_redirects=False).status_code == 303

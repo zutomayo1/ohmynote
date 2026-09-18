@@ -76,8 +76,8 @@
       data-embed-rebuild-url="/api/ai/embed/rebuild">
   <input type="hidden" name="_csrf" value="{{ csrf }}">
 
-  {# ===== 主区块：AI 服务（唯一默认展开） ===== #}
-  <details class="settings-block settings-block--primary" open>
+  {# ===== 主区块：AI 服务（默认收起，与其余设置一致；整页默认只展开「我的预设」） ===== #}
+  <details class="settings-block settings-block--primary">
     <summary class="settings-block__summary">
       <span class="settings-block__chevron" aria-hidden="true">▸</span>
       <span class="settings-block__title">AI 服务</span>
