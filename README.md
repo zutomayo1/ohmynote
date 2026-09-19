@@ -376,6 +376,8 @@ inknote/
 │   │   └── meta.py              feed / rss / sitemap / robots / about / health
 │   ├── services/
 │   │   ├── __init__.py
+│   │   ├── agent/               笔记助手（包）：core 循环 / tools 声明式工具层（含安全属性单一来源）/
+│   │   │                        safety 确认层 / history 执行历史 / prompt
 │   │   ├── content.py           详情页上下文（个人页与公开页共用）
 │   │   ├── export.py            Markdown 打包导出
 │   │   ├── feeds.py             Atom / RSS / sitemap（标准库 ElementTree）

@@ -550,34 +550,34 @@ def test_agent_management_tools_work(db_conn, seeded_note):
         assert name in tools, f"缺少工具 {name}"
 
     nid = seeded_note
-    assert tools["add_tags"]["run"]({"note_id": nid, "tags": ["部署", "运维"]})["updated"] is True
-    removed = tools["remove_tags"]["run"]({"note_id": nid, "tags": ["运维"]})
+    assert tools["add_tags"].run({"note_id": nid, "tags": ["部署", "运维"]})["updated"] is True
+    removed = tools["remove_tags"].run({"note_id": nid, "tags": ["运维"]})
     assert removed["removed"] == ["运维"] and "运维" not in removed["tags"]
-    assert tools["set_category"]["run"]({"note_id": nid, "category": "运维"})["category"] == "运维"
-    assert tools["archive_note"]["run"]({"note_id": nid})["archived"] is True
-    assert tools["archive_note"]["run"]({"note_id": nid, "archived": False})["archived"] is False
-    assert tools["pin_note"]["run"]({"note_id": nid})["pinned"] is True
-    assert tools["star_note"]["run"]({"note_id": nid, "starred": True})["starred"] is True
+    assert tools["set_category"].run({"note_id": nid, "category": "运维"})["category"] == "运维"
+    assert tools["archive_note"].run({"note_id": nid})["archived"] is True
+    assert tools["archive_note"].run({"note_id": nid, "archived": False})["archived"] is False
+    assert tools["pin_note"].run({"note_id": nid})["pinned"] is True
+    assert tools["star_note"].run({"note_id": nid, "starred": True})["starred"] is True
     # update_note 现在也能改分类/标签（tags 是整体替换）
-    assert tools["update_note"]["run"]({"note_id": nid, "tags": ["只剩这个"]})["updated"] is True
+    assert tools["update_note"].run({"note_id": nid, "tags": ["只剩这个"]})["updated"] is True
     assert agent_service.repo.get_note(db_conn, nid)["tags"] == ["只剩这个"]
 
     # 回收站往返
-    assert tools["trash_note"]["run"]({"note_id": nid})["trashed"] is True
+    assert tools["trash_note"].run({"note_id": nid})["trashed"] is True
     assert agent_service.repo.get_note(db_conn, nid) is None
-    assert tools["restore_note"]["run"]({"note_id": nid})["restored"] is True
+    assert tools["restore_note"].run({"note_id": nid})["restored"] is True
     assert agent_service.repo.get_note(db_conn, nid) is not None
 
     # 只读性质的汇总工具
-    assert "tags" in tools["list_tags"]["run"]({})
-    assert "categories" in tools["list_categories"]["run"]({})
-    stats = tools["note_stats"]["run"]({})
+    assert "tags" in tools["list_tags"].run({})
+    assert "categories" in tools["list_categories"].run({})
+    stats = tools["note_stats"].run({})
     assert stats["notes"] >= 1 and "words" in stats
 
 
 def test_agent_remove_tags_is_a_noop_when_absent(db_conn, seeded_note):
     tools = agent_service._make_tools(db_conn)
-    result = tools["remove_tags"]["run"]({"note_id": seeded_note, "tags": ["根本没有的标签"]})
+    result = tools["remove_tags"].run({"note_id": seeded_note, "tags": ["根本没有的标签"]})
     assert result["updated"] is False and "本来就没有" in result["note"]
 
 
@@ -589,21 +589,21 @@ def test_agent_search_notes_supports_filters(db_conn):
     repo.update_note(db_conn, a["id"], tags=["筛选用"], category="筛选分类")
     b = repo.create_note(db_conn, title="筛选乙", content="内容乙")
 
-    by_tag = tools["search_notes"]["run"]({"tag": "筛选用"})
+    by_tag = tools["search_notes"].run({"tag": "筛选用"})
     assert [n["id"] for n in by_tag["notes"]] == [a["id"]]
-    by_cat = tools["search_notes"]["run"]({"category": "筛选分类"})
+    by_cat = tools["search_notes"].run({"category": "筛选分类"})
     assert [n["id"] for n in by_cat["notes"]] == [a["id"]]
-    by_q = tools["search_notes"]["run"]({"query": "筛选乙"})
+    by_q = tools["search_notes"].run({"query": "筛选乙"})
     assert [n["id"] for n in by_q["notes"]] == [b["id"]]
     # 一个条件都不给要报错，别让模型拿全库当结果
-    assert "error" in tools["search_notes"]["run"]({})
+    assert "error" in tools["search_notes"].run({})
     # days=30 能覆盖刚建的笔记
-    assert "notes" in tools["search_notes"]["run"]({"days": 30})
+    assert "notes" in tools["search_notes"].run({"days": 30})
 
 
 def test_agent_read_note_offset_beyond_end_is_safe(db_conn, seeded_note):
     tools = agent_service._make_tools(db_conn)
-    result = tools["read_note"]["run"]({"note_id": seeded_note, "offset": 999999})
+    result = tools["read_note"].run({"note_id": seeded_note, "offset": 999999})
     assert result["has_more"] is False and result["content"] == ""
 
 
@@ -778,7 +778,7 @@ def test_agent_page_has_mode_segment_and_no_readonly_checkbox(auth_client):
 # ---------------------------------------------------------------------------
 def test_bulk_add_tags_and_missing_ids(db_conn, seeded_note):
     tools = agent_service._make_tools(db_conn)
-    result = tools["bulk_add_tags"]["run"]({"note_ids": [seeded_note, 99999], "tags": ["运维"]})
+    result = tools["bulk_add_tags"].run({"note_ids": [seeded_note, 99999], "tags": ["运维"]})
     assert result["updated"] == 1 and result["missing"] == [99999]
     note = agent_service.repo.get_note(db_conn, seeded_note)
     assert "运维" in note["tags"] and "docker" in note["tags"]   # 追加不覆盖
@@ -786,25 +786,25 @@ def test_bulk_add_tags_and_missing_ids(db_conn, seeded_note):
 
 def test_bulk_add_tags_is_idempotent(db_conn, seeded_note):
     tools = agent_service._make_tools(db_conn)
-    tools["bulk_add_tags"]["run"]({"note_ids": [seeded_note], "tags": ["运维"]})
-    result = tools["bulk_add_tags"]["run"]({"note_ids": [seeded_note], "tags": ["运维"]})
+    tools["bulk_add_tags"].run({"note_ids": [seeded_note], "tags": ["运维"]})
+    result = tools["bulk_add_tags"].run({"note_ids": [seeded_note], "tags": ["运维"]})
     assert result["updated"] == 0 and result["unchanged"] == 1
 
 
 def test_bulk_remove_tags_keeps_others(db_conn, seeded_note):
     tools = agent_service._make_tools(db_conn)
-    result = tools["bulk_remove_tags"]["run"]({"note_ids": [seeded_note], "tags": ["docker"]})
+    result = tools["bulk_remove_tags"].run({"note_ids": [seeded_note], "tags": ["docker"]})
     assert result["updated"] == 1
     note = agent_service.repo.get_note(db_conn, seeded_note)
     assert "docker" not in note["tags"]
-    absent = tools["bulk_remove_tags"]["run"]({"note_ids": [seeded_note], "tags": ["docker"]})
+    absent = tools["bulk_remove_tags"].run({"note_ids": [seeded_note], "tags": ["docker"]})
     assert absent["updated"] == 0   # 没有可删的也不报错
 
 
 def test_bulk_tags_reject_bad_input(db_conn):
     tools = agent_service._make_tools(db_conn)
-    assert "error" in tools["bulk_add_tags"]["run"]({"note_ids": "x", "tags": ["a"]})
-    assert "error" in tools["bulk_add_tags"]["run"]({"note_ids": [1], "tags": []})
+    assert "error" in tools["bulk_add_tags"].run({"note_ids": "x", "tags": ["a"]})
+    assert "error" in tools["bulk_add_tags"].run({"note_ids": [1], "tags": []})
 
 
 def test_bulk_tools_count_as_writes():
@@ -814,7 +814,7 @@ def test_bulk_tools_count_as_writes():
 
 def test_append_note_preserves_original(db_conn, seeded_note):
     tools = agent_service._make_tools(db_conn)
-    result = tools["append_note"]["run"]({"note_id": seeded_note, "content": "## 补充\n新的一段"})
+    result = tools["append_note"].run({"note_id": seeded_note, "content": "## 补充\n新的一段"})
     assert result["updated"] is True
     note = agent_service.repo.get_note(db_conn, seeded_note)
     assert note["content"].startswith("用 Docker Compose 部署服务。")
@@ -824,7 +824,7 @@ def test_append_note_preserves_original(db_conn, seeded_note):
 def test_list_trash_shows_soft_deleted(db_conn, seeded_note):
     assert agent_service.repo.soft_delete(db_conn, seeded_note)
     tools = agent_service._make_tools(db_conn)
-    result = tools["list_trash"]["run"]({"limit": 10})
+    result = tools["list_trash"].run({"limit": 10})
     ids = [n["id"] for n in result["notes"]]
     assert seeded_note in ids
     assert all(n["days_left"] >= 0 for n in result["notes"])

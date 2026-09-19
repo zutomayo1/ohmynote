@@ -321,16 +321,16 @@ def test_note_history_and_restore_tools(db_conn, seeded_note):
     original = agent_service.repo.get_note(db_conn, seeded_note)["content"]
     agent_service.repo.update_note(db_conn, seeded_note, content="改过一版的内容", reason="manual")
 
-    history = tools["get_note_history"]["run"]({"note_id": seeded_note})
+    history = tools["get_note_history"].run({"note_id": seeded_note})
     assert history["count"] >= 1
     version_id = history["versions"][0]["version_id"]
 
-    restored = tools["restore_version"]["run"]({"note_id": seeded_note, "version_id": version_id})
+    restored = tools["restore_version"].run({"note_id": seeded_note, "version_id": version_id})
     assert restored["restored"] is True
     # 快照存的是改动前的内容：恢复后回到 original
     assert agent_service.repo.get_note(db_conn, seeded_note)["content"] == original
 
-    bad = tools["restore_version"]["run"]({"note_id": seeded_note, "version_id": 999999})
+    bad = tools["restore_version"].run({"note_id": seeded_note, "version_id": 999999})
     assert "error" in bad
 
 
@@ -345,7 +345,7 @@ def test_list_backlinks_tool(db_conn):
     source = agent_service.repo.create_note(db_conn, title="来源页", content="见 [[目标页]]")
     agent_service.repo.update_note(db_conn, source["id"], content="见 [[目标页]]")
 
-    result = tools["list_backlinks"]["run"]({"note_id": target["id"]})
+    result = tools["list_backlinks"].run({"note_id": target["id"]})
     assert result["count"] >= 1
     assert any(n["id"] == source["id"] for n in result["notes"])
 
@@ -353,14 +353,14 @@ def test_list_backlinks_tool(db_conn):
 def test_semantic_search_tool_reports_unavailable(db_conn):
     """测试库没向量索引：工具必须给出可行动的错误提示，而不是崩。"""
     tools = agent_service._make_tools(db_conn)
-    result = tools["semantic_search"]["run"]({"query": "随便什么"})
+    result = tools["semantic_search"].run({"query": "随便什么"})
     assert "error" in result
     assert "search_notes" in result["error"]      # 告诉模型改走关键词检索
 
 
 def test_semantic_search_rejects_empty_query(db_conn):
     tools = agent_service._make_tools(db_conn)
-    assert "error" in tools["semantic_search"]["run"]({})
+    assert "error" in tools["semantic_search"].run({})
 
 
 def test_merge_notes_tool(db_conn):
@@ -369,7 +369,7 @@ def test_merge_notes_tool(db_conn):
     s1 = agent_service.repo.create_note(db_conn, title="散稿一", content="第一篇的内容")
     s2 = agent_service.repo.create_note(db_conn, title="散稿二", content="第二篇的内容")
 
-    result = tools["merge_notes"]["run"]({"target_id": target["id"], "source_ids": [s1["id"], s2["id"]]})
+    result = tools["merge_notes"].run({"target_id": target["id"], "source_ids": [s1["id"], s2["id"]]})
     assert result["merged"] is True
 
     merged = agent_service.repo.get_note(db_conn, target["id"])
@@ -385,10 +385,10 @@ def test_merge_notes_tool(db_conn):
 def test_merge_notes_rejects_bad_input(db_conn):
     tools = agent_service._make_tools(db_conn)
     note = agent_service.repo.create_note(db_conn, title="A", content="a")
-    assert "error" in tools["merge_notes"]["run"]({"target_id": 99999, "source_ids": [note["id"]]})
-    assert "error" in tools["merge_notes"]["run"]({"target_id": note["id"], "source_ids": []})
+    assert "error" in tools["merge_notes"].run({"target_id": 99999, "source_ids": [note["id"]]})
+    assert "error" in tools["merge_notes"].run({"target_id": note["id"], "source_ids": []})
     # 源列表里只有目标自己 = 没有合法源
-    assert "error" in tools["merge_notes"]["run"]({"target_id": note["id"], "source_ids": [note["id"]]})
+    assert "error" in tools["merge_notes"].run({"target_id": note["id"], "source_ids": [note["id"]]})
 
 
 def test_merge_in_loop_requires_confirmation(db_conn, monkeypatch):
@@ -491,7 +491,7 @@ def test_replace_in_note_basic_count_and_zero_hit(db_conn):
     note = agent_service.repo.create_note(
         db_conn, title="替换试验田", content="旧词一 旧词二 旧词三，其余不动。"
     )
-    run = _tools(db_conn)["replace_in_note"]["run"]
+    run = _tools(db_conn)["replace_in_note"].run
     out = run({"note_id": note["id"], "find": "旧词", "replace_with": "新词", "count": 2})
     assert out["replaced"] == 2 and out["occurrences"] == 3
     assert "新词一 新词二 旧词三" in agent_service.repo.get_note(db_conn, note["id"])["content"]
@@ -531,7 +531,7 @@ def test_replace_in_note_mass_hits_require_confirm(db_conn, monkeypatch):
 
 def test_prepend_note_tool(db_conn):
     note = agent_service.repo.create_note(db_conn, title="开头插入", content="正文在这里。")
-    run = _tools(db_conn)["prepend_note"]["run"]
+    run = _tools(db_conn)["prepend_note"].run
     assert run({"note_id": note["id"], "content": ""}) .get("error")
     out = run({"note_id": note["id"], "content": "TL;DR：先看这个。"})
     assert out["updated"] is True
@@ -548,7 +548,7 @@ def test_rewrite_section_tool(db_conn):
         "# 总标题\n\n## 安装\n\n旧步骤一。\n\n### 依赖\n\n旧依赖说明。\n\n## 使用\n\n使用说明保持不变。\n"
     )
     note = agent_service.repo.create_note(db_conn, title="章节重写", content=content)
-    run = _tools(db_conn)["rewrite_section"]["run"]
+    run = _tools(db_conn)["rewrite_section"].run
     miss = run({"note_id": note["id"], "section": "不存在", "content": "x"})
     assert "sections" in miss and "安装" in miss["sections"]
     out = run({"note_id": note["id"], "section": "安装", "content": "新步骤。\n\n### 依赖\n\n新依赖。"})
@@ -597,7 +597,7 @@ def test_bulk_set_category_tool_and_confirm(db_conn):
                                           category="旧分类")["id"] for i in range(3)]
     ids.append(agent_service.repo.create_note(db_conn, title="已是目标", content="x",
                                               category="技术")["id"])
-    run = _tools(db_conn)["bulk_set_category"]["run"]
+    run = _tools(db_conn)["bulk_set_category"].run
     out = run({"note_ids": ids, "category": "技术"})
     assert out["updated"] == 3 and out["unchanged"] == 1
     out = run({"note_ids": ids + [99999], "category": ""})
@@ -626,16 +626,16 @@ def test_find_similar_keyword_fallback(db_conn, monkeypatch):
     a = agent_service.repo.create_note(db_conn, title="A 主笔记", content="x", tags=["python", "测试"])
     b = agent_service.repo.create_note(db_conn, title="B 相似", content="x", tags=["python"])
     agent_service.repo.create_note(db_conn, title="C 无关", content="x", tags=["生活"])
-    out = _tools(db_conn)["find_similar"]["run"]({"note_id": a["id"]})
+    out = _tools(db_conn)["find_similar"].run({"note_id": a["id"]})
     assert out["engine"] == "keyword"
     names = [n["title"] for n in out["notes"]]
     assert "B 相似" in names and "C 无关" not in names
     assert out["notes"][0]["score"] >= 2.0
-    assert "error" in _tools(db_conn)["find_similar"]["run"]({"note_id": 999999})
+    assert "error" in _tools(db_conn)["find_similar"].run({"note_id": 999999})
 
 
 def test_search_notes_zero_hit_hint(db_conn):
-    out = _tools(db_conn)["search_notes"]["run"]({"query": "绝对查无此词的字符串"})
+    out = _tools(db_conn)["search_notes"].run({"query": "绝对查无此词的字符串"})
     assert out["count"] == 0 and "semantic_search" in out.get("hint", "")
 
 
@@ -663,7 +663,7 @@ def test_registry_describes_new_tools(db_conn):
     for name in ("replace_in_note", "prepend_note", "rewrite_section",
                  "bulk_set_category", "find_similar"):
         spec = tools.get(name)
-        assert spec and spec["description"] and spec["params"], f"注册表缺 {name}"
+        assert spec and spec.description and spec.params, f"注册表缺 {name}"
         assert name in agent_service._describe_tools(tools)
     # 写工具进只读黑名单；条件确认动作在确认白名单里
     for name in ("replace_in_note", "prepend_note", "rewrite_section", "bulk_set_category"):
@@ -705,7 +705,7 @@ def test_bulk_replace_text_confirm_flow(db_conn, monkeypatch):
 
 
 def test_bulk_replace_text_validation(db_conn):
-    run = _tools(db_conn)["bulk_replace_text"]["run"]
+    run = _tools(db_conn)["bulk_replace_text"].run
     assert "error" in run({"find": "x", "replace_with": "y"})
     assert "error" in run({"note_ids": [1], "find": "", "replace_with": "y"})
     assert "error" in run({"note_ids": [1], "find": "x", "replace_with": "x"})
@@ -742,7 +742,7 @@ def test_writing_activity_tool(db_conn):
                                    created_at=f"{day_a} 18:00:00")
     agent_service.repo.create_note(db_conn, title="桶B", content="一笔",
                                    created_at=f"{day_b} 09:00:00")
-    out = _tools(db_conn)["writing_activity"]["run"]({"days": 30})
+    out = _tools(db_conn)["writing_activity"].run({"days": 30})
     by_date = {x["date"]: x for x in out["series"]}
     assert by_date[day_a]["notes"] == 2 and by_date[day_a]["words"] >= 16
     assert by_date[day_b]["notes"] == 1
