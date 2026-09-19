@@ -12,7 +12,8 @@ from uuid import uuid4
 from ... import repo
 from . import ai
 from .history import _last_run_recap, _notes_list, _record_run, MAX_HISTORY_CHARS, MAX_HISTORY_TURNS
-from .prompt import SYSTEM_PROMPT, _today_label
+from .prompt import (SYSTEM_PROMPT, UNTRUSTED_CLOSE, UNTRUSTED_OPEN, _today_label,
+                     fence_untrusted)
 from .safety import _clear_pending_op, _get_pending_op, _save_pending_op, confirm_card, needs_confirm
 from .tools import OBSERVE_LIMIT, _as_int, _describe_tools, _make_tools
 
@@ -213,7 +214,9 @@ def iter_agent_events(
     started = time.time()
     tools = _make_tools(conn)
     system = SYSTEM_PROMPT.format(tools=_describe_tools(tools), today=_today_label(),
-                                  max_actions=MAX_ACTIONS_PER_TURN)
+                                  max_actions=MAX_ACTIONS_PER_TURN,
+                                  untrusted_open=UNTRUSTED_OPEN,
+                                  untrusted_close=UNTRUSTED_CLOSE)
     messages: list[dict[str, str]] = [{"role": "system", "content": system}]
     recap = _last_run_recap(conn)
     if recap:
@@ -248,8 +251,13 @@ def iter_agent_events(
         return int((time.time() - started) * 1000)
 
     def _push_observe(payload: dict, limit_chars: int) -> None:
-        """把工具结果喂回模型：按工具自己的上限截断，别把长正文一刀切掉。"""
-        text = json.dumps(payload, ensure_ascii=False)
+        """把工具结果喂回模型：整体围上「不可信」围栏（prompt injection 防线的执行点），
+        再按工具自己的上限截断，别把长正文一刀切掉。
+
+        围栏在唯一出口处生效：无论哪个工具（含将来新增的），笔记衍生的内容都以
+        数据身份进入模型；伪造的结束标记在 fence_untrusted 里已被中性化。
+        """
+        text = fence_untrusted(json.dumps(payload, ensure_ascii=False))
         if len(text) > limit_chars:
             text = text[:limit_chars] + "…（结果过长已截断）"
         messages.append({"role": "user", "content": "工具结果：" + text})

@@ -687,29 +687,23 @@ def test_agent_read_only_still_blocks_writes(db_conn, seeded_note, monkeypatch):
 
 
 def test_delete_run_removes_only_target(db_conn):
-    """单条删除：只删目标那条，别的留着；未知 id 返回 False。"""
-    from uuid import uuid4
+    """单条删除：只删目标那条，别的留着；未知 id 返回 False。
 
+    2026-09-19 起历史存在 agent_runs 表里（id 由 _record_run 直接写入）；
+    旧版「把列表写回 meta」的手法已废弃——那会经迁移通道把删除的行复活。
+    """
     agent_service.clear_runs(db_conn)
     for task in ("任务甲", "任务乙"):
         agent_service._record_run(db_conn, task, ok=True, answer="好", steps=[],
                                   error="", read_only=False)
     runs = agent_service.list_runs(db_conn)
-    for run in runs:
-        if not run.get("id"):
-            run["id"] = uuid4().hex[:10]
-    from app.services import agent as agent_mod
-
-    # 直接把带 id 的列表写回（_record_run 只给新记录加 id）
-    import json as json_mod
-    agent_mod.repo.save_meta_map(
-        db_conn, {"runs": json_mod.dumps(runs, ensure_ascii=False)}, prefix="agent.")
-
-    target = runs[0]["id"]
+    assert all(run.get("id") for run in runs)   # 表存储时代 id 必有（单条删除的前提）
+    target = runs[-1]["id"]
     assert agent_service.delete_run(db_conn, target) is True
     remaining = agent_service.list_runs(db_conn)
     assert len(remaining) == 1
     assert all(run["id"] != target for run in remaining)
+    assert agent_service.delete_run(db_conn, "不存在的 id") is False
     assert agent_service.delete_run(db_conn, "不存在的id") is False
 
 

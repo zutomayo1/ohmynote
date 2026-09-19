@@ -96,6 +96,25 @@ CREATE TABLE IF NOT EXISTS blog_stats (
     likes INTEGER NOT NULL DEFAULT 0,
     reads INTEGER NOT NULL DEFAULT 0
 );
+
+-- agent 执行历史（2026-09-19 从 meta 表的 agent.runs JSON 迁出）：
+-- 独立表可分页/可删单条/不挤 meta；steps/notes 是冻结快照，存 JSON 即可
+CREATE TABLE IF NOT EXISTS agent_runs (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id      TEXT    NOT NULL UNIQUE,              -- 单条删除的对外 id（uuid 短码）
+    created_at  TEXT    NOT NULL,
+    task        TEXT    NOT NULL DEFAULT '',
+    ok          INTEGER NOT NULL DEFAULT 1,
+    error       TEXT    NOT NULL DEFAULT '',
+    answer      TEXT    NOT NULL DEFAULT '',
+    read_only   INTEGER NOT NULL DEFAULT 0,
+    dry_run     INTEGER NOT NULL DEFAULT 0,
+    cancelled   INTEGER NOT NULL DEFAULT 0,
+    duration_ms INTEGER NOT NULL DEFAULT 0,
+    steps_json  TEXT    NOT NULL DEFAULT '[]',
+    notes_json  TEXT    NOT NULL DEFAULT '[]'
+);
+CREATE INDEX IF NOT EXISTS idx_agent_runs_recent ON agent_runs (id DESC);
 """
 
 # 新版本若给已有表加字段，写在这里即可（启动时自动 ALTER TABLE）
