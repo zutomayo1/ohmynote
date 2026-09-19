@@ -16,6 +16,8 @@ from .prompt import (SYSTEM_PROMPT, UNTRUSTED_CLOSE, UNTRUSTED_OPEN, _today_labe
                      fence_untrusted)
 from .safety import _clear_pending_op, _get_pending_op, _save_pending_op, confirm_card, needs_confirm
 from .tools import OBSERVE_LIMIT, _as_int, _describe_tools, _make_tools
+from .undo import commit as undo_commit
+from .undo import prepare as undo_prepare
 
 logger = logging.getLogger("inknote.agent")
 
@@ -344,6 +346,8 @@ def iter_agent_events(
             summary = f"未知工具 {action}"
         else:
             repeat_streak = 0
+            # 撤销防线：写工具执行前先快照受影响笔记，成功后压入 undo 栈（读/干跑/只读不记）
+            undo_ctx = undo_prepare(conn, action, params) if spec.writes else None
             try:
                 observation = spec.run(params)
             except (TypeError, ValueError, OverflowError) as exc:
@@ -355,6 +359,8 @@ def iter_agent_events(
             # 只有真的执行过才算「做过」；报错的调用允许换个参数重试
             if not (isinstance(observation, dict) and observation.get("error")):
                 seen_calls.add(signature)
+                if undo_ctx is not None:
+                    undo_commit(conn, undo_ctx, action, observation, summary)
         return observation, summary, confirm_info
 
     try:

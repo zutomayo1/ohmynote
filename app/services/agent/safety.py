@@ -13,6 +13,8 @@ from typing import Any
 from ... import repo
 from .history import _record_run
 from .tools import _TOOL_SPECS, _make_tools
+from .undo import commit as undo_commit
+from .undo import prepare as undo_prepare
 from uuid import uuid4
 
 logger = logging.getLogger("inknote.agent")
@@ -86,11 +88,16 @@ def execute_pending(conn: sqlite3.Connection, confirm_id: str) -> dict[str, Any]
     spec = _make_tools(conn).get(action)
     if spec is None:
         return {"ok": False, "error": "工具已不存在"}
+    # 确认执行的写操作同样进 undo 栈（与循环内执行同等待遇）
+    undo_ctx = undo_prepare(conn, action, pending.get("params") or {}) if spec.writes else None
     try:
         result = spec.run(pending.get("params") or {})
     except Exception as exc:
         logger.warning("agent 确认执行 %s 失败", action, exc_info=True)
         return {"ok": False, "error": f"执行失败：{exc}"}
+    ok = not (isinstance(result, dict) and result.get("error"))
+    if undo_ctx and ok:
+        undo_commit(conn, undo_ctx, action, result or {}, "用户确认执行的写操作")
     ok = not (isinstance(result, dict) and result.get("error"))
     note = pending.get("note") or {}
     involved = {note["id"]: note.get("title")} if isinstance(note.get("id"), int) else None

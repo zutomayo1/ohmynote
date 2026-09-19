@@ -6229,6 +6229,15 @@ body.split-dragging .editor__textarea { pointer-events: none; }
 
 .agent-runs__clear:hover { color: var(--danger); }
 
+/* 「撤销上一步」：与清空记录同形的行内文字按钮，主色提示这是可执行的正向动作 */
+.agent-runs__undo {
+  border: 0; padding: 0; background: none; cursor: pointer;
+  color: var(--ink-3); font-family: var(--font-sans); font-size: 12px;
+  text-decoration: underline; text-underline-offset: 3px; }
+
+.agent-runs__undo:hover { color: var(--brand); }
+.agent-runs__undo:disabled { cursor: default; color: var(--ink-3); }
+
 .agent-runs__summary { padding: 2px 0; }
 
 @media (max-width: 960px) {

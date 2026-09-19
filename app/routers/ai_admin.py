@@ -626,6 +626,15 @@ async def agent_runs_clear(conn: sqlite3.Connection = Depends(db_conn)):
     return _json({"ok": True})
 
 
+@ai_api_router.post("/agent/undo")
+async def agent_undo_last_step(conn: sqlite3.Connection = Depends(db_conn)):
+    """撤销笔记助手的上一步写操作：把受影响笔记恢复到该步之前的状态。
+
+    栈空返回 ok=False（不是客户端错误，前端给提示即可）。
+    """
+    return _json(agent.undo_last(conn))
+
+
 @ai_api_router.post("/agent/confirm")
 async def agent_confirm(request: Request, conn: sqlite3.Connection = Depends(db_conn)):
     """用户点「确认执行」：真正落地待确认的危险操作（不经过模型）。"""

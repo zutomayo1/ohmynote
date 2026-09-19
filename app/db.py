@@ -115,6 +115,15 @@ CREATE TABLE IF NOT EXISTS agent_runs (
     notes_json  TEXT    NOT NULL DEFAULT '[]'
 );
 CREATE INDEX IF NOT EXISTS idx_agent_runs_recent ON agent_runs (id DESC);
+
+-- agent 步骤级撤销栈：每次写操作成功后压入一份「执行前快照」，撤销 = 弹栈恢复
+CREATE TABLE IF NOT EXISTS agent_undo (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at   TEXT    NOT NULL,
+    tool         TEXT    NOT NULL,
+    summary      TEXT    NOT NULL DEFAULT '',
+    payload_json TEXT    NOT NULL
+);
 """
 
 # 新版本若给已有表加字段，写在这里即可（启动时自动 ALTER TABLE）

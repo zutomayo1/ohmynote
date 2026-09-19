@@ -210,6 +210,33 @@
       });
     }
 
+    // ===== 撤销上一步：把助手最近一次写操作恢复到该步之前 =====
+    var undoBtn = document.getElementById('agent-undo');
+    if (undoBtn) {
+      var undoTimer = null;
+      var undoReset = function () {
+        undoBtn.disabled = false;
+        undoBtn.textContent = '撤销上一步';
+      };
+      undoBtn.addEventListener('click', function () {
+        undoBtn.disabled = true;
+        undoBtn.textContent = '撤销中…';
+        var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+        fetch('/api/agent/undo', {
+          method: 'POST',
+          headers: { 'X-CSRF-Token': csrfMeta ? csrfMeta.getAttribute('content') : '' },
+          credentials: 'same-origin'
+        }).then(function (res) { return res.json(); }).then(function (data) {
+          undoBtn.textContent = (data && data.ok)
+            ? '已撤销：' + (data.summary || '上一步')
+            : ((data && data.error) || '没有可撤销的操作');
+          if (undoTimer) { clearTimeout(undoTimer); }
+          undoTimer = setTimeout(undoReset, 2600);
+          if (data && data.ok) { loadRuns(); }   // 撤销也会落一条执行历史
+        }).catch(function () { undoReset(); });
+      });
+    }
+
     var pendingEl = null;   // 进行中提示 <li>，收到事件时移除
     var stepCount = 0;      // 已展示的步骤数
 

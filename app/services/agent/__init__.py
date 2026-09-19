@@ -18,13 +18,14 @@ from .safety import (_ALL_CONFIRMABLE, _WRITE_TOOLS, _clear_pending_op,
                      cancel_pending, execute_pending)
 from .tools import (ToolSpec, _as_int, _as_tags, _describe_tools, _heading_lines,
                     _locate_section, _make_tools, _note_brief, _opt_int, _TOOL_SPECS)
+from .undo import MAX_UNDO, undo_last
 
 __all__ = [
     "run_agent", "iter_agent_events", "request_cancel", "new_run_id",
     "execute_pending", "cancel_pending", "list_runs", "clear_runs", "delete_run",
-    "ensure_run_ids", "SYSTEM_PROMPT", "ToolSpec", "repo", "ai",
+    "ensure_run_ids", "undo_last", "SYSTEM_PROMPT", "ToolSpec", "repo", "ai",
     "MAX_STEPS", "MAX_REPEAT_STEPS", "MAX_FORMAT_RETRIES", "MAX_ACTIONS_PER_TURN",
-    "PLAN_MAX_CHARS", "OBSERVE_LIMIT",
+    "PLAN_MAX_CHARS", "OBSERVE_LIMIT", "MAX_UNDO",
     "MAX_HISTORY_TURNS", "MAX_HISTORY_CHARS", "MAX_RUNS", "_TOOL_SPECS",
     "_make_tools", "_describe_tools", "_extract_json", "_clean_history", "_today_label",
     "_record_run", "_notes_list", "_last_run_recap", "_locate_section", "_heading_lines",
