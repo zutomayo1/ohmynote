@@ -211,6 +211,7 @@
     }
 
     // ===== 撤销上一步：把助手最近一次写操作恢复到该步之前 =====
+    // 按钮在结果区（#agent-result）里，final 事件带 undoable 才显示；栈空自动收起
     var undoBtn = document.getElementById('agent-undo');
     if (undoBtn) {
       var undoTimer = null;
@@ -227,12 +228,18 @@
           headers: { 'X-CSRF-Token': csrfMeta ? csrfMeta.getAttribute('content') : '' },
           credentials: 'same-origin'
         }).then(function (res) { return res.json(); }).then(function (data) {
-          undoBtn.textContent = (data && data.ok)
-            ? '已撤销：' + (data.summary || '上一步')
-            : ((data && data.error) || '没有可撤销的操作');
+          undoBtn.disabled = false;
+          if (data && data.ok) {
+            undoBtn.textContent = '已撤销：' + (data.summary || '上一步');
+            loadRuns();   // 撤销也会落一条执行历史
+          } else {
+            undoBtn.textContent = (data && data.error) || '没有可撤销的操作';
+          }
           if (undoTimer) { clearTimeout(undoTimer); }
-          undoTimer = setTimeout(undoReset, 2600);
-          if (data && data.ok) { loadRuns(); }   // 撤销也会落一条执行历史
+          undoTimer = setTimeout(function () {
+            if (data && data.ok && data.remaining === 0) { undoBtn.hidden = true; }
+            undoReset();
+          }, 2600);
         }).catch(function () { undoReset(); });
       });
     }
@@ -503,6 +510,7 @@
       if (resultEl) { resultEl.hidden = false; }
       if (stepsEl) { stepsEl.textContent = ''; }
       if (answerEl) { answerEl.textContent = ''; answerEl.className = 'agent-answer'; }
+      if (undoBtn) { undoBtn.hidden = true; }   // 是否可撤销等 final 事件说了算
 
       function onStep(item) {
         removePending();
@@ -520,6 +528,11 @@
         var secs = ev.duration_ms ? '（用时 ' + Math.max(1, Math.round(ev.duration_ms / 1000)) + ' 秒）' : '';
         if (ev.cancelled) { setStatus('已取消' + secs, 'warn'); }
         else { setStatus((ev.ok ? '完成' : (ev.error || '没有完成')) + secs, ev.ok ? 'ok' : 'warn'); }
+        if (undoBtn) {
+          undoBtn.hidden = !ev.undoable;
+          undoBtn.textContent = '撤销上一步';
+          undoBtn.disabled = false;
+        }
         if (answerEl) {
           answerEl.textContent = ev.answer || ev.error || '';
           answerEl.className = 'agent-answer' + (ev.ok ? '' : ' agent-answer--error');

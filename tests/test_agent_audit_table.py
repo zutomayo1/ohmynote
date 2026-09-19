@@ -31,7 +31,8 @@ def _record(conn, task="任务", **kw):
                       cancelled=kw.pop("cancelled", False))
 
 
-def test_agent_runs_table_exists():
+def test_agent_runs_table_exists(client):
+    """client 夹具会触发 init_db（并行下本文件可能被分到没人建过库的 worker，不能裸查）。"""
     from app import db
 
     with db.db() as conn:

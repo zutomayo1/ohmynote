@@ -17,6 +17,7 @@ from .prompt import (SYSTEM_PROMPT, UNTRUSTED_CLOSE, UNTRUSTED_OPEN, _today_labe
 from .safety import _clear_pending_op, _get_pending_op, _save_pending_op, confirm_card, needs_confirm
 from .tools import OBSERVE_LIMIT, _as_int, _describe_tools, _make_tools
 from .undo import commit as undo_commit
+from .undo import peek as undo_peek
 from .undo import prepare as undo_prepare
 
 logger = logging.getLogger("inknote.agent")
@@ -247,7 +248,8 @@ def iter_agent_events(
                     duration_ms=_elapsed_ms(), cancelled=cancel_event.is_set())
         return {"type": "final", "ok": ok, "answer": answer, "steps": steps,
                 "error": error, "notes": _notes_list(involved), "run_id": run_id,
-                "duration_ms": _elapsed_ms(), "cancelled": cancel_event.is_set()}
+                "duration_ms": _elapsed_ms(), "cancelled": cancel_event.is_set(),
+                "undoable": undo_peek(conn) is not None}
 
     def _elapsed_ms() -> int:
         return int((time.time() - started) * 1000)
@@ -519,4 +521,5 @@ def run_agent(
         "error": final.get("error") or "",
         "cancelled": bool(final.get("cancelled")),
         "duration_ms": int(final.get("duration_ms") or 0),
+        "undoable": bool(final.get("undoable")),
     }

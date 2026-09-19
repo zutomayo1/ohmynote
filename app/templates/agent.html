@@ -49,6 +49,8 @@
       <ol class="agent-steps" id="agent-steps"></ol>
       <div class="agent-answer" id="agent-answer"></div>
       <div class="agent-notes" id="agent-notes" hidden></div>
+      <button class="agent-undo" type="button" id="agent-undo" hidden
+              title="把助手最近一次写操作恢复到该步之前（恢复本身也存版本历史）">撤销上一步</button>
     </section>
 
     <details class="agent-history" id="agent-history" hidden>
@@ -85,7 +87,6 @@
       </summary>
       <ul class="agent-runs__list" id="agent-runs-list"></ul>
       <p class="micro">最近 20 次，悬停看步骤。
-        <button class="agent-runs__undo" type="button" id="agent-undo">撤销上一步</button>
         <button class="agent-runs__clear" type="button" id="agent-runs-clear">清空记录</button></p>
     </details>
   </aside>

@@ -126,6 +126,7 @@ def test_merge_notes_undo_restores_target_and_sources(db_conn):
 
 
 def test_undo_empty_stack(db_conn):
+    db_conn.execute("DELETE FROM agent_undo")   # 共享库：别的用例可能留了条目
     result = agent.undo_last(db_conn)
     assert result["ok"] is False and "没有可撤销" in result["error"]
 
@@ -146,6 +147,9 @@ def test_loop_records_undo_and_read_only_does_not(db_conn, monkeypatch):
     assert agent.run_agent(db_conn, "加标签")["ok"] is True
     assert agent.undo_last(db_conn)["ok"] is True                  # 循环里的写进栈了
 
+    # 只读模式不产生 undo 记录：清栈后按「前后增量」断言（共享库约定）
+    db_conn.execute("DELETE FROM agent_undo")
+    before = db_conn.execute("SELECT COUNT(*) FROM agent_undo").fetchone()[0]
     chat2 = _ScriptedChat([
         json.dumps({"action": "replace_in_note",
                     "params": {"note_id": note["id"], "find": "原文", "replace_with": "改"}},
@@ -155,7 +159,35 @@ def test_loop_records_undo_and_read_only_does_not(db_conn, monkeypatch):
     monkeypatch.setattr(agent.ai, "chat", chat2)
     result2 = agent.run_agent(db_conn, "试试改", read_only=True)
     assert any("已拦截写操作" in s["summary"] for s in result2["steps"])
-    assert agent.undo_last(db_conn)["ok"] is False                 # 只读没产生 undo 记录
+    after = db_conn.execute("SELECT COUNT(*) FROM agent_undo").fetchone()[0]
+    assert after == before, "只读模式不该产生 undo 记录"
+    assert agent.undo_last(db_conn)["ok"] is False                 # 栈仍是空的
+
+
+def test_final_event_carries_undoable_flag(db_conn, monkeypatch):
+    """final 事件带 undoable：写过为 True（按钮按需出现），只读为 False。"""
+    note = agent.repo.create_note(db_conn, title="标记试验", content="原文。")
+    chat = _ScriptedChat([
+        json.dumps({"action": "add_tags",
+                    "params": {"note_id": note["id"], "tags": ["标记"]}},
+                   ensure_ascii=False),
+        json.dumps({"action": "final", "answer": "完成"}, ensure_ascii=False),
+    ])
+    monkeypatch.setattr(agent.ai, "chat", chat)
+    result = agent.run_agent(db_conn, "加标签")
+    assert result["ok"] is True and result["undoable"] is True
+    assert agent.undo_last(db_conn)["ok"] is True
+
+    # 只读任务 + 清空栈：没有可撤销的写操作 → undoable False
+    db_conn.execute("DELETE FROM agent_undo")
+    chat2 = _ScriptedChat([
+        json.dumps({"action": "read_note", "params": {"note_id": note["id"]}},
+                   ensure_ascii=False),
+        json.dumps({"action": "final", "answer": "读完了"}, ensure_ascii=False),
+    ])
+    monkeypatch.setattr(agent.ai, "chat", chat2)
+    result2 = agent.run_agent(db_conn, "读一下")
+    assert result2["ok"] is True and result2["undoable"] is False
 
 
 def test_confirmed_execute_also_undoable(db_conn):
@@ -197,6 +229,7 @@ def test_undo_endpoint_http(auth_client, csrf):
     assert res.status_code == 200
     body = res.json()
     assert body["ok"] is True and body["tool"] == "replace_in_note"
+    assert body["remaining"] == 0
     with db_mod.db() as conn:
         assert agent.repo.get_note(conn, note["id"])["content"] == "第一段。"
 

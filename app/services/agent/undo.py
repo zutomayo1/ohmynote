@@ -113,6 +113,15 @@ def commit(conn: sqlite3.Connection, ctx: dict[str, Any], tool: str,
     except Exception:
         logger.warning("agent undo 记录失败（tool=%s）", tool, exc_info=True)
 
+def peek(conn: sqlite3.Connection) -> dict[str, Any] | None:
+    """栈顶摘要（不弹出）。给 final 事件的 undoable 标记用。"""
+    try:
+        row = conn.execute(
+            "SELECT tool, summary FROM agent_undo ORDER BY id DESC LIMIT 1").fetchone()
+        return {"tool": row["tool"], "summary": row["summary"]} if row else None
+    except Exception:
+        return None
+
 def undo_last(conn: sqlite3.Connection) -> dict[str, Any]:
     """撤销最近一步写操作。返回 {ok, tool, summary, changed, skipped} 或 {ok: False, error}。"""
     try:
@@ -176,6 +185,7 @@ def undo_last(conn: sqlite3.Connection) -> dict[str, Any]:
                 repo.soft_delete(conn, nid)
             changed.append(nid)
         conn.execute("DELETE FROM agent_undo WHERE id = ?", (row["id"],))
+        remaining = int(conn.execute("SELECT COUNT(*) FROM agent_undo").fetchone()[0])
         if changed:
             # 撤销本身也进执行历史（审计闭环：谁在什么时候反悔了什么，可追溯）
             involved = {}
@@ -189,7 +199,7 @@ def undo_last(conn: sqlite3.Connection) -> dict[str, Any]:
                                 "duration_ms": 0}],
                         error="", read_only=False, involved=involved)
         return {"ok": True, "tool": row["tool"], "summary": row["summary"],
-                "changed": changed, "skipped": skipped}
+                "changed": changed, "skipped": skipped, "remaining": remaining}
     except Exception as exc:
         logger.warning("agent undo 执行失败", exc_info=True)
         return {"ok": False, "error": f"撤销失败：{exc}"}

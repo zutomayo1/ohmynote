@@ -248,15 +248,19 @@ def test_iter_agent_events_yields_error_when_ai_disabled(db_conn, monkeypatch):
 
 
 def test_run_agent_still_matches_old_shape(db_conn, seeded_note, monkeypatch):
-    """run_agent 退化为 iter_agent_events 的消费者：老四键保底，v2 加 cancelled/duration_ms。"""
+    """run_agent 退化为 iter_agent_events 的消费者：老四键保底，v2 加 cancelled/duration_ms，
+    撤销功能再加 undoable（2026-09-19：final 事件带「栈里有没有可撤销的写操作」）。"""
     script = ScriptedChat([
         json.dumps({"action": "search_notes", "params": {"query": "Docker"}}, ensure_ascii=False),
         json.dumps({"action": "final", "answer": "完成"}, ensure_ascii=False),
     ])
     monkeypatch.setattr(agent_service.ai, "chat", script)
+    db_conn.execute("DELETE FROM agent_undo")   # 共享库：栈里可能有前序用例留下的条目
     result = agent_service.run_agent(db_conn, "搜 Docker 笔记")
     assert {"ok", "answer", "steps", "error"} <= set(result)
-    assert set(result) == {"ok", "answer", "steps", "error", "cancelled", "duration_ms"}
+    assert set(result) == {"ok", "answer", "steps", "error", "cancelled", "duration_ms",
+                           "undoable"}
+    assert result["undoable"] is False      # 纯读任务 + 空栈：没有可撤销的写操作
     assert result["ok"] is True
     assert result["steps"][0]["tool"] == "search_notes"
 
